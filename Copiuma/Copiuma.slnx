@@ -1,0 +1,3 @@
+<Solution>
+  <Project Path="../src/api-gateway/Gateway.API/Gateway.API.csproj" />
+</Solution>

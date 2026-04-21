@@ -1,0 +1,31 @@
+services:
+  # Основная БД (PostgreSQL)
+  postgres:
+    image: postgres:16
+    container_name: copiuma_db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./docker/postgres-data:/var/lib/postgresql/data
+
+  # Кэш и Realtime (Redis)
+  redis:
+    image: redis:7
+    container_name: copiuma_cache
+    ports:
+      - "6379:6379"
+
+  # Хранилище файлов (MinIO аналог S3)
+  minio:
+    image: minio/minio
+    container_name: copiuma_storage
+    ports:
+      - "9000:9000"
+      - "9091:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
