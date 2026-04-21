@@ -30,6 +30,14 @@ public class TracksController : ControllerBase
         using var stream = request.File.OpenReadStream();
         var savedFileName = await _storageService.UploadFileAsync(stream, request.File.FileName, request.File.ContentType);
 
+        var userIdString = Request.Headers["X-User-Id"].FirstOrDefault();
+        Guid uploaderId = Guid.Empty;
+
+        if (!string.IsNullOrEmpty(userIdString) && Guid.TryParse(userIdString, out var parsedId))
+        {
+            uploaderId = parsedId;
+        }
+
         var track = new Track
         {
             Id = Guid.NewGuid(),
@@ -38,7 +46,7 @@ public class TracksController : ControllerBase
             FileName = savedFileName,
             ContentType = request.File.ContentType,
             UploadedAt = DateTime.UtcNow,
-            UploadedByUserId = Guid.Empty
+            UploadedByUserId = uploaderId
         };
 
         _context.Tracks.Add(track);

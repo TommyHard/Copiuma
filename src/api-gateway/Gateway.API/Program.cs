@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using Yarp.ReverseProxy.Transforms;
 
 namespace Gateway.API;
 
@@ -59,7 +60,23 @@ public class Program
         });
 
         builder.Services.AddReverseProxy()
-            .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
+            .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))
+            .AddTransforms(builderContext =>
+            {
+                builderContext.AddRequestTransform(transformContext =>
+                {
+                    var userId = transformContext.HttpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                              ?? transformContext.HttpContext.User.FindFirst("Id")?.Value
+                              ?? transformContext.HttpContext.User.FindFirst("id")?.Value;
+
+                    if (!string.IsNullOrEmpty(userId))
+                    {
+                        transformContext.ProxyRequest.Headers.Add("X-User-Id", userId);
+                    }
+
+                    return ValueTask.CompletedTask;
+                });
+            });
 
         var app = builder.Build();
 
