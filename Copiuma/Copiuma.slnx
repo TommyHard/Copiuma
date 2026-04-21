@@ -1,3 +1,8 @@
 <Solution>
+  <Folder Name="/Элементы решения/">
+    <File Path="test.http" />
+  </Folder>
   <Project Path="../src/api-gateway/Gateway.API/Gateway.API.csproj" />
+  <Project Path="../src/services/Identity.API/Identity.API.csproj" />
+  <Project Path="../src/services/Music.API/Music.API.csproj" />
 </Solution>
