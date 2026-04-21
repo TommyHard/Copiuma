@@ -46,7 +46,7 @@ public class TracksController : ControllerBase
 
         return Ok(new
         {
-            Message = "Трек успешно загружен в облако и сохранен в базу!",
+            Message = "Трек успешно загружен в облако и сохранен в базу",
             TrackId = track.Id,
             FileName = savedFileName
         });
@@ -67,5 +67,20 @@ public class TracksController : ControllerBase
             .ToListAsync();
 
         return Ok(tracks);
+    }
+
+    [HttpGet("{id}/play")]
+    public async Task<IActionResult> PlayTrack(Guid id)
+    {
+        var track = await _context.Tracks.FindAsync(id);
+
+        if (track == null)
+        {
+            return NotFound("Трек не найден в базе данных");
+        }
+
+        var stream = await _storageService.GetFileStreamAsync(track.FileName);
+
+        return File(stream, track.ContentType, enableRangeProcessing: true);
     }
 }

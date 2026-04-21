@@ -38,4 +38,23 @@ public class FileStorageService
 
         return uniqueFileName;
     }
+
+    public async Task<Stream> GetFileStreamAsync(string fileName)
+    {
+        var memoryStream = new MemoryStream();
+
+        var getObjectArgs = new GetObjectArgs()
+            .WithBucket(BucketName)
+            .WithObject(fileName)
+            .WithCallbackStream((stream) =>
+            {
+                stream.CopyTo(memoryStream);
+            });
+
+        await _minioClient.GetObjectAsync(getObjectArgs);
+
+        memoryStream.Position = 0;
+
+        return memoryStream;
+    }
 }
