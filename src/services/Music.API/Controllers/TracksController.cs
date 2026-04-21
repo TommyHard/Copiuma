@@ -77,6 +77,31 @@ public class TracksController : ControllerBase
         return Ok(tracks);
     }
 
+    [HttpGet("favorites")]
+    public async Task<IActionResult> GetFavoriteTracks()
+    {
+        var userIdString = Request.Headers["X-User-Id"].FirstOrDefault();
+        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
+        {
+            return Unauthorized("Пользователь не авторизован или запрос пришел не через Gateway");
+        }
+
+        var favoriteTracks = await _context.LikedTracks
+            .Where(l => l.UserId == userId)
+            .Include(l => l.Track)
+            .OrderByDescending(l => l.LikedAt)
+            .Select(l => new
+            {
+                l.Track!.Id,
+                l.Track.Title,
+                l.Track.Artist,
+                LikedAt = l.LikedAt
+            })
+            .ToListAsync();
+
+        return Ok(favoriteTracks);
+    }
+
     [HttpGet("{id}/play")]
     public async Task<IActionResult> PlayTrack(Guid id)
     {
@@ -90,5 +115,40 @@ public class TracksController : ControllerBase
         var stream = await _storageService.GetFileStreamAsync(track.FileName);
 
         return File(stream, track.ContentType, enableRangeProcessing: true);
+    }
+
+    [HttpPost("{id}/like")]
+    public async Task<IActionResult> ToggleLike(Guid id)
+    {
+        var userIdString = Request.Headers["X-User-Id"].FirstOrDefault();
+        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
+        {
+            return Unauthorized("Пользователь не авторизован или запрос пришел не через Gateway");
+        }
+
+        var track = await _context.Tracks.FindAsync(id);
+        if (track == null) return NotFound("Трек не найден");
+
+        var existingLike = await _context.LikedTracks
+            .FirstOrDefaultAsync(l => l.UserId == userId && l.TrackId == id);
+
+        if (existingLike != null)
+        {
+            _context.LikedTracks.Remove(existingLike);
+            await _context.SaveChangesAsync();
+            return Ok(new { Message = "Трек удален из избранного", IsLiked = false });
+        }
+
+        var like = new LikedTrack
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            TrackId = id
+        };
+
+        _context.LikedTracks.Add(like);
+        await _context.SaveChangesAsync();
+
+        return Ok(new { Message = "Трек добавлен в избранное", IsLiked = true });
     }
 }

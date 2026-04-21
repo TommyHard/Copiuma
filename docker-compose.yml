@@ -1,5 +1,6 @@
+version: '3.8'
+
 services:
-  # Основная БД (PostgreSQL)
   postgres:
     image: postgres:16
     container_name: copiuma_db
@@ -8,17 +9,7 @@ services:
       POSTGRES_PASSWORD: password123
     ports:
       - "5432:5432"
-    volumes:
-      - ./docker/postgres-data:/var/lib/postgresql/data
 
-  # Кэш и Realtime (Redis)
-  redis:
-    image: redis:7
-    container_name: copiuma_cache
-    ports:
-      - "6379:6379"
-
-  # Хранилище файлов (MinIO аналог S3)
   minio:
     image: minio/minio
     container_name: copiuma_storage
@@ -29,3 +20,46 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     command: server /data --console-address ":9001"
+
+  identity-api:
+      build:
+        context: ./src/services/Identity.API
+        dockerfile: Dockerfile
+      container_name: identity_api
+      ports:
+        - "5001:8080" # ПОРТ ДЛЯ СВАГГЕРА
+      environment:
+        - ASPNETCORE_ENVIRONMENT=Development # РЕЖИМ РАЗРАБОТКИ
+        - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=copiuma_identity;Username=admin;Password=password123
+        - JwtSettings__Key=C0piuma_Super_Secret_Security_Key_2077
+      depends_on:
+        - postgres
+
+  music-api:
+    build:
+      context: ./src/services/Music.API
+      dockerfile: Dockerfile
+    container_name: music_api
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=copiuma_music;Username=admin;Password=password123
+      - Minio__Endpoint=minio:9000
+      - Minio__AccessKey=minioadmin
+      - Minio__SecretKey=minioadmin
+    depends_on:
+      - postgres
+      - minio
+
+  gateway-api:
+    build:
+      context: ./src/api-gateway/Gateway.API
+      dockerfile: Dockerfile
+    container_name: gateway_api
+    ports:
+      - "7161:8080"
+    environment:
+      - JwtSettings__Key=C0piuma_Super_Secret_Security_Key_2077
+      - ReverseProxy__Clusters__identity-cluster__Destinations__destination1__Address=http://identity-api:8080
+      - ReverseProxy__Clusters__music-cluster__Destinations__destination1__Address=http://music-api:8080
+    depends_on:
+      - identity-api
+      - music-api
