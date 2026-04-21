@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Music.API.Data;
+using Music.API.Dtos;
 using Music.API.Models;
 using Music.API.Services;
 
@@ -19,25 +20,22 @@ public class TracksController : ControllerBase
     }
 
     [HttpPost("upload")]
-    public async Task<IActionResult> UploadTrack(
-        [FromForm] IFormFile? file,
-        [FromForm] string title,
-        [FromForm] string? artist)
+    public async Task<IActionResult> UploadTrack([FromForm] UploadTrackRequest request)
     {
-        if (file == null || file.Length == 0) return BadRequest("Файл не выбран или пуст");
-        if (!file.ContentType.Contains("audio")) return BadRequest("Загрузите аудиофайл");
-        if (string.IsNullOrWhiteSpace(title)) return BadRequest("Название трека обязательно");
+        if (request.File == null || request.File.Length == 0) return BadRequest("Файл не выбран или пуст");
+        if (!request.File.ContentType.Contains("audio")) return BadRequest("Пожалуйста, загрузите аудиофайл");
+        if (string.IsNullOrWhiteSpace(request.Title)) return BadRequest("Название трека обязательно");
 
-        using var stream = file.OpenReadStream();
-        var savedFileName = await _storageService.UploadFileAsync(stream, file.FileName, file.ContentType);
+        using var stream = request.File.OpenReadStream();
+        var savedFileName = await _storageService.UploadFileAsync(stream, request.File.FileName, request.File.ContentType);
 
         var track = new Track
         {
             Id = Guid.NewGuid(),
-            Title = title,
-            Artist = artist,
+            Title = request.Title,
+            Artist = request.Artist,
             FileName = savedFileName,
-            ContentType = file.ContentType,
+            ContentType = request.File.ContentType,
             UploadedAt = DateTime.UtcNow,
             UploadedByUserId = Guid.Empty
         };
@@ -47,7 +45,7 @@ public class TracksController : ControllerBase
 
         return Ok(new
         {
-            Message = "Трек успешно загружен в облако и сохранен в базу",
+            Message = "Трек успешно загружен в облако и сохранен в базу!",
             TrackId = track.Id,
             FileName = savedFileName
         });
