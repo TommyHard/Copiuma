@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Music.API.Data;
 using Music.API.Dtos;
 using Music.API.Models;
@@ -49,5 +50,22 @@ public class TracksController : ControllerBase
             TrackId = track.Id,
             FileName = savedFileName
         });
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetAllTracks()
+    {
+        var tracks = await _context.Tracks
+            .OrderByDescending(t => t.UploadedAt)
+            .Select(t => new
+            {
+                t.Id,
+                t.Title,
+                t.Artist,
+                t.UploadedAt
+            })
+            .ToListAsync();
+
+        return Ok(tracks);
     }
 }
