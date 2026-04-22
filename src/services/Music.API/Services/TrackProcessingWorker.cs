@@ -1,8 +1,9 @@
-﻿using System.Text;
-using System.Text.Json;
+﻿using Microsoft.AspNetCore.SignalR;
 using Music.API.Data;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using System.Text;
+using System.Text.Json;
 
 namespace Music.API.Services;
 
@@ -91,6 +92,17 @@ public class TrackProcessingWorker : BackgroundService
                             await dbContext.SaveChangesAsync();
 
                             Console.WriteLine($"--> [WORKER] Готово. Длительность трека '{track.Title}': {track.Duration.Value:mm\\:ss}");
+
+                            var hubContext = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<Music.API.Hubs.NotificationHub>>();
+
+                            await hubContext.Clients.All.SendAsync("TrackProcessed", new
+                            {
+                                TrackId = track.Id,
+                                Title = track.Title,
+                                Duration = track.Duration.Value.ToString(@"mm\:ss")
+                            });
+
+                            Console.WriteLine("--> [WORKER] Push-уведомление отправлено клиентам");
                         }
                         finally
                         {

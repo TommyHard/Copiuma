@@ -1,9 +1,11 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 using Music.API.Data;
 using Music.API.Dtos;
 using Music.API.Models;
 using Music.API.Services;
+using System.Text.Json;
 
 namespace Music.API.Controllers;
 
@@ -14,12 +16,14 @@ public class TracksController : ControllerBase
     private readonly FileStorageService _storageService;
     private readonly AppDbContext _context;
     private readonly MessageBusClient _messageBusClient;
+    private readonly IDistributedCache _cache;
 
-    public TracksController(FileStorageService storageService, AppDbContext context, MessageBusClient messageBusClient)
+    public TracksController(FileStorageService storageService, AppDbContext context, MessageBusClient messageBusClient, IDistributedCache cache)
     {
         _storageService = storageService;
         _context = context;
         _messageBusClient = messageBusClient;
+        _cache = cache;
     }
 
     [HttpPost("upload")]
@@ -65,18 +69,37 @@ public class TracksController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAllTracks()
+    public async Task<IActionResult> GetAllTracks([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
     {
+        var cacheKey = $"tracks_page_{page}_size_{pageSize}";
+
+        var cachedData = await _cache.GetStringAsync(cacheKey);
+        if (!string.IsNullOrEmpty(cachedData))
+        {
+            Console.WriteLine($"--> [CACHE HIT] Отдаем треки из Redis (Страница {page})");
+            return Ok(JsonSerializer.Deserialize<object>(cachedData));
+        }
+
+        Console.WriteLine($"--> [DB HIT] Получаем в PostgreSQL треки (Страница {page})");
+
         var tracks = await _context.Tracks
             .OrderByDescending(t => t.UploadedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(t => new
             {
                 t.Id,
                 t.Title,
                 t.Artist,
+                t.Duration,
                 t.UploadedAt
             })
             .ToListAsync();
+
+        var cacheOptions = new DistributedCacheEntryOptions()
+            .SetAbsoluteExpiration(TimeSpan.FromSeconds(30));
+
+        await _cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(tracks), cacheOptions);
 
         return Ok(tracks);
     }

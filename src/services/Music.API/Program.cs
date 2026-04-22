@@ -18,6 +18,11 @@ public class Program
         builder.Services.AddDbContext<AppDbContext>(options =>
         options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+        builder.Services.AddStackExchangeRedisCache(options =>
+        {
+            options.Configuration = builder.Configuration["Redis:Configuration"];
+        });
+
         builder.Services.AddMinio(configureClient => configureClient
         .WithEndpoint(builder.Configuration["Minio:Endpoint"])
         .WithCredentials(
@@ -25,6 +30,18 @@ public class Program
             builder.Configuration["Minio:SecretKey"])
         .WithSSL(false)
         .Build());
+
+        builder.Services.AddSignalR();
+        builder.Services.AddCors(options =>
+        {
+            options.AddDefaultPolicy(policy =>
+            {
+                policy.AllowAnyHeader()
+                      .AllowAnyMethod()
+                      .SetIsOriginAllowed(_ => true)
+                      .AllowCredentials();
+            });
+        });
 
         builder.Services.AddScoped<Music.API.Services.FileStorageService>();
         builder.Services.AddSingleton<MessageBusClient>();
@@ -40,9 +57,13 @@ public class Program
 
         app.UseHttpsRedirection();
 
+        app.UseCors();
+
         app.UseAuthorization();
 
         app.MapControllers();
+
+        app.MapHub<Music.API.Hubs.NotificationHub>("/notifications");
 
         app.Run();
     }
