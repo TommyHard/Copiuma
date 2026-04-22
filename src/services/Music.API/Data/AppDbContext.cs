@@ -19,5 +19,13 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<PlaylistTrack>()
             .HasKey(pt => new { pt.PlaylistId, pt.TrackId });
+
+        modelBuilder.Entity<Track>()
+            .HasGeneratedTsVectorColumn(
+                t => t.SearchVector,
+                "russian",
+                t => new { t.Title, t.Artist })
+            .HasIndex(t => t.SearchVector)
+            .HasMethod("GIN");
     }
 }

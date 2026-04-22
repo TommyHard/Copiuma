@@ -3,6 +3,9 @@
     <File Path="test-sockets.html" />
     <File Path="test.http" />
   </Folder>
+  <Folder Name="/Элементы решения/Copiuma-Web/">
+    <File Path="index.html" />
+  </Folder>
   <Project Path="../src/api-gateway/Gateway.API/Gateway.API.csproj" />
   <Project Path="../src/services/Identity.API/Identity.API.csproj" />
   <Project Path="../src/services/Music.API/Music.API.csproj" />

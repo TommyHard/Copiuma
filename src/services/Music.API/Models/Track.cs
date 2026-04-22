@@ -1,4 +1,6 @@
-﻿namespace Music.API.Models;
+﻿using NpgsqlTypes;
+
+namespace Music.API.Models;
 
 public class Track
 {
@@ -22,4 +24,6 @@ public class Track
     public Guid UploadedByUserId { get; set; }
 
     public TimeSpan? Duration { get; set; }
+
+    public NpgsqlTsVector? SearchVector { get; set; }
 }

@@ -12,6 +12,17 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
+        builder.Services.AddCors(options =>
+        {
+            options.AddDefaultPolicy(policy =>
+            {
+                policy.AllowAnyHeader()
+                      .AllowAnyMethod()
+                      .SetIsOriginAllowed(_ => true)
+                      .AllowCredentials();
+            });
+        });
+
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen(options =>
         {
@@ -85,6 +96,8 @@ public class Program
             app.UseSwagger();
             app.UseSwaggerUI();
         }
+
+        app.UseCors();
 
         app.UseAuthentication();
         app.UseAuthorization();

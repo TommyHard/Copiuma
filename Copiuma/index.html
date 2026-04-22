@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Copiuma Music</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #1db954;
+        }
+
+        .panel {
+            background-color: #181818;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        input {
+            padding: 10px;
+            margin: 5px 0;
+            width: calc(100% - 22px);
+            border-radius: 4px;
+            border: none;
+            background: #333;
+            color: white;
+        }
+
+        button {
+            background-color: #1db954;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+            button:hover {
+                background-color: #1ed760;
+            }
+
+        .track-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #282828;
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+
+            .track-item:hover {
+                background-color: #2a2a2a;
+            }
+
+        .player-container {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: #181818;
+            padding: 15px;
+            border-top: 1px solid #282828;
+            display: none;
+        }
+
+        audio {
+            width: 100%;
+            outline: none;
+        }
+
+        #auth-status {
+            color: #aaaaaa;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Copiuma Music</h1>
+
+        <div class="panel" id="auth-panel">
+            <h2>Вход в систему</h2>
+            <div id="auth-status">Вы не авторизованы</div>
+            <input type="email" id="email" placeholder="Email" value="tommyhard@gmail.com">
+            <input type="password" id="password" placeholder="Пароль">
+            <button onclick="login()">Войти</button>
+        </div>
+
+        <div class="panel" id="tracks-panel" style="display: none;">
+            <h2>Мои треки</h2>
+            <button onclick="loadTracks()" style="margin-bottom: 15px;">Обновить список</button>
+            <div id="tracks-list"></div>
+        </div>
+    </div>
+
+    <div class="player-container" id="player-container">
+        <div id="now-playing" style="margin-bottom: 10px; font-weight: bold; color: #1db954;">Ничего не играет</div>
+        <audio id="audio-player" controls></audio>
+    </div>
+
+    <script>
+        const API_IDENTITY = 'http://localhost:5001/Auth';
+        const API_MUSIC = 'http://localhost:7161/api/music';
+
+    window.onload = () => {
+        const token = localStorage.getItem('token');
+        if (token) {
+            document.getElementById('auth-status').innerText = 'Авторизован';
+            document.getElementById('tracks-panel').style.display = 'block';
+            loadTracks();
+        }
+    };
+
+    async function login() {
+        const email = document.getElementById('email').value.trim();
+        const password = document.getElementById('password').value.trim();
+
+        try {
+            const response = await fetch(`${API_IDENTITY}/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email, password: password })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                localStorage.setItem('token', data.token);
+
+                document.getElementById('auth-status').innerText = '✅ Авторизован успешно!';
+                document.getElementById('tracks-panel').style.display = 'block';
+                loadTracks();
+            } else {
+                // Вскрываем настоящий ответ сервера!
+                const errorText = await response.text();
+                alert(`Сервер отклонил запрос (Статус ${response.status}):\n${errorText}`);
+                console.error("Детали:", errorText);
+            }
+        } catch (error) {
+            console.error('Ошибка сети:', error);
+            alert('Не удалось подключиться к серверу. Посмотри консоль (F12).');
+        }
+    }
+
+    async function loadTracks() {
+        const token = localStorage.getItem('token');
+        const listDiv = document.getElementById('tracks-list');
+        listDiv.innerHTML = 'Загрузка...';
+
+        try {
+            const response = await fetch(`${API_MUSIC}/Tracks?page=1&pageSize=50`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                const tracks = await response.json();
+                listDiv.innerHTML = '';
+
+                if (tracks.length === 0) {
+                    listDiv.innerHTML = 'Треков пока нет.';
+                    return;
+                }
+
+                tracks.forEach(track => {
+                    const trackTitle = track.title || track.Title || 'Без названия';
+                    const trackArtist = track.artist || track.Artist || 'Неизвестен';
+                    const trackId = track.id || track.Id;
+                    const trackDurationRaw = track.duration || track.Duration;
+
+                    const duration = trackDurationRaw ? trackDurationRaw.substring(3, 8) : '--:--';
+
+                    const div = document.createElement('div');
+                    div.className = 'track-item';
+                    div.innerHTML = `
+                        <div>
+                            <strong>${trackTitle}</strong><br>
+                            <small style="color: #aaa;">${trackArtist}</small>
+                        </div>
+                        <div style="color: #1db954;">${duration} 🎵</div>
+                    `;
+
+                    div.onclick = () => playTrack(trackId, trackTitle, trackArtist);
+                    listDiv.appendChild(div);
+                });
+            } else if (response.status === 401) {
+                alert('Сессия истекла, войдите заново.');
+                localStorage.removeItem('token');
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
+    async function playTrack(id, title, artist) {
+        const token = localStorage.getItem('token');
+        const playerContainer = document.getElementById('player-container');
+        const audio = document.getElementById('audio-player');
+        const nowPlaying = document.getElementById('now-playing');
+
+        nowPlaying.innerText = `Загрузка: ${artist} - ${title}...`;
+        playerContainer.style.display = 'block';
+
+        try {
+            const response = await fetch(`${API_MUSIC}/Tracks/${id}/play`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                const blob = await response.blob();
+                const objectUrl = URL.createObjectURL(blob);
+
+                audio.src = objectUrl;
+                audio.play();
+                nowPlaying.innerText = `Играет: ${artist} - ${title}`;
+            } else {
+                alert('Не удалось загрузить трек');
+                nowPlaying.innerText = 'Ошибка загрузки';
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    }
+    </script>
+
+</body>
+</html>

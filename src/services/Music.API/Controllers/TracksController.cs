@@ -129,6 +129,32 @@ public class TracksController : ControllerBase
         return Ok(favoriteTracks);
     }
 
+    [HttpGet("search")]
+    public async Task<IActionResult> SearchTracks([FromQuery] string q)
+    {
+        if (string.IsNullOrWhiteSpace(q))
+        {
+            return BadRequest("Поисковой запрос не может быть пустым");
+        }
+
+        Console.WriteLine($"--> [SEARCH] Ищем треки по запросу: '{q}'");
+
+        var tracks = await _context.Tracks
+            .Where(t => t.SearchVector!.Matches(EF.Functions.WebSearchToTsQuery("russian", q)))
+            .Select(t => new
+            {
+                t.Id,
+                t.Title,
+                t.Artist,
+                t.Duration,
+                t.UploadedAt
+            })
+            .Take(20)
+            .ToListAsync();
+
+        return Ok(tracks);
+    }
+
     [HttpGet("{id}/play")]
     public async Task<IActionResult> PlayTrack(Guid id)
     {
