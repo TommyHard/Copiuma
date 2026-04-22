@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16
@@ -20,6 +18,16 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     command: server /data --console-address ":9001"
+  
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: copiuma_rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
 
   identity-api:
       build:
@@ -45,9 +53,11 @@ services:
       - Minio__Endpoint=minio:9000
       - Minio__AccessKey=minioadmin
       - Minio__SecretKey=minioadmin
+      - RabbitMQ__HostName=rabbitmq
     depends_on:
       - postgres
       - minio
+      - rabbitmq
 
   gateway-api:
     build:

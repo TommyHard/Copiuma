@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Minio;
 using Music.API.Data;
+using Music.API.Services;
 
 namespace Music.API;
 
@@ -26,6 +27,8 @@ public class Program
         .Build());
 
         builder.Services.AddScoped<Music.API.Services.FileStorageService>();
+        builder.Services.AddSingleton<MessageBusClient>();
+        builder.Services.AddHostedService<TrackProcessingWorker>();
 
         var app = builder.Build();
 

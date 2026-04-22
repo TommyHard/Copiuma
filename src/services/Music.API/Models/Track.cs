@@ -20,4 +20,6 @@ public class Track
 
     // ID пользователя, который загрузил трек
     public Guid UploadedByUserId { get; set; }
+
+    public TimeSpan? Duration { get; set; }
 }

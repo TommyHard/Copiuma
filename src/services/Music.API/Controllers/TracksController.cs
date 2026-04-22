@@ -13,11 +13,13 @@ public class TracksController : ControllerBase
 {
     private readonly FileStorageService _storageService;
     private readonly AppDbContext _context;
+    private readonly MessageBusClient _messageBusClient;
 
-    public TracksController(FileStorageService storageService, AppDbContext context)
+    public TracksController(FileStorageService storageService, AppDbContext context, MessageBusClient messageBusClient)
     {
         _storageService = storageService;
         _context = context;
+        _messageBusClient = messageBusClient;
     }
 
     [HttpPost("upload")]
@@ -51,6 +53,8 @@ public class TracksController : ControllerBase
 
         _context.Tracks.Add(track);
         await _context.SaveChangesAsync();
+
+        _messageBusClient.PublishNewTrackEvent(track.Id);
 
         return Ok(new
         {
