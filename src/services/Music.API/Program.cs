@@ -45,8 +45,6 @@ public class Program
 
         builder.Services.AddScoped<Music.API.Services.FileStorageService>();
         builder.Services.AddSingleton<MessageBusClient>();
-
-        builder.Services.AddScoped<HlsConverterService>();
         builder.Services.AddHostedService<TrackProcessingWorker>();
 
         var app = builder.Build();
