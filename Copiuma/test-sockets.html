@@ -25,29 +25,25 @@
     </style>
 </head>
 <body>
-    <h2>🎧 Локатор Уведомлений Music.API</h2>
+    <h2>Локатор Уведомлений Music.API</h2>
     <div id="log">Ожидание подключения к серверу...</div>
 
     <script>
-        // 1. Указываем адрес нашего Хаба
         const connection = new signalR.HubConnectionBuilder()
             .withUrl("http://localhost:5002/notifications")
             .build();
 
-        // 2. Подписываемся на событие "TrackProcessed" (то самое, что отправляет Воркер!)
         connection.on("TrackProcessed", function (data) {
             const logDiv = document.getElementById("log");
             const newElement = document.createElement("p");
-            newElement.innerHTML = `🔥 <span class="success">УВЕДОМЛЕНИЕ:</span> Трек <b>"${data.title}"</b> успешно обработан! Длительность: <b>${data.duration}</b>`;
+            newElement.innerHTML = `<span class="success">УВЕДОМЛЕНИЕ:</span> Трек <b>"${data.title}"</b> успешно обработан. Длительность: <b>${data.duration}</b>`;
             logDiv.prepend(newElement);
 
-            // Проигрываем системный звук для крутости
             new Audio('https://actions.google.com/sounds/v1/ui/message_notification.ogg').play();
         });
 
-        // 3. Запускаем соединение
         connection.start()
-            .then(() => document.getElementById("log").innerHTML = "<p>✅ Подключено! Жду загрузки треков...</p>")
+            .then(() => document.getElementById("log").innerHTML = "<p>Подключено. Ожидание загрузки треков...</p>")
             .catch(err => console.error(err));
     </script>
 </body>
