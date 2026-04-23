@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Copiuma Music</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -100,8 +101,18 @@
             <h2>Вход в систему</h2>
             <div id="auth-status">Вы не авторизованы</div>
             <input type="email" id="email" placeholder="Email" value="tommyhard@gmail.com">
-            <input type="password" id="password" placeholder="Пароль">
+            <input type="password" id="password" placeholder="Пароль" value="admin12345">
             <button onclick="login()">Войти</button>
+        </div>
+
+        <div class="panel" id="social-panel" style="display: none; border-left: 4px solid #e91e63;">
+            <h2>Совместное прослушивание</h2>
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <input type="text" id="room-id" placeholder="ID Комнаты (например, party2026)">
+                <button onclick="joinRoom(true)" style="background-color: #e91e63;">Я Диджей</button>
+                <button onclick="joinRoom(false)" style="background-color: #333;">Я Слушатель</button>
+            </div>
+            <div id="room-status" style="color: #aaa; font-size: 0.9em;">Вы не в комнате</div>
         </div>
 
         <div class="panel" id="tracks-panel" style="display: none;">
@@ -123,19 +134,58 @@
         let syncInterval = null;
         let currentTrackId = null;
 
+        let isSyncing = false;
+        let isLocalPause = false;
+
+        function parseJwt(token) {
+            try {
+                const base64Url = token.split('.')[1];
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function (c) {
+                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                }).join(''));
+                return JSON.parse(jsonPayload);
+            } catch (e) { return null; }
+        }
+
         window.onload = () => {
             const token = localStorage.getItem('token');
+            const audio = document.getElementById('audio-player');
+
+            audio.addEventListener('play', () => {
+                isLocalPause = false;
+                if (isDj && !isSyncing && currentTrackId && currentRoom) {
+                    const title = document.getElementById('now-playing').innerText.replace('Играет: ', '');
+                    hubConnection?.invoke("SendPlay", currentRoom, currentTrackId, title, "Artist", audio.currentTime);
+                }
+            });
+
+            audio.addEventListener('pause', () => {
+                if (!isSyncing) savePlaybackState();
+
+                if (isDj && !isSyncing && currentRoom) {
+                    hubConnection?.invoke("SendPause", currentRoom, audio.currentTime);
+                } else if (!isDj && !isSyncing && currentRoom) {
+                    isLocalPause = true;
+                }
+            });
+
+            audio.addEventListener('seeked', () => {
+                if (isDj && !isSyncing && currentRoom) {
+                    hubConnection?.invoke("SendSeek", currentRoom, audio.currentTime);
+                }
+            });
+
             if (token) {
                 document.getElementById('auth-status').innerText = 'Авторизован';
                 document.getElementById('tracks-panel').style.display = 'block';
+                document.getElementById('social-panel').style.display = 'block';
                 loadTracks();
                 checkActiveSession();
             }
         };
 
-        window.addEventListener('beforeunload', () => {
-            savePlaybackState();
-        });
+        window.addEventListener('beforeunload', () => savePlaybackState());
 
         async function login() {
             const email = document.getElementById('email').value.trim();
@@ -152,8 +202,18 @@
                     const data = await response.json();
                     localStorage.setItem('token', data.token);
 
-                    document.getElementById('auth-status').innerText = 'Авторизован успешно!';
+                    document.getElementById('auth-status').innerText = 'Авторизован успешно.';
                     document.getElementById('tracks-panel').style.display = 'block';
+                    document.getElementById('social-panel').style.display = 'block';
+
+                    if (!document.getElementById('room-participants')) {
+                        const socialPanel = document.getElementById('social-panel');
+                        const partDiv = document.createElement('div');
+                        partDiv.id = 'room-participants';
+                        partDiv.style = 'margin-top: 15px; font-size: 0.9em; background: #222; padding: 10px; border-radius: 4px; display: none;';
+                        socialPanel.appendChild(partDiv);
+                    }
+
                     loadTracks();
                     checkActiveSession();
                 } else {
@@ -187,12 +247,12 @@
                         const div = document.createElement('div');
                         div.className = 'track-item';
                         div.innerHTML = `
-                            <div>
-                                <strong>${trackTitle}</strong><br>
-                                <small style="color: #aaa;">${trackArtist}</small>
-                            </div>
-                            <div style="color: #1db954;">▶</div>
-                        `;
+                    <div>
+                        <strong>${trackTitle}</strong><br>
+                        <small style="color: #aaa;">${trackArtist}</small>
+                    </div>
+                    <div style="color: #1db954;">▶</div>
+                `;
 
                         div.onclick = () => playTrack(trackId, trackTitle, trackArtist);
                         listDiv.appendChild(div);
@@ -225,16 +285,14 @@
                         if (startPosition > 0) audio.currentTime = startPosition;
                     };
 
-                    audio.play();
+                    await audio.play().catch(e => console.log('Autoplay issue:', e));
                     nowPlaying.innerText = `Играет: ${artist} - ${title}`;
+
+                    setTimeout(() => isSyncing = false, 500);
 
                     currentTrackId = id;
                     if (syncInterval) clearInterval(syncInterval);
-
                     syncInterval = setInterval(savePlaybackState, 5000);
-
-                    audio.onpause = savePlaybackState;
-
                 } else {
                     nowPlaying.innerText = 'Ошибка загрузки';
                 }
@@ -256,14 +314,10 @@
                         'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        TrackId: currentTrackId,
-                        PositionSeconds: Math.floor(audio.currentTime)
-                    })
+                    body: JSON.stringify({ TrackId: currentTrackId, PositionSeconds: Math.floor(audio.currentTime) })
                 });
-                console.log(`[Sync] Сохранено: ${Math.floor(audio.currentTime)} сек.`);
             } catch (e) {
-                console.error('[Sync] Ошибка синхронизации', e);
+                console.error('[Sync] Ошибка', e);
             }
         }
 
@@ -276,28 +330,166 @@
 
                 if (response.ok) {
                     const state = await response.json();
-                    const trackId = state.TrackId;
-                    const position = state.PositionSeconds;
+                    if (!state.TrackId) return;
 
-                    if (!trackId) return;
-
-                    const trackResponse = await fetch(`${API_MUSIC}/Tracks/${trackId}`, {
+                    const trackResponse = await fetch(`${API_MUSIC}/Tracks/${state.TrackId}`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                     });
 
                     if (trackResponse.ok) {
                         const track = await trackResponse.json();
-
-                        const userAgrees = confirm(`Продолжить прослушивание "${track.artist} - ${track.title}" с ${position} сек.?`);
-
-                        if (userAgrees) {
-                            playTrack(track.id, track.title, track.artist, position);
-                        }
+                        const userAgrees = confirm(`Продолжить прослушивание "${track.artist} - ${track.title}" с ${state.PositionSeconds} сек.?`);
+                        if (userAgrees) playTrack(track.id, track.title, track.artist, state.PositionSeconds);
                     }
                 }
-            } catch (e) {
-                console.error('Ошибка сессии:', e);
+            } catch (e) { console.error('Ошибка сессии:', e); }
+        }
+
+        let hubConnection = null;
+        let currentRoom = null;
+        let isDj = false;
+        let heartbeatInterval = null;
+
+        async function initSignalR() {
+            if (hubConnection) return;
+
+            hubConnection = new signalR.HubConnectionBuilder()
+                .withUrl("http://localhost:5002/notifications")
+                .withAutomaticReconnect()
+                .build();
+
+            hubConnection.on("DjRejected", (djName) => {
+                alert(`В этой комнате уже есть Диджей (${djName}). Вы подключены как Слушатель.`);
+            });
+
+            hubConnection.on("RoomJoined", (assignedIsDj) => {
+                isDj = assignedIsDj;
+                document.getElementById('room-status').innerHTML =
+                    `Вы в комнате <b>${currentRoom}</b>. Роль: <span style="color: ${isDj ? '#e91e63' : '#1db954'}">${isDj ? 'Диджей ♪' : 'Слушатель ♫'}</span>`;
+                setupDjEvents();
+            });
+
+            hubConnection.on("ForceLeave", (msg) => {
+                alert(msg);
+                currentRoom = null;
+                isDj = false;
+                document.getElementById('room-status').innerHTML = "Вы не в комнате";
+                document.getElementById('room-participants').style.display = 'none';
+                document.getElementById('audio-player').pause();
+            });
+
+            hubConnection.on("UpdateParticipants", (users) => {
+                let partDiv = document.getElementById('room-participants');
+                if (!partDiv) return;
+
+                partDiv.style.display = 'block';
+                let html = '<strong>В комнате:</strong><ul style="margin: 5px 0; padding-left: 20px;">';
+                users.forEach(u => html += `<li>${u.name} ${u.isDj ? '♪' : '♫'}</li>`);
+                html += '</ul>';
+                partDiv.innerHTML = html;
+            });
+
+            hubConnection.on("SyncCurrentTrack", async (trackId, title, artist, position, isPlaying) => {
+                console.log(`[Синхронизация] Подключение к существующему потоку...`);
+                isSyncing = true;
+
+                await playTrack(trackId, title, artist, position);
+
+                const audio = document.getElementById('audio-player');
+                if (!isPlaying) {
+                    audio.pause();
+                    isLocalPause = true;
+                } else {
+                    isLocalPause = false;
+                    audio.play().catch(e => console.log("Требуется клик для запуска звука"));
+                }
+            });
+
+            hubConnection.on("ReceivePlay", (trackId, title, artist, position) => {
+                console.log(`[Синхронизация] Диджей запустил трек: ${title}`);
+                isSyncing = true;
+                isLocalPause = false;
+                playTrack(trackId, title, artist, position);
+            });
+
+            hubConnection.on("ReceivePause", (position) => {
+                const audio = document.getElementById('audio-player');
+                isSyncing = true;
+                audio.currentTime = position;
+                audio.pause();
+                isLocalPause = false;
+                setTimeout(() => isSyncing = false, 500);
+            });
+
+            hubConnection.on("ReceiveSeek", (position) => {
+                console.log(`[Синхронизация] Диджей перемотал на ${position} сек.`);
+                const audio = document.getElementById('audio-player');
+
+                isSyncing = true;
+                audio.currentTime = position;
+
+                if (!isLocalPause && audio.paused) {
+                    audio.play().catch(e => console.warn("Автоплей заблокирован браузером:", e));
+                }
+
+                setTimeout(() => isSyncing = false, 500);
+            });
+
+            hubConnection.on("ReceiveHeartbeat", (position, isPlaying) => {
+                if (isDj || isLocalPause) return;
+                const audio = document.getElementById('audio-player');
+
+                const drift = Math.abs(audio.currentTime - position);
+                if (drift > 3 && isPlaying) {
+                    isSyncing = true;
+                    audio.currentTime = position;
+                    setTimeout(() => isSyncing = false, 500);
+                }
+            });
+
+            await hubConnection.start();
+        }
+
+        function setupDjEvents() {
+            if (heartbeatInterval) clearInterval(heartbeatInterval);
+
+            if (isDj) {
+                heartbeatInterval = setInterval(() => {
+                    const audio = document.getElementById('audio-player');
+                    if (currentRoom && currentTrackId) {
+                        const fullTitle = document.getElementById('now-playing').innerText.replace('Играет: ', '');
+                        const parts = fullTitle.split(' - ');
+                        const artist = parts.length > 1 ? parts[0] : "Неизвестен";
+                        const title = parts.length > 1 ? parts.slice(1).join(' - ') : parts[0];
+
+                        hubConnection.invoke("SendHeartbeat", currentRoom, audio.currentTime, !audio.paused);
+                    }
+                }, 3000);
             }
+        }
+
+        async function joinRoom(asDj) {
+            const roomId = document.getElementById('room-id').value.trim();
+            if (!roomId) return alert("Введите название комнаты");
+
+            if (currentRoom === roomId && isDj === asDj) {
+                console.log("[Social] Вы уже подключены к этой комнате в данной роли.");
+                return;
+            }
+
+            const token = localStorage.getItem('token');
+            const decoded = parseJwt(token);
+            if (!decoded) return alert("Необходима авторизация");
+
+            await initSignalR();
+
+            if (currentRoom) await hubConnection.invoke("LeaveRoom");
+
+            currentRoom = roomId;
+            const userId = decoded.nameid;
+            const userName = decoded.DisplayName || decoded.email;
+
+            await hubConnection.invoke("JoinRoom", currentRoom, asDj, userId, userName);
         }
     </script>
 
