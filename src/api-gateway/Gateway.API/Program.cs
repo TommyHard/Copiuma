@@ -1,7 +1,10 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
 using Yarp.ReverseProxy.Transforms;
 
 namespace Gateway.API;
@@ -12,13 +15,16 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
+        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+                             ?? new[] { "http://localhost:3000" };
+
         builder.Services.AddCors(options =>
         {
             options.AddDefaultPolicy(policy =>
             {
-                policy.AllowAnyHeader()
+                policy.WithOrigins(allowedOrigins)
+                      .AllowAnyHeader()
                       .AllowAnyMethod()
-                      .SetIsOriginAllowed(_ => true)
                       .AllowCredentials();
             });
         });
@@ -35,7 +41,7 @@ public class Program
                 Scheme = "Bearer",
                 BearerFormat = "JWT",
                 In = ParameterLocation.Header,
-                Description = "¬ведите токен в формате: Bearer [пробел] ваш_токен"
+                Description = "¬ведите токен в формате: Bearer {ваш_токен}"
             });
 
             options.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -45,7 +51,7 @@ public class Program
                     {
                         Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
                     },
-                    new string[] {}
+                    Array.Empty<string>()
                 }
             });
         });
@@ -56,12 +62,14 @@ public class Program
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JwtSettings:Key"]!)),
+                    IssuerSigningKey = new SymmetricSecurityKey(
+                        Encoding.UTF8.GetBytes(builder.Configuration["JwtSettings:Key"]!)),
                     ValidateIssuer = true,
                     ValidIssuer = builder.Configuration["JwtSettings:Issuer"],
                     ValidateAudience = true,
                     ValidAudience = builder.Configuration["JwtSettings:Audience"],
-                    ValidateLifetime = true
+                    ValidateLifetime = true,
+                    ClockSkew = TimeSpan.FromSeconds(30)
                 };
             });
 
@@ -70,19 +78,43 @@ public class Program
             options.AddPolicy("AuthenticatedUser", policy => policy.RequireAuthenticatedUser());
         });
 
+        builder.Services.AddRateLimiter(options =>
+        {
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "anon",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 100,
+                        Window = TimeSpan.FromSeconds(10),
+                        QueueLimit = 0,
+                        AutoReplenishment = true
+                    }));
+        });
+
         builder.Services.AddReverseProxy()
             .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))
             .AddTransforms(builderContext =>
             {
                 builderContext.AddRequestTransform(transformContext =>
                 {
-                    var userId = transformContext.HttpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-                              ?? transformContext.HttpContext.User.FindFirst("Id")?.Value
-                              ?? transformContext.HttpContext.User.FindFirst("id")?.Value;
+                    var user = transformContext.HttpContext.User;
+                    var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+                    var email = user.FindFirstValue(ClaimTypes.Email);
+                    var displayName = user.FindFirstValue("DisplayName");
+
+                    transformContext.ProxyRequest.Headers.Remove("X-User-Id");
+                    transformContext.ProxyRequest.Headers.Remove("X-User-Email");
+                    transformContext.ProxyRequest.Headers.Remove("X-User-Name");
 
                     if (!string.IsNullOrEmpty(userId))
                     {
                         transformContext.ProxyRequest.Headers.Add("X-User-Id", userId);
+                        if (!string.IsNullOrEmpty(email))
+                            transformContext.ProxyRequest.Headers.Add("X-User-Email", email);
+                        if (!string.IsNullOrEmpty(displayName))
+                            transformContext.ProxyRequest.Headers.Add("X-User-Name", displayName);
                     }
 
                     return ValueTask.CompletedTask;
@@ -99,13 +131,13 @@ public class Program
         });
 
         app.UseCors();
-
+        app.UseRateLimiter();
         app.UseAuthentication();
         app.UseAuthorization();
 
         app.MapReverseProxy();
 
-        app.MapGet("/test-security", () => "JWT насто€щий!")
+        app.MapGet("/test-security", () => "JWT работает.")
            .RequireAuthorization("AuthenticatedUser");
 
         app.Run();

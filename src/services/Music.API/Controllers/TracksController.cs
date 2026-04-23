@@ -1,154 +1,167 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using Music.API.Data;
 using Music.API.Dtos;
 using Music.API.Models;
 using Music.API.Services;
+using StackExchange.Redis;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace Music.API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("[controller]")]
 public class TracksController : ControllerBase
 {
-    private readonly FileStorageService _storageService;
+    private readonly FileStorageService _storage;
     private readonly AppDbContext _context;
-    private readonly MessageBusClient _messageBusClient;
+    private readonly MessageBusClient _bus;
     private readonly IDistributedCache _cache;
+    private readonly IConnectionMultiplexer _redis;
+    private readonly ILogger<TracksController> _log;
 
-    public TracksController(FileStorageService storageService, AppDbContext context, MessageBusClient messageBusClient, IDistributedCache cache)
+    private static readonly HashSet<string> AllowedContentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
-        _storageService = storageService;
+        "audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav",
+        "audio/flac", "audio/ogg", "audio/webm", "audio/aac", "audio/mp4"
+    };
+
+    public TracksController(
+        FileStorageService storage,
+        AppDbContext context,
+        MessageBusClient bus,
+        IDistributedCache cache,
+        IConnectionMultiplexer redis,
+        ILogger<TracksController> log)
+    {
+        _storage = storage;
         _context = context;
-        _messageBusClient = messageBusClient;
+        _bus = bus;
         _cache = cache;
+        _redis = redis;
+        _log = log;
+    }
+
+    private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+    private const string CacheVersionKey = "tracks:version";
+
+    private async Task<long> GetCacheVersionAsync()
+    {
+        var db = _redis.GetDatabase();
+        var v = await db.StringGetAsync(CacheVersionKey);
+        return v.HasValue ? (long)v : 0L;
+    }
+
+    private async Task BumpCacheVersionAsync()
+    {
+        var db = _redis.GetDatabase();
+        await db.StringIncrementAsync(CacheVersionKey);
     }
 
     [HttpPost("upload")]
+    [RequestSizeLimit(200_000_000)]
     public async Task<IActionResult> UploadTrack([FromForm] UploadTrackRequest request)
     {
-        if (request.File == null || request.File.Length == 0) return BadRequest("Файл не выбран или пуст");
-        if (!request.File.ContentType.Contains("audio")) return BadRequest("Пожалуйста, загрузите аудиофайл");
-        if (string.IsNullOrWhiteSpace(request.Title)) return BadRequest("Название трека обязательно");
+        if (request.File is null || request.File.Length == 0)
+            return BadRequest("Файл не выбран или пуст.");
 
-        using var stream = request.File.OpenReadStream();
-        var savedFileName = await _storageService.UploadFileAsync(stream, request.File.FileName, request.File.ContentType);
+        if (!AllowedContentTypes.Contains(request.File.ContentType))
+            return BadRequest($"Недопустимый content-type: {request.File.ContentType}.");
 
-        var userIdString = Request.Headers["X-User-Id"].FirstOrDefault();
-        Guid uploaderId = Guid.Empty;
+        if (string.IsNullOrWhiteSpace(request.Title))
+            return BadRequest("Название трека обязательно.");
 
-        if (!string.IsNullOrEmpty(userIdString) && Guid.TryParse(userIdString, out var parsedId))
-        {
-            uploaderId = parsedId;
-        }
+        await using var stream = request.File.OpenReadStream();
+        var savedFileName = await _storage.UploadFileAsync(
+            stream, request.File.FileName, request.File.ContentType, request.File.Length);
 
         var track = new Track
         {
             Id = Guid.NewGuid(),
-            Title = request.Title,
-            Artist = request.Artist,
+            Title = request.Title.Trim(),
+            Artist = request.Artist?.Trim(),
             FileName = savedFileName,
             ContentType = request.File.ContentType,
             UploadedAt = DateTime.UtcNow,
-            UploadedByUserId = uploaderId
+            UploadedByUserId = UserId
         };
 
         _context.Tracks.Add(track);
         await _context.SaveChangesAsync();
 
-        _messageBusClient.PublishNewTrackEvent(track.Id);
-
-        return Ok(new
+        try
         {
-            Message = "Трек успешно загружен в облако и сохранен в базу",
-            TrackId = track.Id,
-            FileName = savedFileName
-        });
+            await _bus.PublishNewTrackEventAsync(track.Id);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Не удалось опубликовать событие TrackUploaded для {TrackId}.", track.Id);
+        }
+
+        await BumpCacheVersionAsync();
+
+        return Ok(new { Message = "Трек загружен.", TrackId = track.Id, FileName = savedFileName });
     }
 
     [HttpGet]
     public async Task<IActionResult> GetAllTracks([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
     {
-        var cacheKey = $"tracks_page_{page}_size_{pageSize}";
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
 
-        var cachedData = await _cache.GetStringAsync(cacheKey);
-        if (!string.IsNullOrEmpty(cachedData))
+        var version = await GetCacheVersionAsync();
+        var cacheKey = $"tracks:v{version}:page{page}:size{pageSize}";
+
+        var cached = await _cache.GetStringAsync(cacheKey);
+        if (!string.IsNullOrEmpty(cached))
         {
-            Console.WriteLine($"--> [CACHE HIT] Отдаем треки из Redis (Страница {page})");
-            return Ok(JsonSerializer.Deserialize<object>(cachedData));
+            return Content(cached, "application/json");
         }
-
-        Console.WriteLine($"--> [DB HIT] Получаем в PostgreSQL треки (Страница {page})");
 
         var tracks = await _context.Tracks
             .OrderByDescending(t => t.UploadedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(t => new
-            {
-                t.Id,
-                t.Title,
-                t.Artist,
-                t.Duration,
-                t.UploadedAt
-            })
+            .Select(t => new { t.Id, t.Title, t.Artist, t.Duration, t.UploadedAt })
             .ToListAsync();
 
-        var cacheOptions = new DistributedCacheEntryOptions()
-            .SetAbsoluteExpiration(TimeSpan.FromSeconds(30));
+        var payload = JsonSerializer.Serialize(tracks);
+        await _cache.SetStringAsync(cacheKey, payload, new DistributedCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)
+        });
 
-        await _cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(tracks), cacheOptions);
-
-        return Ok(tracks);
+        return Content(payload, "application/json");
     }
 
     [HttpGet("favorites")]
     public async Task<IActionResult> GetFavoriteTracks()
     {
-        var userIdString = Request.Headers["X-User-Id"].FirstOrDefault();
-        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
-        {
-            return Unauthorized("Пользователь не авторизован или запрос пришел не через Gateway");
-        }
-
-        var favoriteTracks = await _context.LikedTracks
+        var userId = UserId;
+        var favs = await _context.LikedTracks
             .Where(l => l.UserId == userId)
             .Include(l => l.Track)
             .OrderByDescending(l => l.LikedAt)
-            .Select(l => new
-            {
-                l.Track!.Id,
-                l.Track.Title,
-                l.Track.Artist,
-                LikedAt = l.LikedAt
-            })
+            .Select(l => new { l.Track!.Id, l.Track.Title, l.Track.Artist, l.LikedAt })
             .ToListAsync();
 
-        return Ok(favoriteTracks);
+        return Ok(favs);
     }
 
     [HttpGet("search")]
     public async Task<IActionResult> SearchTracks([FromQuery] string q)
     {
         if (string.IsNullOrWhiteSpace(q))
-        {
-            return BadRequest("Поисковой запрос не может быть пустым");
-        }
-
-        Console.WriteLine($"--> [SEARCH] Ищем треки по запросу: '{q}'");
+            return BadRequest("Поисковой запрос не может быть пустым.");
 
         var tracks = await _context.Tracks
             .Where(t => t.SearchVector!.Matches(EF.Functions.WebSearchToTsQuery("russian", q)))
-            .Select(t => new
-            {
-                t.Id,
-                t.Title,
-                t.Artist,
-                t.Duration,
-                t.UploadedAt
-            })
+            .Select(t => new { t.Id, t.Title, t.Artist, t.Duration, t.UploadedAt })
             .Take(20)
             .ToListAsync();
 
@@ -158,59 +171,21 @@ public class TracksController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteTrack(Guid id)
     {
-        var userIdString = Request.Headers["X-User-Id"].FirstOrDefault();
-        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
-            return Unauthorized();
-
+        var userId = UserId;
         var track = await _context.Tracks.FindAsync(id);
-        if (track == null) return NotFound();
+        if (track is null) return NotFound();
 
         if (track.UploadedByUserId != userId)
-            return StatusCode(403, "Вы можете удалять только свои треки");
+            return Forbid();
 
-        try
-        {
-            await _storageService.DeleteFileAsync(track.FileName);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"--> [WARN] Файл {track.FileName} не найден в MinIO при удалении: {ex.Message}");
-        }
+        try { await _storage.DeleteFileAsync(track.FileName); }
+        catch (Exception ex) { _log.LogWarning(ex, "Файл {File} уже отсутствует в MinIO.", track.FileName); }
 
         _context.Tracks.Remove(track);
         await _context.SaveChangesAsync();
+        await BumpCacheVersionAsync();
 
-        await _cache.RemoveAsync("tracks_page_1_size_50");
-
-        return Ok(new { Message = "Трек успешно удален" });
-    }
-
-    [HttpPost("sync-storage")]
-    public async Task<IActionResult> SyncWithStorage()
-    {
-        var tracks = await _context.Tracks.ToListAsync();
-        var deletedCount = 0;
-
-        foreach (var track in tracks)
-        {
-            try
-            {
-                await _storageService.GetFileStreamAsync(track.FileName);
-            }
-            catch
-            {
-                _context.Tracks.Remove(track);
-                deletedCount++;
-            }
-        }
-
-        if (deletedCount > 0)
-        {
-            await _context.SaveChangesAsync();
-            await _cache.RemoveAsync("tracks_page_1_size_50");
-        }
-
-        return Ok(new { Message = $"Синхронизация завершена. Удалено {deletedCount} несуществующих записей." });
+        return Ok(new { Message = "Трек удалён." });
     }
 
     [HttpGet("{id}")]
@@ -220,58 +195,57 @@ public class TracksController : ControllerBase
             .Select(t => new { t.Id, t.Title, t.Artist, t.Duration })
             .FirstOrDefaultAsync(t => t.Id == id);
 
-        if (track == null) return NotFound();
-
-        return Ok(track);
+        return track is null ? NotFound() : Ok(track);
     }
 
     [HttpGet("{id}/play")]
-    public async Task<IActionResult> PlayTrack(Guid id)
+    public async Task<IActionResult> PlayTrack(Guid id, [FromQuery] bool inline = false)
     {
         var track = await _context.Tracks.FindAsync(id);
+        if (track is null) return NotFound("Трек не найден.");
 
-        if (track == null)
+        if (!inline)
         {
-            return NotFound("Трек не найден в базе данных");
+            var url = await _storage.GeneratePresignedGetUrlAsync(track.FileName, expirySeconds: 900);
+            return Redirect(url);
         }
 
-        var stream = await _storageService.GetFileStreamAsync(track.FileName);
+        var stat = await _storage.StatAsync(track.FileName);
+        if (!stat.Exists) return NotFound("Файл отсутствует в хранилище.");
 
-        return File(stream, track.ContentType, enableRangeProcessing: true);
+        Response.ContentType = track.ContentType;
+        Response.ContentLength = stat.Size;
+        Response.Headers["Accept-Ranges"] = "bytes";
+
+        await _storage.StreamToAsync(track.FileName, Response.Body, HttpContext.RequestAborted);
+        return new EmptyResult();
     }
 
     [HttpPost("{id}/like")]
     public async Task<IActionResult> ToggleLike(Guid id)
     {
-        var userIdString = Request.Headers["X-User-Id"].FirstOrDefault();
-        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
-        {
-            return Unauthorized("Пользователь не авторизован или запрос пришел не через Gateway");
-        }
+        var userId = UserId;
+        var trackExists = await _context.Tracks.AnyAsync(t => t.Id == id);
+        if (!trackExists) return NotFound("Трек не найден.");
 
-        var track = await _context.Tracks.FindAsync(id);
-        if (track == null) return NotFound("Трек не найден");
-
-        var existingLike = await _context.LikedTracks
+        var existing = await _context.LikedTracks
             .FirstOrDefaultAsync(l => l.UserId == userId && l.TrackId == id);
 
-        if (existingLike != null)
+        if (existing is not null)
         {
-            _context.LikedTracks.Remove(existingLike);
+            _context.LikedTracks.Remove(existing);
             await _context.SaveChangesAsync();
-            return Ok(new { Message = "Трек удален из избранного", IsLiked = false });
+            return Ok(new { IsLiked = false });
         }
 
-        var like = new LikedTrack
+        _context.LikedTracks.Add(new LikedTrack
         {
             Id = Guid.NewGuid(),
             UserId = userId,
             TrackId = id
-        };
-
-        _context.LikedTracks.Add(like);
+        });
         await _context.SaveChangesAsync();
 
-        return Ok(new { Message = "Трек добавлен в избранное", IsLiked = true });
+        return Ok(new { IsLiked = true });
     }
 }

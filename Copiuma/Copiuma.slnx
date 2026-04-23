@@ -1,8 +1,5 @@
 <Solution>
-  <Folder Name="/Элементы решения/">
-    <File Path="test-sockets.html" />
-    <File Path="test.http" />
-  </Folder>
+  <Folder Name="/Элементы решения/" />
   <Folder Name="/Элементы решения/Copiuma-Web/">
     <File Path="index.html" />
   </Folder>

@@ -1,11 +1,14 @@
 ﻿using Identity.API.Data;
 using Identity.API.Dtos;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace Identity.API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("[controller]")]
 public class ProfileController : ControllerBase
 {
@@ -16,59 +19,42 @@ public class ProfileController : ControllerBase
         _context = context;
     }
 
+    private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
     [HttpGet]
     public async Task<IActionResult> GetProfile()
     {
-        var userIdString = Request.Headers["X-User-Id"].FirstOrDefault();
-        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
-        {
-            return Unauthorized("Пользователь не идентифицирован");
-        }
-
         var user = await _context.Users
             .Include(u => u.Preferences)
-            .FirstOrDefaultAsync(u => u.Id == userId);
+            .FirstOrDefaultAsync(u => u.Id == UserId);
 
-        if (user == null) return NotFound("Пользователь не найден");
+        if (user is null) return NotFound();
 
-        var response = new UserProfileResponse(
+        return Ok(new UserProfileResponse(
             user.Id,
             user.Email,
             user.DisplayName,
             user.Preferences?.FavoriteGenres ?? Array.Empty<string>(),
-            user.Preferences?.Language ?? "ru"
-        );
-
-        return Ok(response);
+            user.Preferences?.Language ?? "ru"));
     }
 
     [HttpPut]
     public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
     {
-        var userIdString = Request.Headers["X-User-Id"].FirstOrDefault();
-        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
-        {
-            return Unauthorized();
-        }
-
         var user = await _context.Users
             .Include(u => u.Preferences)
-            .FirstOrDefaultAsync(u => u.Id == userId);
+            .FirstOrDefaultAsync(u => u.Id == UserId);
 
-        if (user == null) return NotFound();
+        if (user is null) return NotFound();
 
-        user.DisplayName = request.DisplayName;
+        if (!string.IsNullOrWhiteSpace(request.DisplayName))
+            user.DisplayName = request.DisplayName.Trim();
 
-        if (user.Preferences == null)
-        {
-            user.Preferences = new Models.UserPreferences { UserId = user.Id };
-        }
-
-        user.Preferences.FavoriteGenres = request.FavoriteGenres;
-        user.Preferences.Language = request.Language;
+        user.Preferences ??= new Models.UserPreferences { UserId = user.Id };
+        user.Preferences.FavoriteGenres = request.FavoriteGenres ?? Array.Empty<string>();
+        user.Preferences.Language = string.IsNullOrWhiteSpace(request.Language) ? "ru" : request.Language;
 
         await _context.SaveChangesAsync();
-
-        return Ok("Профиль успешно обновлен");
+        return Ok(new { Message = "Профиль обновлён." });
     }
 }

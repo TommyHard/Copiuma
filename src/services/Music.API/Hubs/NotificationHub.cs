@@ -1,33 +1,37 @@
-﻿using Microsoft.AspNetCore.SignalR;
-using System.Collections.Concurrent;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.SignalR;
+using Music.API.Services;
+using System.Security.Claims;
 
 namespace Music.API.Hubs;
 
+[Authorize]
 public class NotificationHub : Hub
 {
-    private static readonly ConcurrentDictionary<string, Room> _rooms = new();
-    private static readonly ConcurrentDictionary<string, string> _userRooms = new();
+    private readonly RoomStore _rooms;
+    private readonly ILogger<NotificationHub> _log;
 
-    public class Room
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _connectionRooms = new();
+
+    public NotificationHub(RoomStore rooms, ILogger<NotificationHub> log)
     {
-        public string RoomId { get; set; } = string.Empty;
-        public string? DjUserId { get; set; }
-        public string? DjName { get; set; }
-        public ConcurrentDictionary<string, Participant> Participants { get; set; } = new();
-
-        public Guid? CurrentTrackId { get; set; }
-        public string? CurrentTitle { get; set; }
-        public string? CurrentArtist { get; set; }
-        public double CurrentPosition { get; set; }
-        public bool IsPlaying { get; set; }
-        public DateTime LastUpdatedAt { get; set; } = DateTime.UtcNow;
+        _rooms = rooms;
+        _log = log;
     }
 
-    public class Participant
+    private string UserId =>
+        Context.User?.FindFirstValue(ClaimTypes.NameIdentifier) ??
+        throw new HubException("userId отсутствует в токене.");
+
+    private string UserName =>
+        Context.User?.FindFirstValue("DisplayName") ??
+        Context.User?.FindFirstValue(ClaimTypes.Email) ??
+        "anonymous";
+
+    public override async Task OnConnectedAsync()
     {
-        public string UserId { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
-        public bool IsDj { get; set; }
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"user-{UserId}");
+        await base.OnConnectedAsync();
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
@@ -36,148 +40,131 @@ public class NotificationHub : Hub
         await base.OnDisconnectedAsync(exception);
     }
 
-    public async Task JoinRoom(string roomId, bool requestDj, string userId, string userName)
+    public async Task JoinRoom(string roomId, bool requestDj)
     {
         await HandleLeaveRoom();
 
-        var room = _rooms.GetOrAdd(roomId, new Room { RoomId = roomId });
+        var state = await _rooms.GetOrCreateAsync(roomId);
 
-        var oldConnections = room.Participants.Where(p => p.Value.UserId == userId).Select(p => p.Key).ToList();
-        foreach (var conn in oldConnections)
+        var isDj = false;
+        if (requestDj && (string.IsNullOrEmpty(state.DjUserId) || state.DjUserId == UserId))
         {
-            room.Participants.TryRemove(conn, out _);
-            await Clients.Client(conn).SendAsync("ForceLeave", "Сессия отключена: вход с другого устройства.");
+            state = state with { DjUserId = UserId, DjName = UserName };
+            isDj = true;
+            await _rooms.SetAsync(state);
+        }
+        else if (requestDj)
+        {
+            await Clients.Caller.SendAsync("DjRejected", state.DjName);
         }
 
-        bool isDj = false;
-
-        if (requestDj)
-        {
-            if (string.IsNullOrEmpty(room.DjUserId) || room.DjUserId == userId)
-            {
-                room.DjUserId = userId;
-                room.DjName = userName;
-                isDj = true;
-            }
-            else
-            {
-                await Clients.Caller.SendAsync("DjRejected", room.DjName);
-                isDj = false;
-            }
-        }
-
-        room.Participants.TryAdd(Context.ConnectionId, new Participant { UserId = userId, Name = userName, IsDj = isDj });
-        _userRooms.TryAdd(Context.ConnectionId, roomId);
-
-        await Groups.AddToGroupAsync(Context.ConnectionId, roomId);
+        _connectionRooms[Context.ConnectionId] = roomId;
+        await Groups.AddToGroupAsync(Context.ConnectionId, RoomGroup(roomId));
 
         await Clients.Caller.SendAsync("RoomJoined", isDj);
-        await BroadcastRoomState(roomId);
 
-        if (!isDj && room.CurrentTrackId.HasValue)
+        if (!isDj && state.CurrentTrackId.HasValue)
         {
-            double position = room.CurrentPosition;
-            if (room.IsPlaying)
-            {
-                position += (DateTime.UtcNow - room.LastUpdatedAt).TotalSeconds;
-            }
-            await Clients.Caller.SendAsync("SyncCurrentTrack", room.CurrentTrackId.Value, room.CurrentTitle, room.CurrentArtist, position, room.IsPlaying);
+            var pos = state.CurrentPosition;
+            if (state.IsPlaying) pos += (DateTime.UtcNow - state.LastUpdatedAt).TotalSeconds;
+
+            await Clients.Caller.SendAsync("SyncCurrentTrack",
+                state.CurrentTrackId.Value, state.CurrentTitle, state.CurrentArtist, pos, state.IsPlaying);
         }
+
+        await BroadcastParticipant(roomId, "ParticipantJoined", isDj);
     }
 
-    public async Task LeaveRoom()
-    {
-        await HandleLeaveRoom();
-    }
+    public Task LeaveRoom() => HandleLeaveRoom();
 
     private async Task HandleLeaveRoom()
     {
-        if (_userRooms.TryRemove(Context.ConnectionId, out var roomId))
+        if (!_connectionRooms.TryRemove(Context.ConnectionId, out var roomId)) return;
+
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, RoomGroup(roomId));
+
+        var state = await _rooms.GetAsync(roomId);
+        if (state is null) return;
+
+        if (state.DjUserId == UserId)
         {
-            await Groups.RemoveFromGroupAsync(Context.ConnectionId, roomId);
-            if (_rooms.TryGetValue(roomId, out var room))
-            {
-                room.Participants.TryRemove(Context.ConnectionId, out var p);
-
-                if (p != null && p.IsDj) room.DjUserId = null;
-
-                if (room.Participants.IsEmpty) _rooms.TryRemove(roomId, out _);
-                else await BroadcastRoomState(roomId);
-            }
+            state = state with { DjUserId = null, DjName = null };
+            await _rooms.SetAsync(state);
         }
+
+        await BroadcastParticipant(roomId, "ParticipantLeft", false);
     }
 
-    private async Task BroadcastRoomState(string roomId)
+    private Task BroadcastParticipant(string roomId, string eventName, bool isDj)
     {
-        if (_rooms.TryGetValue(roomId, out var room))
-        {
-            var participants = room.Participants.Values.Select(p => new { p.Name, p.IsDj }).ToList();
-            await Clients.Group(roomId).SendAsync("UpdateParticipants", participants);
-        }
+        return Clients.Group(RoomGroup(roomId)).SendAsync(eventName, new { UserId, UserName, IsDj = isDj });
     }
 
     public async Task SendPlay(string roomId, Guid trackId, string title, string artist, double position)
     {
-        if (IsCallerDj(roomId))
+        if (!await IsCallerDj(roomId)) return;
+
+        var state = await _rooms.GetAsync(roomId);
+        if (state is null) return;
+
+        state = state with
         {
-            if (_rooms.TryGetValue(roomId, out var room))
-            {
-                room.CurrentTrackId = trackId;
-                room.CurrentTitle = title;
-                room.CurrentArtist = artist;
-                room.CurrentPosition = position;
-                room.IsPlaying = true;
-                room.LastUpdatedAt = DateTime.UtcNow;
-            }
-            await Clients.OthersInGroup(roomId).SendAsync("ReceivePlay", trackId, title, artist, position);
-        }
+            CurrentTrackId = trackId,
+            CurrentTitle = title,
+            CurrentArtist = artist,
+            CurrentPosition = position,
+            IsPlaying = true,
+            LastUpdatedAt = DateTime.UtcNow
+        };
+        await _rooms.SetAsync(state);
+
+        await Clients.OthersInGroup(RoomGroup(roomId)).SendAsync("ReceivePlay", trackId, title, artist, position);
     }
 
     public async Task SendPause(string roomId, double position)
     {
-        if (IsCallerDj(roomId))
-        {
-            if (_rooms.TryGetValue(roomId, out var room))
-            {
-                room.CurrentPosition = position;
-                room.IsPlaying = false;
-                room.LastUpdatedAt = DateTime.UtcNow;
-            }
-            await Clients.OthersInGroup(roomId).SendAsync("ReceivePause", position);
-        }
+        if (!await IsCallerDj(roomId)) return;
+
+        var state = await _rooms.GetAsync(roomId);
+        if (state is null) return;
+
+        state = state with { CurrentPosition = position, IsPlaying = false, LastUpdatedAt = DateTime.UtcNow };
+        await _rooms.SetAsync(state);
+
+        await Clients.OthersInGroup(RoomGroup(roomId)).SendAsync("ReceivePause", position);
     }
 
     public async Task SendSeek(string roomId, double position)
     {
-        if (IsCallerDj(roomId))
-        {
-            if (_rooms.TryGetValue(roomId, out var room))
-            {
-                room.CurrentPosition = position;
-                room.LastUpdatedAt = DateTime.UtcNow;
-            }
-            await Clients.OthersInGroup(roomId).SendAsync("ReceiveSeek", position);
-        }
+        if (!await IsCallerDj(roomId)) return;
+
+        var state = await _rooms.GetAsync(roomId);
+        if (state is null) return;
+
+        state = state with { CurrentPosition = position, LastUpdatedAt = DateTime.UtcNow };
+        await _rooms.SetAsync(state);
+
+        await Clients.OthersInGroup(RoomGroup(roomId)).SendAsync("ReceiveSeek", position);
     }
 
     public async Task SendHeartbeat(string roomId, double position, bool isPlaying)
     {
-        if (IsCallerDj(roomId))
-        {
-            if (_rooms.TryGetValue(roomId, out var room))
-            {
-                room.CurrentPosition = position;
-                room.IsPlaying = isPlaying;
-                room.LastUpdatedAt = DateTime.UtcNow;
-            }
-            await Clients.OthersInGroup(roomId).SendAsync("ReceiveHeartbeat", position, isPlaying);
-        }
+        if (!await IsCallerDj(roomId)) return;
+
+        var state = await _rooms.GetAsync(roomId);
+        if (state is null) return;
+
+        state = state with { CurrentPosition = position, IsPlaying = isPlaying, LastUpdatedAt = DateTime.UtcNow };
+        await _rooms.SetAsync(state);
+
+        await Clients.OthersInGroup(RoomGroup(roomId)).SendAsync("ReceiveHeartbeat", position, isPlaying);
     }
 
-    private bool IsCallerDj(string roomId)
+    private async Task<bool> IsCallerDj(string roomId)
     {
-        if (_rooms.TryGetValue(roomId, out var room) && room.Participants.TryGetValue(Context.ConnectionId, out var p))
-            return p.IsDj;
-        return false;
+        var state = await _rooms.GetAsync(roomId);
+        return state?.DjUserId == UserId;
     }
+
+    private static string RoomGroup(string roomId) => $"room:{roomId}";
 }

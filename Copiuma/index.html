@@ -362,6 +362,7 @@
                 alert(`В этой комнате уже есть Диджей (${djName}). Вы подключены как Слушатель.`);
             });
 
+            // --- https://www.alt-codes.net/ ---
             hubConnection.on("RoomJoined", (assignedIsDj) => {
                 isDj = assignedIsDj;
                 document.getElementById('room-status').innerHTML =

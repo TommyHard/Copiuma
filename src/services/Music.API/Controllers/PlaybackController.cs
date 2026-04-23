@@ -1,42 +1,45 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Caching.Distributed;
-using System.Text.Json;
 using Music.API.Dtos;
+using Music.API.Hubs;
+using System.Security.Claims;
+using System.Text.Json;
 
 namespace Music.API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("[controller]")]
 public class PlaybackController : ControllerBase
 {
     private readonly IDistributedCache _cache;
+    private readonly IHubContext<NotificationHub> _hub;
 
-    public PlaybackController(IDistributedCache cache)
+    public PlaybackController(IDistributedCache cache, IHubContext<NotificationHub> hub)
     {
         _cache = cache;
+        _hub = hub;
     }
+
+    private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private string UserGroup => $"user-{UserId}";
 
     [HttpPost("state")]
     public async Task<IActionResult> SaveState([FromBody] PlaybackStateRequest request)
     {
-        var userIdString = Request.Headers["X-User-Id"].FirstOrDefault();
-        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
-        {
-            return Unauthorized("Пользователь не авторизован");
-        }
-
-        var cacheKey = $"playback_state_{userId}";
-
         var state = new PlaybackStateResponse(
             request.TrackId,
             request.PositionSeconds,
-            DateTime.UtcNow
-        );
+            request.IsPlaying,
+            DateTime.UtcNow);
 
-        var cacheOptions = new DistributedCacheEntryOptions()
-            .SetAbsoluteExpiration(TimeSpan.FromDays(7));
+        var payload = JsonSerializer.Serialize(state);
+        await _cache.SetStringAsync($"playback_state_{UserId}", payload,
+            new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(7) });
 
-        await _cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(state), cacheOptions);
+        await _hub.Clients.Group(UserGroup).SendAsync("PlaybackStateChanged", state);
 
         return Ok();
     }
@@ -44,20 +47,10 @@ public class PlaybackController : ControllerBase
     [HttpGet("state")]
     public async Task<IActionResult> GetState()
     {
-        var userIdString = Request.Headers["X-User-Id"].FirstOrDefault();
-        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
-        {
-            return Unauthorized("Пользователь не авторизован");
-        }
+        var payload = await _cache.GetStringAsync($"playback_state_{UserId}");
+        if (string.IsNullOrEmpty(payload))
+            return NotFound(new { Message = "Нет активной сессии воспроизведения." });
 
-        var cacheKey = $"playback_state_{userId}";
-        var cachedData = await _cache.GetStringAsync(cacheKey);
-
-        if (string.IsNullOrEmpty(cachedData))
-        {
-            return NotFound(new { Message = "Нет активной сессии воспроизведения" });
-        }
-
-        return Content(cachedData, "application/json");
+        return Content(payload, "application/json");
     }
 }
