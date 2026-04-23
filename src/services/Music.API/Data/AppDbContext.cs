@@ -14,6 +14,9 @@ public class AppDbContext : DbContext
     public DbSet<PlaylistTrack> PlaylistTracks { get; set; }
     public DbSet<PlaylistMember> PlaylistMembers { get; set; }
 
+    public DbSet<PlaylistInvitation> PlaylistInvitations { get; set; }
+    public DbSet<Notification> Notifications { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -31,5 +34,25 @@ public class AppDbContext : DbContext
                 t => new { t.Title, t.Artist })
             .HasIndex(t => t.SearchVector)
             .HasMethod("GIN");
+
+        modelBuilder.Entity<Notification>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Payload).HasColumnType("jsonb");
+            b.HasIndex(x => new { x.UserId, x.IsRead, x.CreatedAt });
+        });
+
+        modelBuilder.Entity<PlaylistInvitation>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Status).HasConversion<int>();
+            b.Property(x => x.ProposedRole).HasConversion<int>();
+            b.HasIndex(x => new { x.InviteeId, x.Status });
+            b.HasIndex(x => new { x.PlaylistId, x.InviteeId, x.Status });
+            b.HasOne(x => x.Playlist)
+             .WithMany()
+             .HasForeignKey(x => x.PlaylistId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
     }
 }

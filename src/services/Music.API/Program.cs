@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Minio;
 using Music.API.Auth;
@@ -63,6 +64,7 @@ public class Program
         });
 
         builder.Services.AddScoped<FileStorageService>();
+        builder.Services.AddScoped<NotificationService>();
         builder.Services.AddSingleton<MessageBusClient>();
         builder.Services.AddSingleton<RoomStore>();
         builder.Services.AddHostedService<TrackProcessingWorker>();
@@ -88,7 +90,7 @@ public class Program
         app.UseAuthorization();
 
         app.MapControllers();
-        app.MapHub<NotificationHub>("/notifications");
+        app.MapHub<NotificationHub>("/notifications-hub");
 
         await app.RunAsync();
     }

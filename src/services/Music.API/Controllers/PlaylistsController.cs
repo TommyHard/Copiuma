@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Music.API.Data;
 using Music.API.Dtos;
 using Music.API.Models;
+using Music.API.Services;
 using System.Security.Claims;
 
 namespace Music.API.Controllers;
@@ -14,13 +15,16 @@ namespace Music.API.Controllers;
 public class PlaylistsController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly NotificationService _notify;
 
-    public PlaylistsController(AppDbContext context)
+    public PlaylistsController(AppDbContext context, NotificationService notify)
     {
         _context = context;
+        _notify = notify;
     }
 
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private string? UserName => User.FindFirstValue("DisplayName");
 
     [HttpPost]
     public async Task<IActionResult> CreatePlaylist([FromBody] CreatePlaylistRequest request)
@@ -31,15 +35,14 @@ public class PlaylistsController : ControllerBase
         using var tx = await _context.Database.BeginTransactionAsync();
 
         var playlist = new Playlist { Id = Guid.NewGuid(), Title = request.Title.Trim() };
-        var owner = new PlaylistMember
+        _context.Playlists.Add(playlist);
+        _context.PlaylistMembers.Add(new PlaylistMember
         {
             PlaylistId = playlist.Id,
             UserId = UserId,
             Role = PlaylistRole.Owner
-        };
+        });
 
-        _context.Playlists.Add(playlist);
-        _context.PlaylistMembers.Add(owner);
         await _context.SaveChangesAsync();
         await tx.CommitAsync();
 
@@ -52,53 +55,114 @@ public class PlaylistsController : ControllerBase
         var playlist = await _context.Playlists.FindAsync(playlistId);
         if (playlist is null) return NotFound();
 
-        var isOwner = await _context.PlaylistMembers
-            .AnyAsync(pm => pm.PlaylistId == playlistId && pm.UserId == UserId && pm.Role == PlaylistRole.Owner);
-        if (!isOwner) return Forbid();
+        if (!await IsCallerInRole(playlistId, PlaylistRole.Owner)) return Forbid();
 
         _context.Playlists.Remove(playlist);
         await _context.SaveChangesAsync();
-        return Ok(new { Message = "Плейлист удалён." });
+        return Ok();
     }
 
-    [HttpPost("{playlistId}/members")]
-    public async Task<IActionResult> AddMember(Guid playlistId, [FromBody] AddPlaylistMemberRequest request)
-    {
-        if (!await PlaylistExists(playlistId)) return NotFound();
+    // ---------- Invitations ----------
 
-        var isOwner = await IsCallerInRole(playlistId, PlaylistRole.Owner);
-        if (!isOwner) return Forbid();
+    [HttpPost("{playlistId}/invite")]
+    public async Task<IActionResult> Invite(Guid playlistId, [FromBody] InviteToPlaylistRequest request)
+    {
+        var playlist = await _context.Playlists.FindAsync(playlistId);
+        if (playlist is null) return NotFound();
+
+        if (!await IsCallerInRole(playlistId, PlaylistRole.Owner)) return Forbid();
 
         if (!Enum.TryParse<PlaylistRole>(request.Role, true, out var role) || role == PlaylistRole.Owner)
             return BadRequest("Допустимые роли: Editor, Viewer.");
 
-        var existing = await _context.PlaylistMembers
-            .FirstOrDefaultAsync(pm => pm.PlaylistId == playlistId && pm.UserId == request.TargetUserId);
+        if (request.InviteeId == UserId)
+            return BadRequest("Нельзя пригласить самого себя.");
 
-        if (existing is not null)
+        if (await _context.PlaylistMembers.AnyAsync(m => m.PlaylistId == playlistId && m.UserId == request.InviteeId))
+            return Conflict("Пользователь уже участник плейлиста.");
+
+        if (await _context.PlaylistInvitations.AnyAsync(i =>
+            i.PlaylistId == playlistId &&
+            i.InviteeId == request.InviteeId &&
+            i.Status == InvitationStatus.Pending))
         {
-            existing.Role = role;
-            await _context.SaveChangesAsync();
-            return Ok(new { Message = $"Роль обновлена: {role}." });
+            return Conflict("Приглашение уже отправлено и ожидает ответа.");
         }
 
-        _context.PlaylistMembers.Add(new PlaylistMember
+        var invitation = new PlaylistInvitation
         {
+            Id = Guid.NewGuid(),
             PlaylistId = playlistId,
-            UserId = request.TargetUserId,
-            Role = role
-        });
+            InviterId = UserId,
+            InviteeId = request.InviteeId,
+            ProposedRole = role,
+            Status = InvitationStatus.Pending,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.PlaylistInvitations.Add(invitation);
         await _context.SaveChangesAsync();
-        return Ok(new { Message = $"Участник добавлен с ролью {role}." });
+
+        await _notify.CreateAsync(request.InviteeId, NotificationTypes.PlaylistInvitation, new
+        {
+            invitationId = invitation.Id,
+            playlistId,
+            playlistTitle = playlist.Title,
+            inviterId = UserId,
+            inviterName = UserName,
+            proposedRole = role.ToString()
+        });
+
+        return Ok(new { Message = "Приглашение отправлено.", invitation.Id });
     }
+
+    [HttpGet("{playlistId}/invitations")]
+    public async Task<IActionResult> ListInvitations(Guid playlistId)
+    {
+        if (!await IsCallerInRole(playlistId, PlaylistRole.Owner)) return Forbid();
+
+        var list = await _context.PlaylistInvitations
+            .Where(i => i.PlaylistId == playlistId)
+            .OrderByDescending(i => i.CreatedAt)
+            .Select(i => new
+            {
+                i.Id,
+                i.InviteeId,
+                Role = i.ProposedRole.ToString(),
+                Status = i.Status.ToString(),
+                i.CreatedAt,
+                i.RespondedAt
+            })
+            .ToListAsync();
+
+        return Ok(list);
+    }
+
+    [HttpDelete("{playlistId}/invitations/{invitationId}")]
+    public async Task<IActionResult> CancelInvitation(Guid playlistId, Guid invitationId)
+    {
+        if (!await IsCallerInRole(playlistId, PlaylistRole.Owner)) return Forbid();
+
+        var inv = await _context.PlaylistInvitations
+            .FirstOrDefaultAsync(i => i.Id == invitationId && i.PlaylistId == playlistId);
+        if (inv is null) return NotFound();
+
+        if (inv.Status != InvitationStatus.Pending)
+            return Conflict("Приглашение уже обработано — отозвать нельзя.");
+
+        inv.Status = InvitationStatus.Cancelled;
+        inv.RespondedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        return NoContent();
+    }
+
+    // ---------- Members ----------
 
     [HttpDelete("{playlistId}/members/{userId}")]
     public async Task<IActionResult> RemoveMember(Guid playlistId, Guid userId)
     {
         if (!await PlaylistExists(playlistId)) return NotFound();
-
-        var isOwner = await IsCallerInRole(playlistId, PlaylistRole.Owner);
-        if (!isOwner) return Forbid();
+        if (!await IsCallerInRole(playlistId, PlaylistRole.Owner)) return Forbid();
 
         if (userId == UserId)
             return BadRequest("Владелец не может удалить сам себя. Используйте удаление плейлиста.");
@@ -126,6 +190,8 @@ public class PlaylistsController : ControllerBase
         await _context.SaveChangesAsync();
         return Ok();
     }
+
+    // ---------- Tracks ----------
 
     [HttpPost("{playlistId}/tracks/{trackId}")]
     public async Task<IActionResult> AddTrackToPlaylist(Guid playlistId, Guid trackId)
@@ -167,6 +233,8 @@ public class PlaylistsController : ControllerBase
         return Ok();
     }
 
+    // ---------- Queries ----------
+
     [HttpGet]
     public async Task<IActionResult> GetMyPlaylists()
     {
@@ -191,17 +259,12 @@ public class PlaylistsController : ControllerBase
     {
         var member = await _context.PlaylistMembers
             .FirstOrDefaultAsync(pm => pm.PlaylistId == id && pm.UserId == UserId);
-
-        if (member is null)
-        {
-            return NotFound();
-        }
+        if (member is null) return NotFound();
 
         var playlist = await _context.Playlists
             .Include(p => p.PlaylistTracks)
                 .ThenInclude(pt => pt.Track)
             .FirstOrDefaultAsync(p => p.Id == id);
-
         if (playlist is null) return NotFound();
 
         return Ok(new
