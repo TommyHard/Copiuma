@@ -17,6 +17,10 @@ public class AppDbContext : DbContext
     public DbSet<PlaylistInvitation> PlaylistInvitations { get; set; }
     public DbSet<Notification> Notifications { get; set; }
 
+    public DbSet<TrackRating> TrackRatings { get; set; }
+    public DbSet<TrackReview> TrackReviews { get; set; }
+    public DbSet<ReviewLike> ReviewLikes { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -52,6 +56,42 @@ public class AppDbContext : DbContext
             b.HasOne(x => x.Playlist)
              .WithMany()
              .HasForeignKey(x => x.PlaylistId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TrackRating>(b =>
+        {
+            b.HasKey(x => new { x.UserId, x.TrackId });
+            b.HasIndex(x => x.TrackId);
+            b.Property(x => x.Value)
+             .HasAnnotation("MinValue", 1)
+             .HasAnnotation("MaxValue", 5);
+            b.ToTable(t => t.HasCheckConstraint("CK_TrackRating_Value_1_5", "\"Value\" BETWEEN 1 AND 5"));
+            b.HasOne(x => x.Track)
+             .WithMany()
+             .HasForeignKey(x => x.TrackId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TrackReview>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Text).HasMaxLength(4000);
+            b.HasIndex(x => new { x.TrackId, x.IsDeleted, x.CreatedAt });
+            b.HasIndex(x => new { x.AuthorId, x.CreatedAt });
+            b.HasOne(x => x.Track)
+             .WithMany()
+             .HasForeignKey(x => x.TrackId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ReviewLike>(b =>
+        {
+            b.HasKey(x => new { x.ReviewId, x.UserId });
+            b.HasIndex(x => x.ReviewId);
+            b.HasOne(x => x.Review)
+             .WithMany()
+             .HasForeignKey(x => x.ReviewId)
              .OnDelete(DeleteBehavior.Cascade);
         });
     }

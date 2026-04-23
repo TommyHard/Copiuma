@@ -19,4 +19,7 @@ public static class NotificationTypes
     public const string PlaylistInvitationAccepted = "playlist.invitation.accepted";
     public const string PlaylistInvitationDeclined = "playlist.invitation.declined";
     public const string TrackProcessed = "track.processed";
+
+    public const string TrackReviewCreated = "track.review.created";
+    public const string ReviewLiked = "review.liked";
 }
