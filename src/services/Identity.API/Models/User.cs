@@ -2,7 +2,6 @@
 
 public class User
 {
-    // Уникальный идентификатор
     public Guid Id { get; set; }
 
     public required string Email { get; set; }
@@ -11,6 +10,8 @@ public class User
 
     public string? DisplayName { get; set; }
 
-    // Дата регистрации
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    public UserPreferences? Preferences { get; set; }
+    public List<RefreshToken> RefreshTokens { get; set; } = new();
 }
