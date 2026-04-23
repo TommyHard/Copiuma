@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
 
     public DbSet<Playlist> Playlists { get; set; }
     public DbSet<PlaylistTrack> PlaylistTracks { get; set; }
+    public DbSet<PlaylistMember> PlaylistMembers { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -19,6 +20,9 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<PlaylistTrack>()
             .HasKey(pt => new { pt.PlaylistId, pt.TrackId });
+
+        modelBuilder.Entity<PlaylistMember>()
+            .HasKey(pm => new { pm.PlaylistId, pm.UserId });
 
         modelBuilder.Entity<Track>()
             .HasGeneratedTsVectorColumn(
