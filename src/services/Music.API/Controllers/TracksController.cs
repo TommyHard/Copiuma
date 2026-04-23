@@ -155,6 +155,76 @@ public class TracksController : ControllerBase
         return Ok(tracks);
     }
 
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteTrack(Guid id)
+    {
+        var userIdString = Request.Headers["X-User-Id"].FirstOrDefault();
+        if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
+            return Unauthorized();
+
+        var track = await _context.Tracks.FindAsync(id);
+        if (track == null) return NotFound();
+
+        if (track.UploadedByUserId != userId)
+            return StatusCode(403, "Вы можете удалять только свои треки");
+
+        try
+        {
+            await _storageService.DeleteFileAsync(track.FileName);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"--> [WARN] Файл {track.FileName} не найден в MinIO при удалении: {ex.Message}");
+        }
+
+        _context.Tracks.Remove(track);
+        await _context.SaveChangesAsync();
+
+        await _cache.RemoveAsync("tracks_page_1_size_50");
+
+        return Ok(new { Message = "Трек успешно удален" });
+    }
+
+    [HttpPost("sync-storage")]
+    public async Task<IActionResult> SyncWithStorage()
+    {
+        var tracks = await _context.Tracks.ToListAsync();
+        var deletedCount = 0;
+
+        foreach (var track in tracks)
+        {
+            try
+            {
+                await _storageService.GetFileStreamAsync(track.FileName);
+            }
+            catch
+            {
+                _context.Tracks.Remove(track);
+                deletedCount++;
+            }
+        }
+
+        if (deletedCount > 0)
+        {
+            await _context.SaveChangesAsync();
+            await _cache.RemoveAsync("tracks_page_1_size_50");
+        }
+
+        return Ok(new { Message = $"Синхронизация завершена. Удалено {deletedCount} несуществующих записей." });
+    }
+
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetTrackById(Guid id)
+    {
+        var track = await _context.Tracks
+            .Select(t => new { t.Id, t.Title, t.Artist, t.Duration })
+            .FirstOrDefaultAsync(t => t.Id == id);
+
+        if (track == null) return NotFound();
+
+        return Ok(track);
+    }
+
     [HttpGet("{id}/play")]
     public async Task<IActionResult> PlayTrack(Guid id)
     {

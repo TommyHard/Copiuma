@@ -57,4 +57,13 @@ public class FileStorageService
 
         return memoryStream;
     }
+
+    public async Task DeleteFileAsync(string fileName)
+    {
+        var removeObjectArgs = new RemoveObjectArgs()
+            .WithBucket(BucketName)
+            .WithObject(fileName);
+
+        await _minioClient.RemoveObjectAsync(removeObjectArgs);
+    }
 }

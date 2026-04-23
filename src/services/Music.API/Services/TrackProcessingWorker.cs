@@ -2,6 +2,7 @@
 using Music.API.Data;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 
@@ -34,12 +35,10 @@ public class TrackProcessingWorker : BackgroundService
         {
             _connection = factory.CreateConnection();
             _channel = _connection.CreateModel();
-
             _channel.QueueDeclare(queue: "track_processing_queue", durable: true, exclusive: false, autoDelete: false, arguments: null);
-
             _channel.BasicQos(prefetchSize: 0, prefetchCount: 1, global: false);
 
-            Console.WriteLine("--> [WORKER] Успешно подключился к RabbitMQ и слушает очередь.");
+            Console.WriteLine("--> [WORKER] Успешно подключился к RabbitMQ.");
         }
         catch (Exception ex)
         {
@@ -57,7 +56,6 @@ public class TrackProcessingWorker : BackgroundService
         {
             var body = ea.Body.ToArray();
             var message = Encoding.UTF8.GetString(body);
-            Console.WriteLine($"--> [WORKER] Получено сообщение: {message}");
 
             try
             {
@@ -71,45 +69,100 @@ public class TrackProcessingWorker : BackgroundService
                     var track = await dbContext.Tracks.FindAsync(trackId);
                     if (track != null)
                     {
-                        Console.WriteLine($"--> [WORKER] Начало обработки: Скачиваем файл {track.FileName} из MinIO...");
-
-                        using var minioStream = await storageService.GetFileStreamAsync(track.FileName);
-
-                        var tempFilePath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString() + ".mp3");
-
-                        using (var fileStream = File.Create(tempFilePath))
-                        {
-                            await minioStream.CopyToAsync(fileStream);
-                        }
-
-                        Console.WriteLine("--> [WORKER] Файл скачан. Анализ метаданных.");
+                        var tempOriginalPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString() + "_orig.tmp");
+                        var tempProcessedPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString() + "_norm.ogg");
 
                         try
                         {
-                            var tfile = TagLib.File.Create(tempFilePath);
+                            Console.WriteLine($"--> [WORKER] Скачиваем оригинал {track.FileName}...");
+                            using (var minioStream = await storageService.GetFileStreamAsync(track.FileName))
+                            using (var fileStream = File.Create(tempOriginalPath))
+                            {
+                                await minioStream.CopyToAsync(fileStream);
+                            }
+
+                            Console.WriteLine("--> [WORKER] Запуск FFmpeg: Проход 1 (Анализ громкости)...");
+
+                            var pass1Info = new ProcessStartInfo
+                            {
+                                FileName = "ffmpeg",
+                                Arguments = $"-i \"{tempOriginalPath}\" -af loudnorm=I=-14:TP=-1:LRA=11:print_format=json -f null -",
+                                RedirectStandardError = true,
+                                UseShellExecute = false,
+                                CreateNoWindow = true
+                            };
+
+                            string pass1Output = "";
+                            using (var process1 = Process.Start(pass1Info))
+                            {
+                                pass1Output = await process1!.StandardError.ReadToEndAsync();
+                                await process1.WaitForExitAsync();
+                            }
+
+                            string jsonStats = ExtractLoudnormJson(pass1Output);
+                            if (string.IsNullOrEmpty(jsonStats))
+                            {
+                                throw new Exception("Не удалось получить статистику loudnorm от FFmpeg");
+                            }
+
+                            var stats = JsonSerializer.Deserialize<JsonElement>(jsonStats);
+                            string measuredI = stats.GetProperty("input_i").GetString()!;
+                            string measuredTp = stats.GetProperty("input_tp").GetString()!;
+                            string measuredLra = stats.GetProperty("input_lra").GetString()!;
+                            string measuredThresh = stats.GetProperty("input_thresh").GetString()!;
+                            string targetOffset = stats.GetProperty("target_offset").GetString()!;
+
+                            Console.WriteLine("--> [WORKER] Запуск FFmpeg: Проход 2 (Кодирование в Ogg Vorbis)...");
+
+                            var pass2Filter = $"loudnorm=I=-14:TP=-1:LRA=11:measured_I={measuredI}:measured_TP={measuredTp}:measured_LRA={measuredLra}:measured_thresh={measuredThresh}:offset={targetOffset}:linear=true";
+
+                            var pass2Info = new ProcessStartInfo
+                            {
+                                FileName = "ffmpeg",
+                                Arguments = $"-i \"{tempOriginalPath}\" -af \"{pass2Filter}\" -c:a libvorbis -q:a 5 \"{tempProcessedPath}\" -y",
+                                RedirectStandardError = true,
+                                UseShellExecute = false,
+                                CreateNoWindow = true
+                            };
+
+                            using (var process2 = Process.Start(pass2Info))
+                            {
+                                await process2!.WaitForExitAsync();
+                                if (process2.ExitCode != 0)
+                                {
+                                    var error = await process2.StandardError.ReadToEndAsync();
+                                    throw new Exception($"FFmpeg завершил с ошибкой на 2-м проходе: {error}");
+                                }
+                            }
+
+                            Console.WriteLine("--> [WORKER] Анализ и загрузка в хранилище (Ogg)...");
+
+                            var tfile = TagLib.File.Create(tempProcessedPath);
                             track.Duration = tfile.Properties.Duration;
 
-                            await dbContext.SaveChangesAsync();
+                            using (var processedStream = File.OpenRead(tempProcessedPath))
+                            {
+                                var newFileName = await storageService.UploadFileAsync(processedStream, "track.ogg", "audio/ogg");
 
-                            Console.WriteLine($"--> [WORKER] Готово. Длительность трека '{track.Title}': {track.Duration.Value:mm\\:ss}");
+                                track.FileName = newFileName;
+                                track.ContentType = "audio/ogg";
+                                await dbContext.SaveChangesAsync();
+                            }
 
-                            var hubContext = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<Music.API.Hubs.NotificationHub>>();
+                            Console.WriteLine($"--> [WORKER] Готово. Длительность: {track.Duration.Value:mm\\:ss}");
 
+                            var hubContext = scope.ServiceProvider.GetRequiredService<IHubContext<Hubs.NotificationHub>>();
                             await hubContext.Clients.All.SendAsync("TrackProcessed", new
                             {
                                 TrackId = track.Id,
                                 Title = track.Title,
                                 Duration = track.Duration.Value.ToString(@"mm\:ss")
                             });
-
-                            Console.WriteLine("--> [WORKER] Push-уведомление отправлено клиентам");
                         }
                         finally
                         {
-                            if (File.Exists(tempFilePath))
-                            {
-                                File.Delete(tempFilePath);
-                            }
+                            if (File.Exists(tempOriginalPath)) File.Delete(tempOriginalPath);
+                            if (File.Exists(tempProcessedPath)) File.Delete(tempProcessedPath);
                         }
                     }
                 }
@@ -124,8 +177,19 @@ public class TrackProcessingWorker : BackgroundService
         };
 
         _channel.BasicConsume(queue: "track_processing_queue", autoAck: false, consumer: consumer);
-
         return Task.CompletedTask;
+    }
+
+    private string ExtractLoudnormJson(string ffmpegOutput)
+    {
+        int startIndex = ffmpegOutput.LastIndexOf("{");
+        int endIndex = ffmpegOutput.LastIndexOf("}");
+
+        if (startIndex != -1 && endIndex != -1 && endIndex > startIndex)
+        {
+            return ffmpegOutput.Substring(startIndex, endIndex - startIndex + 1);
+        }
+        return string.Empty;
     }
 
     public override void Dispose()

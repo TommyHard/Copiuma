@@ -117,126 +117,188 @@
     </div>
 
     <script>
-        const API_IDENTITY = 'http://localhost:5001/Auth';
+        const API_IDENTITY = 'http://localhost:7161/api/auth';
         const API_MUSIC = 'http://localhost:7161/api/music';
 
-    window.onload = () => {
-        const token = localStorage.getItem('token');
-        if (token) {
-            document.getElementById('auth-status').innerText = 'Авторизован';
-            document.getElementById('tracks-panel').style.display = 'block';
-            loadTracks();
-        }
-    };
+        let syncInterval = null;
+        let currentTrackId = null;
 
-    async function login() {
-        const email = document.getElementById('email').value.trim();
-        const password = document.getElementById('password').value.trim();
-
-        try {
-            const response = await fetch(`${API_IDENTITY}/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: email, password: password })
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                localStorage.setItem('token', data.token);
-
-                document.getElementById('auth-status').innerText = '✅ Авторизован успешно!';
+        window.onload = () => {
+            const token = localStorage.getItem('token');
+            if (token) {
+                document.getElementById('auth-status').innerText = 'Авторизован';
                 document.getElementById('tracks-panel').style.display = 'block';
                 loadTracks();
-            } else {
-                // Вскрываем настоящий ответ сервера!
-                const errorText = await response.text();
-                alert(`Сервер отклонил запрос (Статус ${response.status}):\n${errorText}`);
-                console.error("Детали:", errorText);
+                checkActiveSession();
             }
-        } catch (error) {
-            console.error('Ошибка сети:', error);
-            alert('Не удалось подключиться к серверу. Посмотри консоль (F12).');
-        }
-    }
+        };
 
-    async function loadTracks() {
-        const token = localStorage.getItem('token');
-        const listDiv = document.getElementById('tracks-list');
-        listDiv.innerHTML = 'Загрузка...';
+        window.addEventListener('beforeunload', () => {
+            savePlaybackState();
+        });
 
-        try {
-            const response = await fetch(`${API_MUSIC}/Tracks?page=1&pageSize=50`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+        async function login() {
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value.trim();
 
-            if (response.ok) {
-                const tracks = await response.json();
-                listDiv.innerHTML = '';
-
-                if (tracks.length === 0) {
-                    listDiv.innerHTML = 'Треков пока нет.';
-                    return;
-                }
-
-                tracks.forEach(track => {
-                    const trackTitle = track.title || track.Title || 'Без названия';
-                    const trackArtist = track.artist || track.Artist || 'Неизвестен';
-                    const trackId = track.id || track.Id;
-                    const trackDurationRaw = track.duration || track.Duration;
-
-                    const duration = trackDurationRaw ? trackDurationRaw.substring(3, 8) : '--:--';
-
-                    const div = document.createElement('div');
-                    div.className = 'track-item';
-                    div.innerHTML = `
-                        <div>
-                            <strong>${trackTitle}</strong><br>
-                            <small style="color: #aaa;">${trackArtist}</small>
-                        </div>
-                        <div style="color: #1db954;">${duration} 🎵</div>
-                    `;
-
-                    div.onclick = () => playTrack(trackId, trackTitle, trackArtist);
-                    listDiv.appendChild(div);
+            try {
+                const response = await fetch(`${API_IDENTITY}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: email, password: password })
                 });
-            } else if (response.status === 401) {
-                alert('Сессия истекла, войдите заново.');
-                localStorage.removeItem('token');
+
+                if (response.ok) {
+                    const data = await response.json();
+                    localStorage.setItem('token', data.token);
+
+                    document.getElementById('auth-status').innerText = 'Авторизован успешно!';
+                    document.getElementById('tracks-panel').style.display = 'block';
+                    loadTracks();
+                    checkActiveSession();
+                } else {
+                    const errorText = await response.text();
+                    alert(`Ошибка: ${errorText}`);
+                }
+            } catch (error) {
+                console.error('Ошибка сети:', error);
             }
-        } catch (error) {
-            console.error(error);
         }
-    }
 
-    async function playTrack(id, title, artist) {
-        const token = localStorage.getItem('token');
-        const playerContainer = document.getElementById('player-container');
-        const audio = document.getElementById('audio-player');
-        const nowPlaying = document.getElementById('now-playing');
+        async function loadTracks() {
+            const token = localStorage.getItem('token');
+            const listDiv = document.getElementById('tracks-list');
+            listDiv.innerHTML = 'Загрузка...';
 
-        nowPlaying.innerText = `Загрузка: ${artist} - ${title}...`;
-        playerContainer.style.display = 'block';
+            try {
+                const response = await fetch(`${API_MUSIC}/Tracks?page=1&pageSize=50`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
 
-        try {
-            const response = await fetch(`${API_MUSIC}/Tracks/${id}/play`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+                if (response.ok) {
+                    const tracks = await response.json();
+                    listDiv.innerHTML = '';
 
-            if (response.ok) {
-                const blob = await response.blob();
-                const objectUrl = URL.createObjectURL(blob);
+                    tracks.forEach(track => {
+                        const trackTitle = track.title || track.Title || 'Без названия';
+                        const trackArtist = track.artist || track.Artist || 'Неизвестен';
+                        const trackId = track.id || track.Id;
 
-                audio.src = objectUrl;
-                audio.play();
-                nowPlaying.innerText = `Играет: ${artist} - ${title}`;
-            } else {
-                alert('Не удалось загрузить трек');
-                nowPlaying.innerText = 'Ошибка загрузки';
+                        const div = document.createElement('div');
+                        div.className = 'track-item';
+                        div.innerHTML = `
+                            <div>
+                                <strong>${trackTitle}</strong><br>
+                                <small style="color: #aaa;">${trackArtist}</small>
+                            </div>
+                            <div style="color: #1db954;">▶</div>
+                        `;
+
+                        div.onclick = () => playTrack(trackId, trackTitle, trackArtist);
+                        listDiv.appendChild(div);
+                    });
+                }
+            } catch (error) {
+                console.error(error);
             }
-        } catch (error) {
-            console.error(error);
         }
-    }
+
+        async function playTrack(id, title, artist, startPosition = 0) {
+            const token = localStorage.getItem('token');
+            const playerContainer = document.getElementById('player-container');
+            const audio = document.getElementById('audio-player');
+            const nowPlaying = document.getElementById('now-playing');
+
+            nowPlaying.innerText = `Загрузка: ${artist} - ${title}...`;
+            playerContainer.style.display = 'block';
+
+            try {
+                const response = await fetch(`${API_MUSIC}/Tracks/${id}/play`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    audio.src = URL.createObjectURL(blob);
+
+                    audio.onloadedmetadata = () => {
+                        if (startPosition > 0) audio.currentTime = startPosition;
+                    };
+
+                    audio.play();
+                    nowPlaying.innerText = `Играет: ${artist} - ${title}`;
+
+                    currentTrackId = id;
+                    if (syncInterval) clearInterval(syncInterval);
+
+                    syncInterval = setInterval(savePlaybackState, 5000);
+
+                    audio.onpause = savePlaybackState;
+
+                } else {
+                    nowPlaying.innerText = 'Ошибка загрузки';
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        async function savePlaybackState() {
+            const token = localStorage.getItem('token');
+            const audio = document.getElementById('audio-player');
+
+            if (!currentTrackId || !token || audio.paused && audio.currentTime === 0) return;
+
+            try {
+                await fetch(`${API_MUSIC}/Playback/state`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        TrackId: currentTrackId,
+                        PositionSeconds: Math.floor(audio.currentTime)
+                    })
+                });
+                console.log(`[Sync] Сохранено: ${Math.floor(audio.currentTime)} сек.`);
+            } catch (e) {
+                console.error('[Sync] Ошибка синхронизации', e);
+            }
+        }
+
+        async function checkActiveSession() {
+            const token = localStorage.getItem('token');
+            try {
+                const response = await fetch(`${API_MUSIC}/Playback/state`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.ok) {
+                    const state = await response.json();
+                    const trackId = state.TrackId;
+                    const position = state.PositionSeconds;
+
+                    if (!trackId) return;
+
+                    const trackResponse = await fetch(`${API_MUSIC}/Tracks/${trackId}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+
+                    if (trackResponse.ok) {
+                        const track = await trackResponse.json();
+
+                        const userAgrees = confirm(`Продолжить прослушивание "${track.artist} - ${track.title}" с ${position} сек.?`);
+
+                        if (userAgrees) {
+                            playTrack(track.id, track.title, track.artist, position);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('Ошибка сессии:', e);
+            }
+        }
     </script>
 
 </body>
