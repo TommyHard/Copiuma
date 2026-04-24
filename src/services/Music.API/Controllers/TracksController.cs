@@ -64,7 +64,7 @@ public class TracksController : ControllerBase
     }
 
     [HttpPost("upload")]
-    [RequestSizeLimit(200_000_000)]
+    [RequestSizeLimit(200_000_000)] // 200 MB upper bound
     public async Task<IActionResult> UploadTrack([FromForm] UploadTrackRequest request)
     {
         if (request.File is null || request.File.Length == 0)
@@ -76,6 +76,24 @@ public class TracksController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Title))
             return BadRequest("Название трека обязательно.");
 
+        string? artistName = request.Artist?.Trim();
+        if (request.ArtistId.HasValue)
+        {
+            var artist = await _context.Artists.FindAsync(request.ArtistId.Value);
+            if (artist is null) return BadRequest("Указанный артист не найден.");
+            artistName = artist.Name;
+        }
+
+        if (request.AlbumId.HasValue)
+        {
+            if (!request.ArtistId.HasValue)
+                return BadRequest("Для AlbumId нужно указать ArtistId.");
+            var album = await _context.Albums.FindAsync(request.AlbumId.Value);
+            if (album is null) return BadRequest("Указанный альбом не найден.");
+            if (album.ArtistId != request.ArtistId.Value)
+                return BadRequest("Альбом принадлежит другому артисту.");
+        }
+
         await using var stream = request.File.OpenReadStream();
         var savedFileName = await _storage.UploadFileAsync(
             stream, request.File.FileName, request.File.ContentType, request.File.Length);
@@ -84,7 +102,10 @@ public class TracksController : ControllerBase
         {
             Id = Guid.NewGuid(),
             Title = request.Title.Trim(),
-            Artist = request.Artist?.Trim(),
+            Artist = artistName,
+            ArtistId = request.ArtistId,
+            AlbumId = request.AlbumId,
+            TrackNumber = request.AlbumId.HasValue ? request.TrackNumber : null,
             FileName = savedFileName,
             ContentType = request.File.ContentType,
             UploadedAt = DateTime.UtcNow,
@@ -127,7 +148,17 @@ public class TracksController : ControllerBase
             .OrderByDescending(t => t.UploadedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(t => new { t.Id, t.Title, t.Artist, t.Duration, t.UploadedAt })
+            .Select(t => new
+            {
+                t.Id,
+                t.Title,
+                t.Artist,
+                t.Duration,
+                t.UploadedAt,
+                t.ArtistId,
+                t.AlbumId,
+                t.TrackNumber
+            })
             .ToListAsync();
 
         var payload = JsonSerializer.Serialize(tracks);
@@ -192,8 +223,18 @@ public class TracksController : ControllerBase
     public async Task<IActionResult> GetTrackById(Guid id)
     {
         var track = await _context.Tracks
-            .Select(t => new { t.Id, t.Title, t.Artist, t.Duration })
-            .FirstOrDefaultAsync(t => t.Id == id);
+            .Where(t => t.Id == id)
+            .Select(t => new
+            {
+                t.Id,
+                t.Title,
+                t.Artist,
+                t.Duration,
+                t.ArtistId,
+                t.AlbumId,
+                t.TrackNumber
+            })
+            .FirstOrDefaultAsync();
 
         return track is null ? NotFound() : Ok(track);
     }

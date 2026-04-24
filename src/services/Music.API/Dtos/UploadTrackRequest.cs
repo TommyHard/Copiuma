@@ -6,4 +6,8 @@ public class UploadTrackRequest
     public required string Title { get; set; }
 
     public string? Artist { get; set; }
+
+    public Guid? ArtistId { get; set; }
+    public Guid? AlbumId { get; set; }
+    public int? TrackNumber { get; set; }
 }

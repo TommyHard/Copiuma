@@ -21,6 +21,9 @@ public class AppDbContext : DbContext
     public DbSet<TrackReview> TrackReviews { get; set; }
     public DbSet<ReviewLike> ReviewLikes { get; set; }
 
+    public DbSet<Artist> Artists { get; set; }
+    public DbSet<Album> Albums { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -93,6 +96,56 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(x => x.ReviewId)
              .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Artist>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Name).HasMaxLength(200);
+            b.Property(x => x.Bio).HasMaxLength(4000);
+            b.HasIndex(x => x.Name);
+        });
+
+        modelBuilder.Entity<Artist>()
+            .HasGeneratedTsVectorColumn(
+                a => a.SearchVector,
+                "russian",
+                a => new { a.Name })
+            .HasIndex(a => a.SearchVector)
+            .HasMethod("GIN");
+
+        modelBuilder.Entity<Album>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Title).HasMaxLength(200);
+            b.HasIndex(x => x.ArtistId);
+            b.HasIndex(x => new { x.ArtistId, x.Title });
+            b.HasOne(x => x.Artist)
+             .WithMany()
+             .HasForeignKey(x => x.ArtistId)
+             .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Album>()
+            .HasGeneratedTsVectorColumn(
+                a => a.SearchVector,
+                "russian",
+                a => new { a.Title })
+            .HasIndex(a => a.SearchVector)
+            .HasMethod("GIN");
+
+        modelBuilder.Entity<Track>(b =>
+        {
+            b.HasOne(x => x.ArtistEntity)
+             .WithMany()
+             .HasForeignKey(x => x.ArtistId)
+             .OnDelete(DeleteBehavior.SetNull);
+            b.HasOne(x => x.Album)
+             .WithMany()
+             .HasForeignKey(x => x.AlbumId)
+             .OnDelete(DeleteBehavior.SetNull);
+            b.HasIndex(x => x.ArtistId);
+            b.HasIndex(x => new { x.AlbumId, x.TrackNumber });
         });
     }
 }
