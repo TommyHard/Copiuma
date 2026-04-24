@@ -1,4 +1,4 @@
-<div align="right">
+<div align="left">
   <kbd> 🇺🇸 English </kbd> • <a href="README.ru.md"><kbd> 🇷🇺 Русский </kbd></a>
 </div>
 
