@@ -1,5 +1,5 @@
 <div align="left">
-  <kbd><span style="color: purple;">🇺🇸 English</span> </kbd> • <a href="README.ru.md"><kbd> 🇷🇺 Русский </kbd></a>
+  <kbd> 🇺🇸 <span style="color: purple;">English</span> </kbd> • <a href="README.ru.md"><kbd> 🇷🇺 Русский </kbd></a>
 </div>
 
 # Copiuma
