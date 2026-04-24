@@ -70,6 +70,7 @@ public class Program
         builder.Services.AddScoped<FileStorageService>();
         builder.Services.AddScoped<NotificationService>();
         builder.Services.AddScoped<RecommendationsService>();
+        builder.Services.AddScoped<SearchService>();
         builder.Services.AddSingleton<MessageBusClient>();
         builder.Services.AddSingleton<RoomStore>();
         builder.Services.AddHostedService<TrackProcessingWorker>();
