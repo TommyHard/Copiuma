@@ -118,6 +118,7 @@ public class ArtistsController : ControllerBase
                 ArtistName = al.Artist!.Name,
                 al.CoverKey,
                 al.ReleaseDate,
+                al.Genres,
                 TrackCount = _db.Tracks.Count(t => t.AlbumId == al.Id)
             })
             .ToListAsync();
@@ -129,7 +130,7 @@ public class ArtistsController : ControllerBase
                 ? null
                 : await _storage.GeneratePresignedImageGetUrlAsync(r.CoverKey);
             list.Add(new AlbumListItem(r.Id, r.Title, r.ArtistId, r.ArtistName,
-                url, r.ReleaseDate, r.TrackCount));
+                url, r.ReleaseDate, r.Genres ?? new List<string>(), r.TrackCount));
         }
 
         return Ok(list);

@@ -51,7 +51,7 @@ public class AlbumsController : ControllerBase
             Title = title,
             ArtistId = request.ArtistId,
             ReleaseDate = request.ReleaseDate,
-            Genre = string.IsNullOrWhiteSpace(request.Genre) ? null : request.Genre.Trim().ToLowerInvariant(),
+            Genres = TracksController.NormalizeGenres(request.Genres),
             CreatedByUserId = UserId,
             CreatedAt = DateTime.UtcNow
         };
@@ -99,6 +99,7 @@ public class AlbumsController : ControllerBase
                 ArtistName = a.Artist!.Name,
                 a.CoverKey,
                 a.ReleaseDate,
+                a.Genres,
                 TrackCount = _db.Tracks.Count(t => t.AlbumId == a.Id)
             })
             .ToListAsync();
@@ -110,7 +111,7 @@ public class AlbumsController : ControllerBase
                 ? null
                 : await _storage.GeneratePresignedImageGetUrlAsync(r.CoverKey);
             items.Add(new AlbumListItem(r.Id, r.Title, r.ArtistId, r.ArtistName,
-                url, r.ReleaseDate, r.TrackCount));
+                url, r.ReleaseDate, r.Genres ?? new List<string>(), r.TrackCount));
         }
 
         return Ok(new { total, items });
@@ -156,10 +157,8 @@ public class AlbumsController : ControllerBase
         if (request.ReleaseDate.HasValue)
             album.ReleaseDate = request.ReleaseDate;
 
-        if (request.Genre is not null)
-            album.Genre = string.IsNullOrWhiteSpace(request.Genre)
-                ? null
-                : request.Genre.Trim().ToLowerInvariant();
+        if (request.Genres is not null)
+            album.Genres = TracksController.NormalizeGenres(request.Genres);
 
         album.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
@@ -293,19 +292,29 @@ public class AlbumsController : ControllerBase
                 ArtistName = a.Artist!.Name,
                 a.CoverKey,
                 a.ReleaseDate,
+                a.Genres,
                 a.CreatedByUserId,
                 a.CreatedAt,
                 TrackCount = _db.Tracks.Count(t => t.AlbumId == a.Id)
             })
             .FirstOrDefaultAsync();
+
         if (row is null) return null;
 
-        var url = row.CoverKey is null
+        var coverUrl = row.CoverKey is null
             ? null
             : await _storage.GeneratePresignedImageGetUrlAsync(row.CoverKey);
 
         return new AlbumResponse(
-            row.Id, row.Title, row.ArtistId, row.ArtistName,
-            url, row.ReleaseDate, row.CreatedByUserId, row.CreatedAt, row.TrackCount);
+            row.Id,
+            row.Title,
+            row.ArtistId,
+            row.ArtistName,
+            coverUrl,
+            row.ReleaseDate,
+            row.Genres ?? new List<string>(),
+            row.CreatedByUserId,
+            row.CreatedAt,
+            row.TrackCount);
     }
 }

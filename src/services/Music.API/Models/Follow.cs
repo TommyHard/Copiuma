@@ -1,16 +1,23 @@
 ﻿namespace Music.API.Models;
 
 /// <summary>
-/// Подписка пользователя на артиста
-/// Составной PK (FollowerUserId, ArtistId) — один юзер не может подписаться
-/// на одного артиста дважды. Отписка = удаление строки
+/// Полиморфная подписка. Одна и та же таблица хранит подписки на артистов,
+/// пользователей и плейлисты. Composite PK (FollowerUserId, TargetType, TargetId)
+/// — один юзер не может подписаться на один и тот же объект дважды
 /// </summary>
 public class Follow
 {
     public Guid FollowerUserId { get; set; }
 
-    public Guid ArtistId { get; set; }
-    public Artist? Artist { get; set; }
+    public FollowTargetType TargetType { get; set; }
+    public Guid TargetId { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+public enum FollowTargetType
+{
+    Artist = 0,
+    User = 1,
+    Playlist = 2
 }

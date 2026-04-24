@@ -22,7 +22,7 @@ public class SearchController : ControllerBase
         [FromQuery] string q,
         [FromQuery] string? types = null,
         [FromQuery] int take = 10,
-        [FromQuery] string? genre = null,
+        [FromQuery] string? genres = null,
         [FromQuery] int? yearFrom = null,
         [FromQuery] int? yearTo = null,
         [FromQuery] int? minDurationMs = null,
@@ -40,7 +40,7 @@ public class SearchController : ControllerBase
 
         var parsed = ParseTypes(types);
         var facets = new SearchFacets(
-            Genre: genre,
+            Genres: ParseGenres(genres),
             YearFrom: yearFrom,
             YearTo: yearTo,
             MinDurationMs: minDurationMs,
@@ -48,6 +48,17 @@ public class SearchController : ControllerBase
 
         var result = await _search.SearchAsync(q, parsed, facets, take, ct);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// CSV-строка "rock,pop,post-punk" -> List. Пустое/null -> null (без фильтра)
+    /// </summary>
+    private static List<string>? ParseGenres(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        return raw
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
     }
 
     private static SearchTypes ParseTypes(string? raw)

@@ -22,6 +22,8 @@ public class TracksController : ControllerBase
     private readonly MessageBusClient _bus;
     private readonly IDistributedCache _cache;
     private readonly IConnectionMultiplexer _redis;
+    private readonly ModerationService _moderation;
+    private readonly AudioProcessingQueue _audioQueue;
     private readonly ILogger<TracksController> _log;
 
     private static readonly HashSet<string> AllowedContentTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -36,6 +38,8 @@ public class TracksController : ControllerBase
         MessageBusClient bus,
         IDistributedCache cache,
         IConnectionMultiplexer redis,
+        ModerationService moderation,
+        AudioProcessingQueue audioQueue,
         ILogger<TracksController> log)
     {
         _storage = storage;
@@ -43,6 +47,8 @@ public class TracksController : ControllerBase
         _bus = bus;
         _cache = cache;
         _redis = redis;
+        _moderation = moderation;
+        _audioQueue = audioQueue;
         _log = log;
     }
 
@@ -61,6 +67,20 @@ public class TracksController : ControllerBase
     {
         var db = _redis.GetDatabase();
         await db.StringIncrementAsync(CacheVersionKey);
+    }
+
+    /// <summary>
+    /// Нормализация массива жанров:
+    /// trim -> lower-case -> фильтр пустых -> дедупликация
+    /// </summary>
+    internal static List<string> NormalizeGenres(IEnumerable<string>? input)
+    {
+        if (input is null) return new List<string>();
+        return input
+            .Where(g => !string.IsNullOrWhiteSpace(g))
+            .Select(g => g.Trim().ToLowerInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
     }
 
     [HttpPost("upload")]
@@ -106,7 +126,7 @@ public class TracksController : ControllerBase
             ArtistId = request.ArtistId,
             AlbumId = request.AlbumId,
             TrackNumber = request.AlbumId.HasValue ? request.TrackNumber : null,
-            Genre = string.IsNullOrWhiteSpace(request.Genre) ? null : request.Genre.Trim().ToLowerInvariant(),
+            Genres = NormalizeGenres(request.Genres),
             FileName = savedFileName,
             ContentType = request.File.ContentType,
             UploadedAt = DateTime.UtcNow,
@@ -124,6 +144,8 @@ public class TracksController : ControllerBase
         {
             _log.LogError(ex, "Не удалось опубликовать событие TrackUploaded для {TrackId}.", track.Id);
         }
+
+        await _audioQueue.EnqueueAsync(track.Id);
 
         await BumpCacheVersionAsync();
 
@@ -145,7 +167,9 @@ public class TracksController : ControllerBase
             return Content(cached, "application/json");
         }
 
-        var tracks = await _context.Tracks
+        var visibleTracks = _moderation.ApplyVisibilityFilter(_context.Tracks, UserId);
+
+        var tracks = await visibleTracks
             .OrderByDescending(t => t.UploadedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -158,7 +182,8 @@ public class TracksController : ControllerBase
                 t.UploadedAt,
                 t.ArtistId,
                 t.AlbumId,
-                t.TrackNumber
+                t.TrackNumber,
+                t.IsExplicit
             })
             .ToListAsync();
 
@@ -191,39 +216,41 @@ public class TracksController : ControllerBase
         if (string.IsNullOrWhiteSpace(q))
             return BadRequest("Поисковой запрос не может быть пустым.");
 
-        var tracks = await _context.Tracks
+        var tracks = await _moderation.ApplyVisibilityFilter(_context.Tracks, UserId)
             .Where(t => t.SearchVector!.Matches(EF.Functions.WebSearchToTsQuery("russian", q)))
-            .Select(t => new { t.Id, t.Title, t.Artist, t.Duration, t.UploadedAt })
+            .Select(t => new { t.Id, t.Title, t.Artist, t.Duration, t.UploadedAt, t.IsExplicit })
             .Take(20)
             .ToListAsync();
 
         return Ok(tracks);
     }
 
+    /// <summary>
+    /// Soft-delete вместо hard. Запись остаётся (для аудита/возможного
+    /// восстановления в случае ошибки), но скрывается из всех листингов
+    /// </summary>
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteTrack(Guid id)
     {
         var userId = UserId;
         var track = await _context.Tracks.FindAsync(id);
-        if (track is null) return NotFound();
+        if (track is null || track.DeletedAt != null) return NotFound();
 
         if (track.UploadedByUserId != userId)
             return Forbid();
 
-        try { await _storage.DeleteFileAsync(track.FileName); }
-        catch (Exception ex) { _log.LogWarning(ex, "Файл {File} уже отсутствует в MinIO.", track.FileName); }
-
-        _context.Tracks.Remove(track);
+        track.DeletedAt = DateTime.UtcNow;
+        track.DeletionReason = TrackDeletionReason.SelfDeleted;
         await _context.SaveChangesAsync();
         await BumpCacheVersionAsync();
 
-        return Ok(new { Message = "Трек удалён." });
+        return Ok(new { Message = "Трек удалён.", DeletedAt = track.DeletedAt });
     }
 
     [HttpGet("{id}")]
     public async Task<IActionResult> GetTrackById(Guid id)
     {
-        var track = await _context.Tracks
+        var track = await _moderation.ApplyVisibilityFilter(_context.Tracks, UserId)
             .Where(t => t.Id == id)
             .Select(t => new
             {
@@ -233,18 +260,29 @@ public class TracksController : ControllerBase
                 t.Duration,
                 t.ArtistId,
                 t.AlbumId,
-                t.TrackNumber
+                t.TrackNumber,
+                t.IsExplicit,
+                t.ProcessingStatus
             })
             .FirstOrDefaultAsync();
 
         return track is null ? NotFound() : Ok(track);
     }
 
+    /// <summary>
+    /// По умолчанию отдается presigned URL на MinIO
+    /// </summary>
     [HttpGet("{id}/play")]
     public async Task<IActionResult> PlayTrack(Guid id, [FromQuery] bool inline = false)
     {
         var track = await _context.Tracks.FindAsync(id);
         if (track is null) return NotFound("Трек не найден.");
+
+        if (track.DeletedAt != null) return NotFound("Трек недоступен.");
+
+        if (track.UploadedByUserId != UserId &&
+            await _moderation.IsShadowbannedAsync(track.UploadedByUserId))
+            return NotFound("Трек недоступен.");
 
         if (!inline)
         {
@@ -264,10 +302,10 @@ public class TracksController : ControllerBase
     }
 
     /// <summary>
-    /// Клиент репортит проигранный трек (или попытку)
-    /// Рекомендации: popular/similar/for-you строятся на этих событиях
-    /// PlayedMs - длительность реального воспроизведения в мс.
-    /// Completed - true, если дослушали до конца (клиент сам решает по >= 90%)
+    /// Клиент репортит проигранный трек (или попытку). Для 
+    /// рекомендаций: popular/similar/for-you строятся на этих событиях
+    /// PlayedMs — длительность реального воспроизведения в мс. Completed —
+    /// true, если дослушали до конца (клиент сам решает по >= 90%)
     /// </summary>
     [HttpPost("{id}/play-event")]
     public async Task<IActionResult> ReportPlay(
@@ -321,5 +359,39 @@ public class TracksController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok(new { IsLiked = true });
+    }
+
+    [HttpGet("{id}/status")]
+    public async Task<IActionResult> GetProcessingStatus(Guid id, CancellationToken ct)
+    {
+        var t = await _context.Tracks
+            .Where(t => t.Id == id)
+            .Select(t => new { t.Id, t.ProcessingStatus, HasWaveform = t.WaveformPeaks != null, t.Duration, t.DeletedAt })
+            .FirstOrDefaultAsync(ct);
+        if (t is null || t.DeletedAt != null) return NotFound();
+
+        return Ok(new TrackProcessingStatusResponse(t.Id, t.ProcessingStatus, t.HasWaveform, t.Duration));
+    }
+
+    /// <summary>
+    /// Массив peaks для рендеринга waveform в UI
+    /// </summary>
+    [HttpGet("{id}/waveform")]
+    public async Task<IActionResult> GetWaveform(Guid id, CancellationToken ct)
+    {
+        var t = await _context.Tracks
+            .Where(t => t.Id == id && t.DeletedAt == null)
+            .Select(t => new { t.Id, t.WaveformPeaks, t.Duration, t.LoudnessLufs })
+            .FirstOrDefaultAsync(ct);
+
+        if (t is null) return NotFound();
+        if (t.WaveformPeaks is null || t.WaveformPeaks.Count == 0)
+            return NotFound("Waveform ещё не посчитан — попробуйте позже.");
+
+        return Ok(new WaveformResponse(
+            t.Id,
+            t.WaveformPeaks,
+            t.Duration ?? TimeSpan.Zero,
+            t.LoudnessLufs ?? 0));
     }
 }

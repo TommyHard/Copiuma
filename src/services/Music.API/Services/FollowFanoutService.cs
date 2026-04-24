@@ -63,7 +63,7 @@ public class FollowFanoutService
     private async Task FanOutAsync(Guid artistId, string type, object payload, CancellationToken ct)
     {
         var followerIds = await _db.Follows
-            .Where(f => f.ArtistId == artistId)
+            .Where(f => f.TargetType == FollowTargetType.Artist && f.TargetId == artistId)
             .Select(f => f.FollowerUserId)
             .ToListAsync(ct);
 

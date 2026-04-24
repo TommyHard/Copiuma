@@ -32,3 +32,26 @@ public record TopArtistItem(
     string? AvatarKey,
     int PlayCount,
     DateTime LastPlayedAt);
+
+/// <summary>
+/// Подписка юзера на другого юзера. IsMutual = true если он тоже подписан в ответ (друг)
+/// </summary>
+public record FollowedUserItem(
+    Guid UserId,
+    bool IsMutual,
+    DateTime SubscribedAt);
+
+/// <summary>
+/// Подписка user на плейлист
+/// </summary>
+public record FollowedPlaylistItem(
+    Guid PlaylistId,
+    string Title,
+    DateTime SubscribedAt);
+
+/// <summary>
+/// Взаимная подписка (друг)
+/// </summary>
+public record FriendItem(
+    Guid UserId,
+    DateTime SinceAt);

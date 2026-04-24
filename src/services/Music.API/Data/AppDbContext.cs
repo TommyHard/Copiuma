@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Music.API.Models;
 
 namespace Music.API.Data;
@@ -6,6 +7,11 @@ namespace Music.API.Data;
 public class AppDbContext : DbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+
+    private static readonly ValueComparer<List<string>> StringListComparer = new(
+        (a, b) => (a == null && b == null) || (a != null && b != null && a.SequenceEqual(b)),
+        c => c.Aggregate(0, (acc, v) => HashCode.Combine(acc, v.GetHashCode())),
+        c => c.ToList());
 
     public DbSet<Track> Tracks { get; set; }
     public DbSet<LikedTrack> LikedTracks { get; set; }
@@ -33,6 +39,9 @@ public class AppDbContext : DbContext
     public DbSet<OfflineItem> OfflineItems { get; set; }
 
     public DbSet<Follow> Follows { get; set; }
+
+    public DbSet<Report> Reports { get; set; }
+    public DbSet<UserFlag> UserFlags { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -134,8 +143,10 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(x => x.ArtistId)
              .OnDelete(DeleteBehavior.Restrict);
-            b.Property(x => x.Genre).HasMaxLength(64);
-            b.HasIndex(x => x.Genre);
+            b.Property(x => x.Genres)
+                .HasColumnType("text[]")
+                .Metadata.SetValueComparer(StringListComparer);
+            b.HasIndex(x => x.Genres).HasMethod("gin");
             b.HasIndex(x => x.ReleaseDate);
         });
 
@@ -159,8 +170,11 @@ public class AppDbContext : DbContext
              .OnDelete(DeleteBehavior.SetNull);
             b.HasIndex(x => x.ArtistId);
             b.HasIndex(x => new { x.AlbumId, x.TrackNumber });
-            b.Property(x => x.Genre).HasMaxLength(64);
-            b.HasIndex(x => x.Genre);
+
+            b.Property(x => x.Genres)
+                .HasColumnType("text[]")
+                .Metadata.SetValueComparer(StringListComparer);
+            b.HasIndex(x => x.Genres).HasMethod("gin");
         });
 
         modelBuilder.Entity<AuditEvent>(b =>
@@ -220,18 +234,48 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<Follow>(b =>
         {
-            b.HasKey(x => new { x.FollowerUserId, x.ArtistId });
-            b.HasIndex(x => x.ArtistId);
-            b.HasOne(x => x.Artist)
-             .WithMany()
-             .HasForeignKey(x => x.ArtistId)
-             .OnDelete(DeleteBehavior.Cascade);
+            b.HasKey(x => new { x.FollowerUserId, x.TargetType, x.TargetId });
+            b.Property(x => x.TargetType).HasConversion<int>();
+            b.HasIndex(x => new { x.TargetType, x.TargetId });
         });
 
         modelBuilder.Entity<Playlist>(b =>
         {
             b.Property(x => x.Visibility).HasConversion<int>();
             b.HasIndex(x => new { x.Visibility, x.CreatedAt });
+        });
+
+        // ---- Moderation ----
+
+        modelBuilder.Entity<Track>(b =>
+        {
+            b.Property(x => x.DeletionReason).HasConversion<int?>();
+            b.Property(x => x.ProcessingStatus).HasConversion<int>();
+            b.HasIndex(x => x.DeletedAt);
+            b.Property(x => x.WaveformPeaks).HasColumnType("jsonb");
+            b.Property(x => x.AcousticFingerprint).HasMaxLength(200);
+            b.HasIndex(x => x.AcousticFingerprint);
+        });
+
+        modelBuilder.Entity<Report>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.TargetType).HasConversion<int>();
+            b.Property(x => x.Status).HasConversion<int>();
+            b.Property(x => x.Reason).HasMaxLength(64);
+            b.Property(x => x.Details).HasMaxLength(2000);
+            b.Property(x => x.ResolutionNote).HasMaxLength(2000);
+            b.HasIndex(x => new { x.Status, x.CreatedAt });
+            b.HasIndex(x => new { x.TargetType, x.TargetId, x.CreatedAt });
+            b.HasIndex(x => new { x.ReporterUserId, x.TargetType, x.TargetId });
+        });
+
+        modelBuilder.Entity<UserFlag>(b =>
+        {
+            b.HasKey(x => new { x.UserId, x.Kind });
+            b.Property(x => x.Kind).HasConversion<int>();
+            b.Property(x => x.Note).HasMaxLength(1000);
+            b.HasIndex(x => new { x.Kind, x.ExpiresAt });
         });
     }
 }

@@ -24,8 +24,8 @@ public record ArtistListItem(
 
 // ---- Albums ----
 
-public record CreateAlbumRequest(Guid ArtistId, string Title, DateOnly? ReleaseDate, string? Genre = null);
-public record UpdateAlbumRequest(string? Title, DateOnly? ReleaseDate, string? Genre = null);
+public record CreateAlbumRequest(Guid ArtistId, string Title, DateOnly? ReleaseDate, List<string>? Genres = null);
+public record UpdateAlbumRequest(string? Title, DateOnly? ReleaseDate, List<string>? Genres = null);
 
 public record AlbumResponse(
     Guid Id,
@@ -34,6 +34,7 @@ public record AlbumResponse(
     string ArtistName,
     string? CoverUrl,
     DateOnly? ReleaseDate,
+    IReadOnlyList<string> Genres,
     Guid CreatedByUserId,
     DateTime CreatedAt,
     int TrackCount);
@@ -45,6 +46,7 @@ public record AlbumListItem(
     string ArtistName,
     string? CoverUrl,
     DateOnly? ReleaseDate,
+    IReadOnlyList<string> Genres,
     int TrackCount);
 
 public record AlbumTrackItem(

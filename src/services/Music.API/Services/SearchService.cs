@@ -8,9 +8,6 @@ namespace Music.API.Services;
 /// <summary>
 /// Единый поиск по трекам/артистам/альбомам/публичным плейлистам поверх
 /// tsvector'ов
-///
-/// Плейлисты — без tsvector, ищем ILIKE по Title среди
-/// public-плейлистов
 /// </summary>
 public class SearchService
 {
@@ -58,6 +55,21 @@ public class SearchService
         return new SearchResult(tracks, artists, albums, playlists);
     }
 
+    /// <summary>
+    /// Нормализация списка жанров из facets: trim/lower/dedup + фильтр пустых
+    /// Возвращает null если список пуст — значит фильтр не применяется
+    /// </summary>
+    private static string[]? NormalizeFacetGenres(List<string>? input)
+    {
+        if (input is null || input.Count == 0) return null;
+        var arr = input
+            .Where(g => !string.IsNullOrWhiteSpace(g))
+            .Select(g => g.Trim().ToLowerInvariant())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        return arr.Length == 0 ? null : arr;
+    }
+
     private async Task<IReadOnlyList<SearchTrackItem>> SearchTracksAsync(
         string q, SearchFacets f, int take, CancellationToken ct)
     {
@@ -74,7 +86,7 @@ public class SearchService
                 t.ArtistId,
                 t.AlbumId,
                 t.Duration,
-                t.Genre,
+                t.Genres,
                 t.SearchVector!.Rank(EF.Functions.WebSearchToTsQuery(Language, q))))
             .OrderByDescending(x => x.Rank)
             .Take(take)
@@ -83,10 +95,10 @@ public class SearchService
 
     private IQueryable<Track> ApplyTrackFacets(IQueryable<Track> q, SearchFacets f)
     {
-        if (!string.IsNullOrWhiteSpace(f.Genre))
+        var genres = NormalizeFacetGenres(f.Genres);
+        if (genres is not null)
         {
-            var g = f.Genre.ToLowerInvariant();
-            q = q.Where(t => t.Genre == g);
+            q = q.Where(t => t.Genres.Any(g => genres.Contains(g)));
         }
         if (f.MinDurationMs is int minMs)
         {
@@ -134,10 +146,10 @@ public class SearchService
         var query = _db.Albums
             .Where(a => a.SearchVector!.Matches(EF.Functions.WebSearchToTsQuery(Language, q)));
 
-        if (!string.IsNullOrWhiteSpace(f.Genre))
+        var genres = NormalizeFacetGenres(f.Genres);
+        if (genres is not null)
         {
-            var g = f.Genre.ToLowerInvariant();
-            query = query.Where(a => a.Genre == g);
+            query = query.Where(a => a.Genres.Any(g => genres.Contains(g)));
         }
 
         if (f.YearFrom is int yFrom)
@@ -153,7 +165,7 @@ public class SearchService
                 a.Artist!.Name,
                 a.ReleaseDate,
                 a.CoverKey,
-                a.Genre,
+                a.Genres,
                 a.SearchVector!.Rank(EF.Functions.WebSearchToTsQuery(Language, q))))
             .OrderByDescending(x => x.Rank)
             .Take(take)

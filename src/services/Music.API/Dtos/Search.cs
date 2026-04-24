@@ -17,7 +17,7 @@ public record SearchTrackItem(
     Guid? ArtistId,
     Guid? AlbumId,
     TimeSpan? Duration,
-    string? Genre,
+    IReadOnlyList<string> Genres,
     float Rank);
 
 public record SearchArtistItem(
@@ -33,7 +33,7 @@ public record SearchAlbumItem(
     string? ArtistName,
     DateOnly? ReleaseDate,
     string? CoverKey,
-    string? Genre,
+    IReadOnlyList<string> Genres,
     float Rank);
 
 public record SearchPlaylistItem(
@@ -56,8 +56,12 @@ public enum SearchTypes
     All = Tracks | Artists | Albums | Playlists
 }
 
+/// <summary>
+/// Genres — массив жанров (OR-пересечение с Track.Genres/Album.Genres).
+/// Пустой список = фильтр не применяется
+/// </summary>
 public record SearchFacets(
-    string? Genre = null,
+    List<string>? Genres = null,
     int? YearFrom = null,
     int? YearTo = null,
     int? MinDurationMs = null,

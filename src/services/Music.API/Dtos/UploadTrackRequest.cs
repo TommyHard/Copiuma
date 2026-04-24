@@ -11,5 +11,5 @@ public class UploadTrackRequest
     public Guid? AlbumId { get; set; }
     public int? TrackNumber { get; set; }
 
-    public string? Genre { get; set; }
+    public List<string>? Genres { get; set; }
 }

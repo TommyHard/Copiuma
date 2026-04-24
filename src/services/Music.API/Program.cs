@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Minio;
 using Music.API.Auth;
@@ -72,8 +73,12 @@ public class Program
         builder.Services.AddScoped<RecommendationsService>();
         builder.Services.AddScoped<SearchService>();
         builder.Services.AddScoped<FollowFanoutService>();
+        builder.Services.AddScoped<ModerationService>();
         builder.Services.AddSingleton<MessageBusClient>();
         builder.Services.AddSingleton<RoomStore>();
+        builder.Services.AddSingleton<AudioProcessingQueue>();
+        builder.Services.AddSingleton<IAudioAnalyzer, StubAudioAnalyzer>();
+        builder.Services.AddHostedService<AudioProcessingWorker>();
         builder.Services.AddHostedService<TrackProcessingWorker>();
         builder.Services.AddHostedService<BucketInitializer>();
 

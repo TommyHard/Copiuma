@@ -19,7 +19,11 @@ public class Album
 
     public DateOnly? ReleaseDate { get; set; }
 
-    public string? Genre { get; set; }
+    /// <summary>
+    /// Массив жанров в lower-case ("rock", "post-punk")
+    /// Пустой массив = жанр не указан
+    /// </summary>
+    public List<string> Genres { get; set; } = new();
 
     public Guid CreatedByUserId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

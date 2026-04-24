@@ -8,6 +8,10 @@ public class Track
 
     public required string Title { get; set; }
 
+    /// <summary>
+    /// Снимок имени исполнителя. Если задан ArtistId, копируется из Artist.Name
+    /// при upload, иначе берётся из запроса как есть
+    /// </summary>
     public string? Artist { get; set; }
 
     public required string FileName { get; set; }
@@ -20,15 +24,82 @@ public class Track
 
     public TimeSpan? Duration { get; set; }
 
+
+    /// <summary>
+    /// Ссылка на сущность Artist. null = legacy/без каталога
+    /// </summary>
     public Guid? ArtistId { get; set; }
     public Artist? ArtistEntity { get; set; }
 
+    /// <summary>
+    /// Необязательно: к какому альбому относится. null = сингл
+    /// </summary>
     public Guid? AlbumId { get; set; }
     public Album? Album { get; set; }
 
+    /// <summary>
+    /// Номер трека в альбоме. null если нет альбома
+    /// </summary>
     public int? TrackNumber { get; set; }
 
-    public string? Genre { get; set; }
+    /// <summary>
+    /// Массив жанров в lower-case ("rock", "post-punk")
+    /// Пустой массив = жанр не указан
+    /// </summary>
+    public List<string> Genres { get; set; } = new();
+
+    /// <summary>
+    /// Explicit-контент (мат / 18+)
+    /// </summary>
+    public bool IsExplicit { get; set; }
+
+    /// <summary>
+    /// Soft-delete: вместо физического удаления ставим timestamp
+    /// Запись остаётся для аудита, но скрывается из всех user-facing выборок
+    /// Фоновый job раз в N дней чистит файлы в MinIO и физически удаляет запись
+    /// </summary>
+    public DateTime? DeletedAt { get; set; }
+
+    /// <summary>
+    /// Причина удаления (DMCA / moderator / self). null — если ещё активен
+    /// </summary>
+    public TrackDeletionReason? DeletionReason { get; set; }
+
+    /// <summary>
+    /// Состояние фоновой обработки (ffmpeg -> duration/loudness/waveform)
+    /// Upload создаёт трек со статусом Pending; worker меняет на Ready/Failed
+    /// </summary>
+    public TrackProcessingStatus ProcessingStatus { get; set; } = TrackProcessingStatus.Pending;
+
+    /// <summary>
+    /// Нормализация громкости
+    /// </summary>
+    public double? LoudnessLufs { get; set; }
+
+    /// <summary>
+    /// Массив peak-значений для рендеринга waveform в UI
+    /// </summary>
+    public List<float>? WaveformPeaks { get; set; }
+
+    /// <summary>
+    /// Chromaprint-fingerprint для дедупликации и антипиратства
+    ///</summary>
+    public string? AcousticFingerprint { get; set; }
 
     public NpgsqlTsVector? SearchVector { get; set; }
+}
+
+public enum TrackDeletionReason
+{
+    SelfDeleted = 0,
+    ModeratorRemoved = 1,
+    DmcaTakedown = 2
+}
+
+public enum TrackProcessingStatus
+{
+    Pending = 0,
+    Processing = 1,
+    Ready = 2,
+    Failed = 3
 }

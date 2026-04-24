@@ -25,4 +25,7 @@ public static class NotificationTypes
 
     public const string ArtistReleasedTrack = "artist.released.track";
     public const string ArtistReleasedAlbum = "artist.released.album";
+
+    public const string UserFollowedYou = "user.followed.you";
+    public const string BecameFriends = "user.became.friends";
 }
