@@ -257,26 +257,92 @@ public class PlaylistsController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetPlaylistDetails(Guid id)
     {
-        var member = await _context.PlaylistMembers
-            .FirstOrDefaultAsync(pm => pm.PlaylistId == id && pm.UserId == UserId);
-        if (member is null) return NotFound();
-
         var playlist = await _context.Playlists
             .Include(p => p.PlaylistTracks)
                 .ThenInclude(pt => pt.Track)
             .FirstOrDefaultAsync(p => p.Id == id);
         if (playlist is null) return NotFound();
 
+        var member = await _context.PlaylistMembers
+            .FirstOrDefaultAsync(pm => pm.PlaylistId == id && pm.UserId == UserId);
+
+        if (member is null && playlist.Visibility != PlaylistVisibility.Public)
+            return NotFound();
+
         return Ok(new
         {
             playlist.Id,
             playlist.Title,
             playlist.CreatedAt,
-            YourRole = member.Role.ToString(),
+            Visibility = playlist.Visibility.ToString(),
+            YourRole = member?.Role.ToString(),
             Tracks = playlist.PlaylistTracks
                 .OrderByDescending(pt => pt.AddedAt)
                 .Select(pt => new { pt.Track!.Id, pt.Track.Title, pt.Track.Artist, pt.AddedAt })
         });
+    }
+
+    // ---------- Visibility / public ----------
+
+    /// <summary>
+    /// Смена видимости. Только Owner может менять
+    /// </summary>
+    [HttpPatch("{playlistId}/visibility")]
+    public async Task<IActionResult> SetVisibility(Guid playlistId, [FromBody] SetVisibilityRequest request)
+    {
+        var playlist = await _context.Playlists.FindAsync(playlistId);
+        if (playlist is null) return NotFound();
+
+        if (!await IsCallerInRole(playlistId, PlaylistRole.Owner)) return Forbid();
+
+        if (!Enum.TryParse<PlaylistVisibility>(request.Visibility, ignoreCase: true, out var v))
+            return BadRequest($"Неизвестная видимость: {request.Visibility}. Допустимо: Private, Public.");
+
+        if (playlist.Visibility == v) return Ok(new { Visibility = v.ToString() });
+
+        playlist.Visibility = v;
+        await _context.SaveChangesAsync();
+        return Ok(new { Visibility = v.ToString() });
+    }
+
+    /// <summary>
+    /// Лента публичных плейлистов
+    /// </summary>
+    [HttpGet("public")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetPublicPlaylists(
+        [FromQuery] int take = 20,
+        [FromQuery] DateTime? before = null,
+        [FromQuery] string? q = null,
+        CancellationToken ct = default)
+    {
+        take = Math.Clamp(take, 1, 50);
+
+        var query = _context.Playlists
+            .Where(p => p.Visibility == PlaylistVisibility.Public);
+
+        if (before.HasValue)
+            query = query.Where(p => p.CreatedAt < before.Value);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var pattern = $"%{q}%";
+            query = query.Where(p => EF.Functions.ILike(p.Title, pattern));
+        }
+
+        var list = await query
+            .OrderByDescending(p => p.CreatedAt)
+            .Take(take)
+            .Select(p => new
+            {
+                p.Id,
+                p.Title,
+                p.CreatedAt,
+                TrackCount = p.PlaylistTracks.Count
+            })
+            .ToListAsync(ct);
+
+        return Ok(list);
     }
 
     private Task<bool> PlaylistExists(Guid id) => _context.Playlists.AnyAsync(p => p.Id == id);
@@ -284,4 +350,14 @@ public class PlaylistsController : ControllerBase
     private Task<bool> IsCallerInRole(Guid playlistId, PlaylistRole role) =>
         _context.PlaylistMembers.AnyAsync(pm =>
             pm.PlaylistId == playlistId && pm.UserId == UserId && pm.Role == role);
+}
+
+public class SetVisibilityRequest
+{
+    /// <summary>
+    /// "Private"
+    /// или 
+    /// "Public"
+    /// </summary>
+    public required string Visibility { get; set; }
 }

@@ -22,4 +22,7 @@ public static class NotificationTypes
 
     public const string TrackReviewCreated = "track.review.created";
     public const string ReviewLiked = "review.liked";
+
+    public const string ArtistReleasedTrack = "artist.released.track";
+    public const string ArtistReleasedAlbum = "artist.released.album";
 }

@@ -32,6 +32,8 @@ public class AppDbContext : DbContext
 
     public DbSet<OfflineItem> OfflineItems { get; set; }
 
+    public DbSet<Follow> Follows { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -132,6 +134,9 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(x => x.ArtistId)
              .OnDelete(DeleteBehavior.Restrict);
+            b.Property(x => x.Genre).HasMaxLength(64);
+            b.HasIndex(x => x.Genre);
+            b.HasIndex(x => x.ReleaseDate);
         });
 
         modelBuilder.Entity<Album>()
@@ -154,6 +159,8 @@ public class AppDbContext : DbContext
              .OnDelete(DeleteBehavior.SetNull);
             b.HasIndex(x => x.ArtistId);
             b.HasIndex(x => new { x.AlbumId, x.TrackNumber });
+            b.Property(x => x.Genre).HasMaxLength(64);
+            b.HasIndex(x => x.Genre);
         });
 
         modelBuilder.Entity<AuditEvent>(b =>
@@ -209,6 +216,22 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(x => x.TrackId)
              .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Follow>(b =>
+        {
+            b.HasKey(x => new { x.FollowerUserId, x.ArtistId });
+            b.HasIndex(x => x.ArtistId);
+            b.HasOne(x => x.Artist)
+             .WithMany()
+             .HasForeignKey(x => x.ArtistId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Playlist>(b =>
+        {
+            b.Property(x => x.Visibility).HasConversion<int>();
+            b.HasIndex(x => new { x.Visibility, x.CreatedAt });
         });
     }
 }

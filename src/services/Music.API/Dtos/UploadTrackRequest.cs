@@ -10,4 +10,6 @@ public class UploadTrackRequest
     public Guid? ArtistId { get; set; }
     public Guid? AlbumId { get; set; }
     public int? TrackNumber { get; set; }
+
+    public string? Genre { get; set; }
 }

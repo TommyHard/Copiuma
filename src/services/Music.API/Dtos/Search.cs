@@ -7,7 +7,8 @@
 public record SearchResult(
     IReadOnlyList<SearchTrackItem> Tracks,
     IReadOnlyList<SearchArtistItem> Artists,
-    IReadOnlyList<SearchAlbumItem> Albums);
+    IReadOnlyList<SearchAlbumItem> Albums,
+    IReadOnlyList<SearchPlaylistItem> Playlists);
 
 public record SearchTrackItem(
     Guid Id,
@@ -16,6 +17,7 @@ public record SearchTrackItem(
     Guid? ArtistId,
     Guid? AlbumId,
     TimeSpan? Duration,
+    string? Genre,
     float Rank);
 
 public record SearchArtistItem(
@@ -31,11 +33,17 @@ public record SearchAlbumItem(
     string? ArtistName,
     DateOnly? ReleaseDate,
     string? CoverKey,
+    string? Genre,
     float Rank);
 
+public record SearchPlaylistItem(
+    Guid Id,
+    string Title,
+    DateTime CreatedAt,
+    int TrackCount);
+
 /// <summary>
-/// Флаги, чтобы клиент мог сделать "только артисты"
-/// или всё сразу
+/// Флаги, чтобы клиент мог сделать "только артисты" или всё сразу
 /// </summary>
 [Flags]
 public enum SearchTypes
@@ -44,5 +52,13 @@ public enum SearchTypes
     Tracks = 1 << 0,
     Artists = 1 << 1,
     Albums = 1 << 2,
-    All = Tracks | Artists | Albums
+    Playlists = 1 << 3,
+    All = Tracks | Artists | Albums | Playlists
 }
+
+public record SearchFacets(
+    string? Genre = null,
+    int? YearFrom = null,
+    int? YearTo = null,
+    int? MinDurationMs = null,
+    int? MaxDurationMs = null);

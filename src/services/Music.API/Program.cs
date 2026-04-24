@@ -71,6 +71,7 @@ public class Program
         builder.Services.AddScoped<NotificationService>();
         builder.Services.AddScoped<RecommendationsService>();
         builder.Services.AddScoped<SearchService>();
+        builder.Services.AddScoped<FollowFanoutService>();
         builder.Services.AddSingleton<MessageBusClient>();
         builder.Services.AddSingleton<RoomStore>();
         builder.Services.AddHostedService<TrackProcessingWorker>();

@@ -5,11 +5,6 @@ using Music.API.Services;
 
 namespace Music.API.Controllers;
 
-/// <summary>
-/// Единый поиск /search?q=. Раньше были три разных эндпойнта
-/// (/tracks/search, /artists?q=, /albums?q=). Старые остаются
-/// совместимости ради. Удалить в будущем
-/// </summary>
 [ApiController]
 [Authorize]
 [Route("[controller]")]
@@ -27,13 +22,31 @@ public class SearchController : ControllerBase
         [FromQuery] string q,
         [FromQuery] string? types = null,
         [FromQuery] int take = 10,
+        [FromQuery] string? genre = null,
+        [FromQuery] int? yearFrom = null,
+        [FromQuery] int? yearTo = null,
+        [FromQuery] int? minDurationMs = null,
+        [FromQuery] int? maxDurationMs = null,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(q))
-            return BadRequest("Параметр q обязателен.");
+            return BadRequest("Параметр q обязателен");
+
+        if (yearFrom is int yf && yearTo is int yt && yf > yt)
+            return BadRequest("yearFrom должен быть ≤ yearTo");
+
+        if (minDurationMs is int mn && maxDurationMs is int mx && mn > mx)
+            return BadRequest("minDurationMs должен быть ≤ maxDurationMs");
 
         var parsed = ParseTypes(types);
-        var result = await _search.SearchAsync(q, parsed, take, ct);
+        var facets = new SearchFacets(
+            Genre: genre,
+            YearFrom: yearFrom,
+            YearTo: yearTo,
+            MinDurationMs: minDurationMs,
+            MaxDurationMs: maxDurationMs);
+
+        var result = await _search.SearchAsync(q, parsed, facets, take, ct);
         return Ok(result);
     }
 
@@ -50,11 +63,11 @@ public class SearchController : ControllerBase
                 "track" or "tracks" => SearchTypes.Tracks,
                 "artist" or "artists" => SearchTypes.Artists,
                 "album" or "albums" => SearchTypes.Albums,
+                "playlist" or "playlists" => SearchTypes.Playlists,
                 "all" => SearchTypes.All,
                 _ => SearchTypes.None
             };
         }
-
         return acc == SearchTypes.None ? SearchTypes.All : acc;
     }
 }

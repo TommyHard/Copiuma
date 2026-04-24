@@ -25,7 +25,7 @@ public class HistoryController : ControllerBase
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
     /// <summary>
-    /// Последние уникальные прослушанные треки.
+    /// Последние уникальные прослушанные треки
     /// </summary>
     /// <param name="take">Сколько строк (1-100, по умолчанию 50)</param>
     /// <param name="sinceDays">Окно истории в днях (1-365, по умолчанию 30)</param>
@@ -90,7 +90,7 @@ public class HistoryController : ControllerBase
     }
 
     /// <summary>
-    /// Лента прослушиваний без дедупликации
+    /// Лента прослушиваний — без дедупликации
     /// </summary>
     [HttpGet("tracks/raw")]
     public async Task<IActionResult> GetRawHistory(
@@ -172,6 +172,60 @@ public class HistoryController : ControllerBase
 
     //    return Ok(latestEvents);
     //}
+
+    /// <summary>
+    /// Топ артистов пользователя за окно.
+    /// Score — число прослушиваний треков этого артиста
+    /// </summary>
+    [HttpGet("artists")]
+    public async Task<IActionResult> GetTopArtists(
+        [FromQuery] int take = 20,
+        [FromQuery] int sinceDays = 30,
+        CancellationToken ct = default)
+    {
+        take = Math.Clamp(take, 1, 100);
+        sinceDays = Math.Clamp(sinceDays, 1, 365);
+        var since = DateTime.UtcNow.AddDays(-sinceDays);
+
+        var aggregated = await _db.PlayEvents
+            .Where(p => p.UserId == UserId && p.StartedAt >= since && p.Track!.ArtistId != null)
+            .GroupBy(p => p.Track!.ArtistId!.Value)
+            .Select(g => new
+            {
+                ArtistId = g.Key,
+                PlayCount = g.Count(),
+                LastPlayedAt = g.Max(x => x.StartedAt)
+            })
+            .OrderByDescending(x => x.PlayCount)
+            .ThenByDescending(x => x.LastPlayedAt)
+            .Take(take)
+            .ToListAsync(ct);
+
+        if (aggregated.Count == 0)
+            return Ok(Array.Empty<TopArtistItem>());
+
+        var ids = aggregated.Select(x => x.ArtistId).ToList();
+        var artists = await _db.Artists
+            .Where(a => ids.Contains(a.Id))
+            .Select(a => new { a.Id, a.Name, a.AvatarKey })
+            .ToDictionaryAsync(x => x.Id, ct);
+
+        var result = aggregated
+            .Where(a => artists.ContainsKey(a.ArtistId))
+            .Select(a =>
+            {
+                var meta = artists[a.ArtistId];
+                return new TopArtistItem(
+                    a.ArtistId,
+                    meta.Name,
+                    meta.AvatarKey,
+                    a.PlayCount,
+                    a.LastPlayedAt);
+            })
+            .ToList();
+
+        return Ok(result);
+    }
 
     /// <summary>
     /// Удалить свою историю

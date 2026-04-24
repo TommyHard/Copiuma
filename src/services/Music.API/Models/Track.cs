@@ -28,5 +28,7 @@ public class Track
 
     public int? TrackNumber { get; set; }
 
+    public string? Genre { get; set; }
+
     public NpgsqlTsVector? SearchVector { get; set; }
 }

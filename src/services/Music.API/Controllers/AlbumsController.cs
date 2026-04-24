@@ -9,6 +9,10 @@ using System.Security.Claims;
 
 namespace Music.API.Controllers;
 
+/// <summary>
+/// CRUD + поиск по альбомам, обложка в bucket "images", attach/detach треков
+/// Удалить альбом можно только если он пуст (все треки откреплены)
+/// </summary>
 [ApiController]
 [Authorize]
 [Route("[controller]")]
@@ -16,11 +20,13 @@ public class AlbumsController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly FileStorageService _storage;
+    private readonly FollowFanoutService _fanout;
 
-    public AlbumsController(AppDbContext db, FileStorageService storage)
+    public AlbumsController(AppDbContext db, FileStorageService storage, FollowFanoutService fanout)
     {
         _db = db;
         _storage = storage;
+        _fanout = fanout;
     }
 
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -45,12 +51,15 @@ public class AlbumsController : ControllerBase
             Title = title,
             ArtistId = request.ArtistId,
             ReleaseDate = request.ReleaseDate,
+            Genre = string.IsNullOrWhiteSpace(request.Genre) ? null : request.Genre.Trim().ToLowerInvariant(),
             CreatedByUserId = UserId,
             CreatedAt = DateTime.UtcNow
         };
 
         _db.Albums.Add(album);
         await _db.SaveChangesAsync();
+
+        await _fanout.FanOutNewAlbumAsync(artist.Id, album.Id, album.Title, artist.Name);
 
         return Ok(await BuildResponse(album.Id));
     }
@@ -147,6 +156,11 @@ public class AlbumsController : ControllerBase
         if (request.ReleaseDate.HasValue)
             album.ReleaseDate = request.ReleaseDate;
 
+        if (request.Genre is not null)
+            album.Genre = string.IsNullOrWhiteSpace(request.Genre)
+                ? null
+                : request.Genre.Trim().ToLowerInvariant();
+
         album.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
@@ -222,6 +236,11 @@ public class AlbumsController : ControllerBase
 
     // ---- Attach/detach tracks ----
 
+    /// <summary>
+    /// Привязывает существующий трек к альбому. Трек должен принадлежать тому же
+    /// артисту, что и альбом (иначе 400). Если трек ранее был в другом альбоме
+    /// этого же артиста — перевязываем
+    /// </summary>
     [HttpPost("{id:guid}/tracks/{trackId:guid}")]
     public async Task<IActionResult> AttachTrack(
         Guid id, Guid trackId, [FromBody] AttachAlbumTrackRequest? request)

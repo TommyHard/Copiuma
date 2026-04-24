@@ -106,6 +106,7 @@ public class TracksController : ControllerBase
             ArtistId = request.ArtistId,
             AlbumId = request.AlbumId,
             TrackNumber = request.AlbumId.HasValue ? request.TrackNumber : null,
+            Genre = string.IsNullOrWhiteSpace(request.Genre) ? null : request.Genre.Trim().ToLowerInvariant(),
             FileName = savedFileName,
             ContentType = request.File.ContentType,
             UploadedAt = DateTime.UtcNow,
@@ -263,10 +264,10 @@ public class TracksController : ControllerBase
     }
 
     /// <summary>
-    /// Клиент репортит проигранный трек (или попытку).
+    /// Клиент репортит проигранный трек (или попытку)
     /// Рекомендации: popular/similar/for-you строятся на этих событиях
-    /// PlayedMs - длительность реального воспроизведения в мс. 
-    /// Completed - true, если дослушали до конца (клиент сам решает по >= 90%).
+    /// PlayedMs - длительность реального воспроизведения в мс.
+    /// Completed - true, если дослушали до конца (клиент сам решает по >= 90%)
     /// </summary>
     [HttpPost("{id}/play-event")]
     public async Task<IActionResult> ReportPlay(

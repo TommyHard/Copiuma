@@ -9,4 +9,5 @@ public class Playlist
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public List<PlaylistTrack> PlaylistTracks { get; set; } = new();
+    public PlaylistVisibility Visibility { get; set; } = PlaylistVisibility.Private;
 }

@@ -24,8 +24,8 @@ public record ArtistListItem(
 
 // ---- Albums ----
 
-public record CreateAlbumRequest(Guid ArtistId, string Title, DateOnly? ReleaseDate);
-public record UpdateAlbumRequest(string? Title, DateOnly? ReleaseDate);
+public record CreateAlbumRequest(Guid ArtistId, string Title, DateOnly? ReleaseDate, string? Genre = null);
+public record UpdateAlbumRequest(string? Title, DateOnly? ReleaseDate, string? Genre = null);
 
 public record AlbumResponse(
     Guid Id,

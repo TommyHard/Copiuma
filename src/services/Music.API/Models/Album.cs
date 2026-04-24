@@ -2,6 +2,10 @@
 
 namespace Music.API.Models;
 
+/// <summary>
+/// Альбом: принадлежит одному Artist, содержит несколько Track
+/// Обложка хранится в bucket "images"
+/// </summary>
 public class Album
 {
     public Guid Id { get; set; }
@@ -14,6 +18,8 @@ public class Album
     public string? CoverKey { get; set; }
 
     public DateOnly? ReleaseDate { get; set; }
+
+    public string? Genre { get; set; }
 
     public Guid CreatedByUserId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

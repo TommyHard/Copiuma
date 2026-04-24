@@ -1,5 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Music.API.Models;
@@ -8,17 +7,26 @@ using System.Text.Json;
 
 namespace Music.API.Data;
 
+/// <summary>
+/// Любое SaveChangesAsync() для
+/// whitelist сущностей добавляет запись ChangeLogEntry в ту же
+/// транзакцию. Хранит только изменённые поля
+/// </summary>
 public class ChangelogInterceptor : SaveChangesInterceptor
 {
     private readonly IHttpContextAccessor _http;
 
+    /// <summary>
+    /// Whitelist: имя типа, набор свойств, чьи изменения важны
+    /// Всё остальное — игнорируется (Notifications, Likes, Ratings)
+    /// </summary>
     private static readonly Dictionary<string, string[]> Tracked =
         new(StringComparer.Ordinal)
         {
-            ["Playlist"] = new[] { "Title" },
-            ["Track"] = new[] { "Title", "Artist", "ArtistId", "AlbumId", "TrackNumber", "Duration" },
+            ["Playlist"] = new[] { "Title", "Visibility" },
+            ["Track"] = new[] { "Title", "Artist", "ArtistId", "AlbumId", "TrackNumber", "Duration", "Genre" },
             ["Artist"] = new[] { "Name", "Bio", "AvatarKey" },
-            ["Album"] = new[] { "Title", "ArtistId", "ReleaseDate", "CoverKey" },
+            ["Album"] = new[] { "Title", "ArtistId", "ReleaseDate", "CoverKey", "Genre" },
             ["PlaylistInvitation"] = new[] { "Status" },
         };
 
