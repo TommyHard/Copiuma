@@ -20,30 +20,34 @@ public class RecommendationsController : ControllerBase
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
     /// <summary>
-    /// Самые играемые треки за последние 7 дней
+    /// Самые проигрываемые треки за последние 7 дней
+    /// Дизлайки учитываются
     /// </summary>
     [HttpGet("popular")]
     public async Task<IActionResult> Popular([FromQuery] int take = 50, CancellationToken ct = default)
-        => Ok(await _rec.GetPopularAsync(take, ct));
+        => Ok(await _rec.GetPopularAsync(take, UserId, ct));
 
     /// <summary>
     /// Ко-слушанные треки
+    /// Дизлайки учитываются
     /// </summary>
     [HttpGet("similar/{trackId:guid}")]
     public async Task<IActionResult> Similar(Guid trackId, [FromQuery] int take = 20, CancellationToken ct = default)
-        => Ok(await _rec.GetSimilarAsync(trackId, take, ct));
+        => Ok(await _rec.GetSimilarAsync(trackId, take, UserId, ct));
 
     /// <summary>
     /// Персональные рекомендации: по артистам, которых юзер слушает/лайкает
+    /// Дизлайки учитываются
     /// </summary>
     [HttpGet("for-you")]
     public async Task<IActionResult> ForYou([FromQuery] int take = 20, CancellationToken ct = default)
         => Ok(await _rec.GetForYouAsync(UserId, take, ct));
 
     /// <summary>
-    /// Популярные артисты за последние 7 дней
+    /// Популярные артисты за последние 7 дней.
+    /// Дизлайкнутые артисты скрываются
     /// </summary>
     [HttpGet("artists/trending")]
     public async Task<IActionResult> TrendingArtists([FromQuery] int take = 20, CancellationToken ct = default)
-        => Ok(await _rec.GetTrendingArtistsAsync(take, ct));
+        => Ok(await _rec.GetTrendingArtistsAsync(take, UserId, ct));
 }

@@ -28,6 +28,9 @@ public class AppDbContext : DbContext
     public DbSet<ChangeLogEntry> ChangeLogEntries { get; set; }
 
     public DbSet<PlayEvent> PlayEvents { get; set; }
+    public DbSet<UserDislike> UserDislikes { get; set; }
+
+    public DbSet<OfflineItem> OfflineItems { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -184,6 +187,24 @@ public class AppDbContext : DbContext
             b.Property(x => x.Source).HasMaxLength(64);
             b.HasIndex(x => new { x.TrackId, x.StartedAt });
             b.HasIndex(x => new { x.UserId, x.StartedAt });
+            b.HasOne(x => x.Track)
+             .WithMany()
+             .HasForeignKey(x => x.TrackId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserDislike>(b =>
+        {
+            b.HasKey(x => new { x.UserId, x.TargetType, x.TargetId });
+            b.Property(x => x.TargetType).HasConversion<int>();
+            b.HasIndex(x => new { x.UserId, x.TargetType });
+        });
+
+        modelBuilder.Entity<OfflineItem>(b =>
+        {
+            b.HasKey(x => new { x.UserId, x.TrackId });
+            b.Property(x => x.Source).HasMaxLength(64);
+            b.HasIndex(x => new { x.UserId, x.AddedAt });
             b.HasOne(x => x.Track)
              .WithMany()
              .HasForeignKey(x => x.TrackId)
