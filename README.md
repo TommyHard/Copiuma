@@ -1,4 +1,4 @@
-[English](#english) | [Русский](#русский)
+<a href="#english"><kbd> 🇬🇧 English </kbd></a> <a href="#русский"><kbd> 🇷🇺 Русский </kbd></a>
 
 <a id="english"></a>
 # Copiuma
