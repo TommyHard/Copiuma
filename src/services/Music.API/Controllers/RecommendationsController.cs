@@ -1,0 +1,49 @@
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Music.API.Services;
+using System.Security.Claims;
+
+namespace Music.API.Controllers;
+
+[ApiController]
+[Authorize]
+[Route("[controller]")]
+public class RecommendationsController : ControllerBase
+{
+    private readonly RecommendationsService _rec;
+
+    public RecommendationsController(RecommendationsService rec)
+    {
+        _rec = rec;
+    }
+
+    private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+    /// <summary>
+    /// Самые играемые треки за последние 7 дней
+    /// </summary>
+    [HttpGet("popular")]
+    public async Task<IActionResult> Popular([FromQuery] int take = 50, CancellationToken ct = default)
+        => Ok(await _rec.GetPopularAsync(take, ct));
+
+    /// <summary>
+    /// Ко-слушанные треки
+    /// </summary>
+    [HttpGet("similar/{trackId:guid}")]
+    public async Task<IActionResult> Similar(Guid trackId, [FromQuery] int take = 20, CancellationToken ct = default)
+        => Ok(await _rec.GetSimilarAsync(trackId, take, ct));
+
+    /// <summary>
+    /// Персональные рекомендации: по артистам, которых юзер слушает/лайкает
+    /// </summary>
+    [HttpGet("for-you")]
+    public async Task<IActionResult> ForYou([FromQuery] int take = 20, CancellationToken ct = default)
+        => Ok(await _rec.GetForYouAsync(UserId, take, ct));
+
+    /// <summary>
+    /// Популярные артисты за последние 7 дней
+    /// </summary>
+    [HttpGet("artists/trending")]
+    public async Task<IActionResult> TrendingArtists([FromQuery] int take = 20, CancellationToken ct = default)
+        => Ok(await _rec.GetTrendingArtistsAsync(take, ct));
+}

@@ -262,6 +262,38 @@ public class TracksController : ControllerBase
         return new EmptyResult();
     }
 
+    /// <summary>
+    /// Клиент репортит проигранный трек (или попытку).
+    /// Рекомендации: popular/similar/for-you строятся на этих событиях
+    /// PlayedMs - длительность реального воспроизведения в мс. 
+    /// Completed - true, если дослушали до конца (клиент сам решает по >= 90%).
+    /// </summary>
+    [HttpPost("{id}/play-event")]
+    public async Task<IActionResult> ReportPlay(
+        Guid id,
+        [FromBody] ReportPlayRequest request,
+        CancellationToken ct = default)
+    {
+        if (request.PlayedMs < 0) return BadRequest("PlayedMs не может быть отрицательным.");
+
+        if (!await _context.Tracks.AnyAsync(t => t.Id == id, ct))
+            return NotFound("Трек не найден.");
+
+        _context.PlayEvents.Add(new PlayEvent
+        {
+            Id = Guid.NewGuid(),
+            UserId = UserId,
+            TrackId = id,
+            PlayedMs = request.PlayedMs,
+            Completed = request.Completed,
+            Source = string.IsNullOrWhiteSpace(request.Source) ? null : request.Source!.Trim(),
+            StartedAt = DateTime.UtcNow
+        });
+
+        await _context.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
     [HttpPost("{id}/like")]
     public async Task<IActionResult> ToggleLike(Guid id)
     {

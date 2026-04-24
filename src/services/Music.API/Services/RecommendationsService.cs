@@ -1,0 +1,234 @@
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
+using Music.API.Data;
+using Music.API.Dtos;
+using System.Text.Json;
+
+namespace Music.API.Services;
+
+public class RecommendationsService
+{
+    private const string VersionKey = "rec:version";
+    private const int PopularLookbackDays = 7;
+    private const int SimilarLookbackDays = 30;
+    private const int ForYouLookbackDays = 30;
+
+    private readonly AppDbContext _db;
+    private readonly IDistributedCache _cache;
+
+    public RecommendationsService(AppDbContext db, IDistributedCache cache)
+    {
+        _db = db;
+        _cache = cache;
+    }
+
+    // ---- Popular ----
+
+    public async Task<IReadOnlyList<TrackRecommendationItem>> GetPopularAsync(
+        int take, CancellationToken ct = default)
+    {
+        take = Math.Clamp(take, 1, 100);
+        var key = await BuildKeyAsync("popular", take.ToString());
+
+        if (await ReadCacheAsync<List<TrackRecommendationItem>>(key, ct) is { } cached)
+            return cached;
+
+        var since = DateTime.UtcNow.AddDays(-PopularLookbackDays);
+
+        var rows = await _db.PlayEvents
+            .Where(e => e.StartedAt >= since)
+            .GroupBy(e => e.TrackId)
+            .Select(g => new { TrackId = g.Key, Plays = g.Count() })
+            .OrderByDescending(x => x.Plays)
+            .Take(take)
+            .Join(_db.Tracks,
+                p => p.TrackId, t => t.Id,
+                (p, t) => new TrackRecommendationItem(
+                    t.Id, t.Title, t.Artist, t.ArtistId, t.AlbumId, p.Plays))
+            .ToListAsync(ct);
+
+        await WriteCacheAsync(key, rows, TimeSpan.FromMinutes(15), ct);
+        return rows;
+    }
+
+    // ---- Similar (co-listened) ----
+
+    public async Task<IReadOnlyList<TrackRecommendationItem>> GetSimilarAsync(
+        Guid trackId, int take, CancellationToken ct = default)
+    {
+        take = Math.Clamp(take, 1, 50);
+        var key = await BuildKeyAsync("similar", $"{trackId}:{take}");
+
+        if (await ReadCacheAsync<List<TrackRecommendationItem>>(key, ct) is { } cached)
+            return cached;
+
+        var since = DateTime.UtcNow.AddDays(-SimilarLookbackDays);
+
+        // Пользователи, слушавшие этот трек за последние N дней
+        var userIds = _db.PlayEvents
+            .Where(e => e.TrackId == trackId && e.StartedAt >= since)
+            .Select(e => e.UserId)
+            .Distinct();
+
+        // Что ещё они слушали (исключая искомый трек) - считаем ко-встречаемость
+        // как число уникальных пользователей на трек.
+        var rows = await _db.PlayEvents
+            .Where(e => userIds.Contains(e.UserId)
+                        && e.TrackId != trackId
+                        && e.StartedAt >= since)
+            .GroupBy(e => e.TrackId)
+            .Select(g => new { TrackId = g.Key, CoUsers = g.Select(x => x.UserId).Distinct().Count() })
+            .OrderByDescending(x => x.CoUsers)
+            .Take(take)
+            .Join(_db.Tracks,
+                p => p.TrackId, t => t.Id,
+                (p, t) => new TrackRecommendationItem(
+                    t.Id, t.Title, t.Artist, t.ArtistId, t.AlbumId, p.CoUsers))
+            .ToListAsync(ct);
+
+        await WriteCacheAsync(key, rows, TimeSpan.FromMinutes(30), ct);
+        return rows;
+    }
+
+    // ---- For-you ----
+
+    public async Task<IReadOnlyList<TrackRecommendationItem>> GetForYouAsync(
+        Guid userId, int take, CancellationToken ct = default)
+    {
+        take = Math.Clamp(take, 1, 50);
+        var key = await BuildKeyAsync("for-you", $"{userId}:{take}");
+
+        if (await ReadCacheAsync<List<TrackRecommendationItem>>(key, ct) is { } cached)
+            return cached;
+
+        var since = DateTime.UtcNow.AddDays(-ForYouLookbackDays);
+
+        // Любимые артисты пользователя: из прослушиваний + лайков
+        // Score = count прослушиваний + 5 за каждый лайк
+        var playsByArtist = _db.PlayEvents
+            .Where(e => e.UserId == userId && e.StartedAt >= since)
+            .Join(_db.Tracks, e => e.TrackId, t => t.Id, (e, t) => t.ArtistId)
+            .Where(a => a.HasValue)
+            .GroupBy(a => a!.Value)
+            .Select(g => new { ArtistId = g.Key, Score = g.Count() });
+
+        var likesByArtist = _db.LikedTracks
+            .Where(l => l.UserId == userId)
+            .Join(_db.Tracks, l => l.TrackId, t => t.Id, (l, t) => t.ArtistId)
+            .Where(a => a.HasValue)
+            .GroupBy(a => a!.Value)
+            .Select(g => new { ArtistId = g.Key, Score = g.Count() * 5 });
+
+        var topArtists = await playsByArtist
+            .Concat(likesByArtist)
+            .GroupBy(x => x.ArtistId)
+            .Select(g => new { ArtistId = g.Key, Score = g.Sum(x => x.Score) })
+            .OrderByDescending(x => x.Score)
+            .Take(10)
+            .Select(x => x.ArtistId)
+            .ToListAsync(ct);
+
+        if (topArtists.Count == 0)
+        {
+            // Нет истории — возвращаем popular
+            return await GetPopularAsync(take, ct);
+        }
+
+        // Что юзер уже слышал / лайкнул — исключаем
+        var knownTrackIds = await _db.PlayEvents
+            .Where(e => e.UserId == userId)
+            .Select(e => e.TrackId)
+            .Union(_db.LikedTracks.Where(l => l.UserId == userId).Select(l => l.TrackId))
+            .ToListAsync(ct);
+
+        var knownSet = new HashSet<Guid>(knownTrackIds);
+
+        // Кандидаты: треки любимых артистов, ранжируем по популярности треков
+        // за тот же период
+        var popularityTable = _db.PlayEvents
+            .Where(e => e.StartedAt >= since)
+            .GroupBy(e => e.TrackId)
+            .Select(g => new { TrackId = g.Key, Plays = g.Count() });
+
+        var candidates = await _db.Tracks
+            .Where(t => t.ArtistId.HasValue && topArtists.Contains(t.ArtistId.Value))
+            .GroupJoin(
+                popularityTable,
+                t => t.Id, p => p.TrackId,
+                (t, ps) => new { t, Plays = ps.Sum(x => (int?)x.Plays) ?? 0 })
+            .OrderByDescending(x => x.Plays)
+            .Take(take * 3)
+            .Select(x => new TrackRecommendationItem(
+                x.t.Id, x.t.Title, x.t.Artist, x.t.ArtistId, x.t.AlbumId, x.Plays))
+            .ToListAsync(ct);
+
+        var filtered = candidates.Where(c => !knownSet.Contains(c.TrackId)).Take(take).ToList();
+
+        if (filtered.Count == 0)
+        {
+            return await GetPopularAsync(take, ct);
+        }
+
+        await WriteCacheAsync(key, filtered, TimeSpan.FromMinutes(10), ct);
+        return filtered;
+    }
+
+    // ---- Trending artists ----
+
+    public async Task<IReadOnlyList<ArtistRecommendationItem>> GetTrendingArtistsAsync(
+        int take, CancellationToken ct = default)
+    {
+        take = Math.Clamp(take, 1, 50);
+        var key = await BuildKeyAsync("trending-artists", take.ToString());
+
+        if (await ReadCacheAsync<List<ArtistRecommendationItem>>(key, ct) is { } cached)
+            return cached;
+
+        var since = DateTime.UtcNow.AddDays(-PopularLookbackDays);
+
+        var rows = await _db.PlayEvents
+            .Where(e => e.StartedAt >= since)
+            .Join(_db.Tracks, e => e.TrackId, t => t.Id, (e, t) => t.ArtistId)
+            .Where(a => a.HasValue)
+            .GroupBy(a => a!.Value)
+            .Select(g => new { ArtistId = g.Key, Plays = g.Count() })
+            .OrderByDescending(x => x.Plays)
+            .Take(take)
+            .Join(_db.Artists,
+                p => p.ArtistId, a => a.Id,
+                (p, a) => new ArtistRecommendationItem(a.Id, a.Name, p.Plays))
+            .ToListAsync(ct);
+
+        await WriteCacheAsync(key, rows, TimeSpan.FromMinutes(15), ct);
+        return rows;
+    }
+
+
+    public async Task BumpVersionAsync(CancellationToken ct = default)
+    {
+        var current = await _cache.GetStringAsync(VersionKey, ct);
+        var next = (long.TryParse(current, out var v) ? v : 0) + 1;
+        await _cache.SetStringAsync(VersionKey, next.ToString(), ct);
+    }
+
+    private async Task<string> BuildKeyAsync(string kind, string suffix)
+    {
+        var v = await _cache.GetStringAsync(VersionKey) ?? "0";
+        return $"rec:{kind}:v{v}:{suffix}";
+    }
+
+    private async Task<T?> ReadCacheAsync<T>(string key, CancellationToken ct) where T : class
+    {
+        var raw = await _cache.GetStringAsync(key, ct);
+        if (string.IsNullOrEmpty(raw)) return null;
+        try { return JsonSerializer.Deserialize<T>(raw); }
+        catch { return null; }
+    }
+
+    private Task WriteCacheAsync<T>(string key, T value, TimeSpan ttl, CancellationToken ct) =>
+        _cache.SetStringAsync(
+            key,
+            JsonSerializer.Serialize(value),
+            new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = ttl },
+            ct);
+}

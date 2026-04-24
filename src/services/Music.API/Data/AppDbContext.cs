@@ -27,6 +27,8 @@ public class AppDbContext : DbContext
     public DbSet<AuditEvent> AuditEvents { get; set; }
     public DbSet<ChangeLogEntry> ChangeLogEntries { get; set; }
 
+    public DbSet<PlayEvent> PlayEvents { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -174,6 +176,18 @@ public class AppDbContext : DbContext
             b.Property(x => x.Changes).HasColumnType("jsonb");
             b.HasIndex(x => new { x.EntityType, x.EntityId, x.CreatedAt });
             b.HasIndex(x => new { x.ActorUserId, x.CreatedAt });
+        });
+
+        modelBuilder.Entity<PlayEvent>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Source).HasMaxLength(64);
+            b.HasIndex(x => new { x.TrackId, x.StartedAt });
+            b.HasIndex(x => new { x.UserId, x.StartedAt });
+            b.HasOne(x => x.Track)
+             .WithMany()
+             .HasForeignKey(x => x.TrackId)
+             .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }
