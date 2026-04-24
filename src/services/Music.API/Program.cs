@@ -77,7 +77,13 @@ public class Program
         builder.Services.AddSingleton<MessageBusClient>();
         builder.Services.AddSingleton<RoomStore>();
         builder.Services.AddSingleton<AudioProcessingQueue>();
-        builder.Services.AddSingleton<IAudioAnalyzer, StubAudioAnalyzer>();
+
+        var analyzerType = builder.Configuration["AudioAnalyzer:Type"]?.ToLowerInvariant() ?? "ffmpeg";
+        if (analyzerType == "stub")
+            builder.Services.AddSingleton<IAudioAnalyzer, StubAudioAnalyzer>();
+        else
+            builder.Services.AddSingleton<IAudioAnalyzer, FFMpegAudioAnalyzer>();
+
         builder.Services.AddHostedService<AudioProcessingWorker>();
         builder.Services.AddHostedService<TrackProcessingWorker>();
         builder.Services.AddHostedService<BucketInitializer>();

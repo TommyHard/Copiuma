@@ -14,7 +14,9 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
 
 RUN apt-get update && \
-    apt-get install -y ffmpeg && \
+    apt-get install -y --no-install-recommends \
+        ffmpeg \
+        libchromaprint-tools && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=publish /app/publish .
