@@ -24,6 +24,9 @@ public class AppDbContext : DbContext
     public DbSet<Artist> Artists { get; set; }
     public DbSet<Album> Albums { get; set; }
 
+    public DbSet<AuditEvent> AuditEvents { get; set; }
+    public DbSet<ChangeLogEntry> ChangeLogEntries { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -146,6 +149,31 @@ public class AppDbContext : DbContext
              .OnDelete(DeleteBehavior.SetNull);
             b.HasIndex(x => x.ArtistId);
             b.HasIndex(x => new { x.AlbumId, x.TrackNumber });
+        });
+
+        modelBuilder.Entity<AuditEvent>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Metadata).HasColumnType("jsonb");
+            b.Property(x => x.Action).HasMaxLength(200);
+            b.Property(x => x.Method).HasMaxLength(10);
+            b.Property(x => x.Path).HasMaxLength(1000);
+            b.Property(x => x.UserAgent).HasMaxLength(500);
+            b.Property(x => x.IpAddress).HasMaxLength(64);
+            b.Property(x => x.CorrelationId).HasMaxLength(128);
+            b.HasIndex(x => new { x.UserId, x.CreatedAt });
+            b.HasIndex(x => new { x.Action, x.CreatedAt });
+            b.HasIndex(x => x.CreatedAt);
+        });
+
+        modelBuilder.Entity<ChangeLogEntry>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.EntityType).HasMaxLength(100);
+            b.Property(x => x.Kind).HasConversion<int>();
+            b.Property(x => x.Changes).HasColumnType("jsonb");
+            b.HasIndex(x => new { x.EntityType, x.EntityId, x.CreatedAt });
+            b.HasIndex(x => new { x.ActorUserId, x.CreatedAt });
         });
     }
 }

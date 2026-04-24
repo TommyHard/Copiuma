@@ -1,9 +1,9 @@
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Minio;
 using Music.API.Auth;
 using Music.API.Data;
 using Music.API.Hubs;
+using Music.API.Middleware;
 using Music.API.Services;
 using StackExchange.Redis;
 
@@ -19,8 +19,12 @@ public class Program
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
 
-        builder.Services.AddDbContext<AppDbContext>(options =>
-            options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddScoped<ChangelogInterceptor>();
+        builder.Services.AddDbContext<AppDbContext>((sp, options) =>
+            options
+                .UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
+                .AddInterceptors(sp.GetRequiredService<ChangelogInterceptor>()));
 
         var redisConn = builder.Configuration["Redis:Configuration"] ?? "localhost:6379";
         builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConn));
@@ -88,6 +92,8 @@ public class Program
         app.UseCors();
         app.UseAuthentication();
         app.UseAuthorization();
+
+        app.UseMiddleware<AuditMiddleware>();
 
         app.MapControllers();
         app.MapHub<NotificationHub>("/notifications-hub");
