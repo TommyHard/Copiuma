@@ -1,5 +1,5 @@
-[![English](https://img.shields.io/badge/Language-English-blue?style=for-the-badge)](#english)
-[![Русский](https://img.shields.io/badge/Язык-Русский-red?style=for-the-badge)](#русский)
+[!(https://img.shields.io/badge/Language-English-blue?style=for-the-badge)](#english)
+[!(https://img.shields.io/badge/Язык-Русский-red?style=for-the-badge)](#русский)
 
 <a id="english"></a>
 # Copiuma
