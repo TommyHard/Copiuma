@@ -84,6 +84,9 @@ public class Program
         else
             builder.Services.AddSingleton<IAudioAnalyzer, FFMpegAudioAnalyzer>();
 
+        var hlsEnabled = builder.Configuration.GetValue<bool?>("Hls:Enabled") ?? true;
+        if (hlsEnabled)
+            builder.Services.AddScoped<IHlsTranscoder, HlsTranscoder>();
         builder.Services.AddHostedService<AudioProcessingWorker>();
         builder.Services.AddHostedService<TrackProcessingWorker>();
         builder.Services.AddHostedService<BucketInitializer>();

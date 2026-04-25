@@ -86,6 +86,13 @@ public class Track
     ///</summary>
     public string? AcousticFingerprint { get; set; }
 
+    /// <summary>
+    /// Состояние HLS-транскодинга (multi-bitrate AAC → .m3u8 + .ts)
+    /// Ставится воркером после завершения базового анализа (ProcessingStatus = Ready)
+    /// NotRequested = HLS ещё никто не запрашивал (по умолчанию для старых треков)
+    /// </summary>
+    public TrackHlsStatus HlsStatus { get; set; } = TrackHlsStatus.NotRequested;
+
     public NpgsqlTsVector? SearchVector { get; set; }
 }
 
@@ -102,4 +109,31 @@ public enum TrackProcessingStatus
     Processing = 1,
     Ready = 2,
     Failed = 3
+}
+
+/// <summary>
+/// [!] Hotfix: Состояние HLS-транскодинга трека.
+/// </summary>
+public enum TrackHlsStatus
+{
+    /// <summary>
+    /// HLS ещё не запрашивался (удалить плесень потом)
+    /// </summary>
+    NotRequested = 0,
+    /// <summary>
+    /// Ждёт обработки в HlsTranscodingQueue.
+    ///</summary>
+    Pending = 1,
+    /// <summary>
+    /// Воркер в процессе транскодинга / заливки
+    /// </summary>
+    Processing = 2,
+    /// <summary>
+    /// master.m3u8 + варианты готовы, можно стримить.
+    ///</summary>
+    Ready = 3,
+    /// <summary>
+    /// Транскодинг не удался (ffmpeg/MinIO упали). Смотри логи
+    /// </summary>
+    Failed = 4
 }

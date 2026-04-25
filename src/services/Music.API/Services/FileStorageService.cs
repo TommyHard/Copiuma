@@ -1,4 +1,5 @@
 ﻿using Minio;
+using Minio.ApiEndpoints;
 using Minio.DataModel.Args;
 
 namespace Music.API.Services;
@@ -8,6 +9,13 @@ public class FileStorageService
     private readonly IMinioClient _minioClient;
     public const string BucketName = "tracks";
     public const string ImagesBucket = "images";
+
+    /// <summary>
+    /// Bucket под HLS-варианты (master.m3u8 + index.m3u8 + .ts segments)
+    /// Структура ключа: {trackId}/master.m3u8, {trackId}/stream_low/index.m3u8,
+    /// {trackId}/stream_low/seg_000.ts
+    /// </summary>
+    public const string HlsBucket = "tracks-hls";
 
     private static readonly HashSet<string> AllowedImageContentTypes =
         new(StringComparer.OrdinalIgnoreCase)
@@ -108,7 +116,7 @@ public class FileStorageService
     }
 
     /// <summary>
-    /// Проверяет, что объект существует. Нужен, чтобы вернуть 404 клиенту
+    /// Проверяет, что объект существует. Нужен, чтобы вернуть 404
     /// </summary>
     public async Task<(bool Exists, long Size, string ContentType)> StatAsync(
         string fileName, CancellationToken ct = default)
@@ -143,6 +151,79 @@ public class FileStorageService
             .WithObject(fileName)
             .WithExpiry(expirySeconds));
     }
+
+    /// <summary>
+    /// Загрузить файл в HLS-bucket. key — полный объектный путь:
+    /// "{trackId}/master.m3u8", "{trackId}/stream_low/seg_000.ts"
+    /// </summary>
+    public async Task UploadHlsObjectAsync(
+        string key,
+        Stream content,
+        string contentType,
+        long size,
+        CancellationToken ct = default)
+    {
+        await _minioClient.PutObjectAsync(new PutObjectArgs()
+            .WithBucket(HlsBucket)
+            .WithObject(key)
+            .WithStreamData(content)
+            .WithObjectSize(size)
+            .WithContentType(contentType), ct);
+    }
+
+    public Task StreamHlsToAsync(string key, Stream destination, CancellationToken ct = default)
+    {
+        return _minioClient.GetObjectAsync(new GetObjectArgs()
+            .WithBucket(HlsBucket)
+            .WithObject(key)
+            .WithCallbackStream(async (source, innerCt) =>
+            {
+                await source.CopyToAsync(destination, 81920, innerCt);
+            }), ct);
+    }
+
+    public async Task<(bool Exists, long Size, string ContentType)> StatHlsAsync(
+        string key, CancellationToken ct = default)
+    {
+        try
+        {
+            var stat = await _minioClient.StatObjectAsync(new StatObjectArgs()
+                .WithBucket(HlsBucket)
+                .WithObject(key), ct);
+            return (true, stat.Size, stat.ContentType);
+        }
+        catch
+        {
+            return (false, 0, string.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Удалить весь HLS-вывод трека по префиксу "{trackId}/"
+    /// Вызывать при soft-purge / DMCA / переобработке
+    /// </summary>
+    public async Task DeleteHlsPrefixAsync(string prefix, CancellationToken ct = default)
+    {
+        var keys = new List<string>();
+        var listArgs = new ListObjectsArgs()
+            .WithBucket(HlsBucket)
+            .WithPrefix(prefix.TrimEnd('/') + "/")
+            .WithRecursive(true);
+
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var observable = _minioClient.ListObjectsAsync(listArgs, ct);
+        using var sub = observable.Subscribe(
+            item => keys.Add(item.Key),
+            ex => tcs.TrySetException(ex),
+            () => tcs.TrySetResult(true));
+        await tcs.Task;
+
+        foreach (var key in keys)
+        {
+            await _minioClient.RemoveObjectAsync(
+                new RemoveObjectArgs().WithBucket(HlsBucket).WithObject(key), ct);
+        }
+    }
 }
 
 public class BucketInitializer : IHostedService
@@ -164,9 +245,12 @@ public class BucketInitializer : IHostedService
             var storage = scope.ServiceProvider.GetRequiredService<FileStorageService>();
             await storage.EnsureBucketAsync(FileStorageService.BucketName, ct);
             await storage.EnsureBucketAsync(FileStorageService.ImagesBucket, ct);
+            await storage.EnsureBucketAsync(FileStorageService.HlsBucket, ct);
             _log.LogInformation(
-                "Buckets готовы: {Tracks}, {Images}.",
-                FileStorageService.BucketName, FileStorageService.ImagesBucket);
+                "Buckets готовы: {Tracks}, {Images}, {Hls}.",
+                FileStorageService.BucketName,
+                FileStorageService.ImagesBucket,
+                FileStorageService.HlsBucket);
         }
         catch (Exception ex)
         {

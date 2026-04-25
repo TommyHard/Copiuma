@@ -6,7 +6,10 @@ namespace Music.API.Services;
 
 /// <summary>
 /// Фоновый worker. Слушает AudioProcessingQueue, скачивает трек из MinIO,
-/// гонит в IAudioAnalyzer, пишет результат в Track
+/// гонит в IAudioAnalyzer, пишет результат в Track.
+///
+/// После анализа запускает HLS multi-bitrate транскодинг
+/// (IHlsTranscoder) и обновляет Track.HlsStatus
 /// </summary>
 public class AudioProcessingWorker : BackgroundService
 {
@@ -41,7 +44,7 @@ public class AudioProcessingWorker : BackgroundService
             catch (Exception ex)
             {
                 _log.LogError(ex, "Audio processing failed for {TrackId}", trackId);
-                await MarkFailedAsync(trackId, stoppingToken);
+                await MarkAnalysisFailedAsync(trackId, stoppingToken);
             }
         }
     }
@@ -52,8 +55,12 @@ public class AudioProcessingWorker : BackgroundService
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         var pending = await db.Tracks
-            .Where(t => t.ProcessingStatus == TrackProcessingStatus.Pending
-                        || t.ProcessingStatus == TrackProcessingStatus.Processing)
+            .Where(t =>
+                t.ProcessingStatus == TrackProcessingStatus.Pending
+                || t.ProcessingStatus == TrackProcessingStatus.Processing
+                || (t.ProcessingStatus == TrackProcessingStatus.Ready
+                    && (t.HlsStatus == TrackHlsStatus.Pending
+                        || t.HlsStatus == TrackHlsStatus.Processing)))
             .Select(t => t.Id)
             .ToListAsync(ct);
 
@@ -71,32 +78,72 @@ public class AudioProcessingWorker : BackgroundService
         var db = sp.GetRequiredService<AppDbContext>();
         var storage = sp.GetRequiredService<FileStorageService>();
         var analyzer = sp.GetRequiredService<IAudioAnalyzer>();
+        var hls = sp.GetService<IHlsTranscoder>();
 
         var track = await db.Tracks.FindAsync(new object?[] { trackId }, ct);
         if (track is null) return;
-        if (track.DeletedAt != null) return; // трек удалили, пока стоял в очереди
-        if (track.ProcessingStatus == TrackProcessingStatus.Ready) return; // уже обработан
+        if (track.DeletedAt != null) return;
 
-        track.ProcessingStatus = TrackProcessingStatus.Processing;
-        await db.SaveChangesAsync(ct);
+        if (track.ProcessingStatus != TrackProcessingStatus.Ready)
+        {
+            track.ProcessingStatus = TrackProcessingStatus.Processing;
+            await db.SaveChangesAsync(ct);
 
-        await using var buffer = new MemoryStream();
-        await storage.StreamToAsync(track.FileName, buffer, ct);
-        buffer.Position = 0;
+            await using var buffer = new MemoryStream();
+            await storage.StreamToAsync(track.FileName, buffer, ct);
+            buffer.Position = 0;
 
-        var result = await analyzer.AnalyzeAsync(buffer, track.ContentType, ct);
+            var result = await analyzer.AnalyzeAsync(buffer, track.ContentType, ct);
 
-        track.Duration = result.Duration;
-        track.LoudnessLufs = result.LoudnessLufs;
-        track.WaveformPeaks = result.WaveformPeaks.ToList();
-        track.AcousticFingerprint = result.AcousticFingerprint;
-        track.ProcessingStatus = TrackProcessingStatus.Ready;
+            track.Duration = result.Duration;
+            track.LoudnessLufs = result.LoudnessLufs;
+            track.WaveformPeaks = result.WaveformPeaks.ToList();
+            track.AcousticFingerprint = result.AcousticFingerprint;
+            track.ProcessingStatus = TrackProcessingStatus.Ready;
 
-        await db.SaveChangesAsync(ct);
-        _log.LogInformation("Audio processed: {TrackId} duration={Duration}", trackId, track.Duration);
+            if (hls is not null && track.HlsStatus == TrackHlsStatus.NotRequested)
+                track.HlsStatus = TrackHlsStatus.Pending;
+
+            await db.SaveChangesAsync(ct);
+            _log.LogInformation("Audio processed: {TrackId} duration={Duration}", trackId, track.Duration);
+        }
+
+        if (hls is null)
+        {
+            _log.LogDebug("IHlsTranscoder not registered, skipping HLS for {TrackId}", trackId);
+            return;
+        }
+
+        if (track.HlsStatus is TrackHlsStatus.Ready or TrackHlsStatus.NotRequested)
+            return;
+
+        try
+        {
+            track.HlsStatus = TrackHlsStatus.Processing;
+            await db.SaveChangesAsync(ct);
+
+            await using var buffer = new MemoryStream();
+            await storage.StreamToAsync(track.FileName, buffer, ct);
+            buffer.Position = 0;
+
+            await hls.TranscodeAndUploadAsync(trackId, buffer, track.ContentType, ct);
+
+            track.HlsStatus = TrackHlsStatus.Ready;
+            await db.SaveChangesAsync(ct);
+            _log.LogInformation("HLS ready: {TrackId}", trackId);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "HLS transcode failed for {TrackId}", trackId);
+            await MarkHlsFailedAsync(trackId, ct);
+        }
     }
 
-    private async Task MarkFailedAsync(Guid trackId, CancellationToken ct)
+    private async Task MarkAnalysisFailedAsync(Guid trackId, CancellationToken ct)
     {
         try
         {
@@ -109,6 +156,22 @@ public class AudioProcessingWorker : BackgroundService
         catch (Exception ex)
         {
             _log.LogError(ex, "Failed to mark track {TrackId} as Failed", trackId);
+        }
+    }
+
+    private async Task MarkHlsFailedAsync(Guid trackId, CancellationToken ct)
+    {
+        try
+        {
+            using var scope = _scopes.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.Tracks
+                .Where(t => t.Id == trackId)
+                .ExecuteUpdateAsync(u => u.SetProperty(t => t.HlsStatus, TrackHlsStatus.Failed), ct);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "Failed to mark HlsStatus=Failed for {TrackId}", trackId);
         }
     }
 }

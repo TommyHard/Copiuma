@@ -255,6 +255,9 @@ public class AppDbContext : DbContext
             b.Property(x => x.WaveformPeaks).HasColumnType("jsonb");
             b.Property(x => x.AcousticFingerprint).HasMaxLength(200);
             b.HasIndex(x => x.AcousticFingerprint);
+
+            b.Property(x => x.HlsStatus).HasConversion<int>();
+            b.HasIndex(x => x.HlsStatus);
         });
 
         modelBuilder.Entity<Report>(b =>
