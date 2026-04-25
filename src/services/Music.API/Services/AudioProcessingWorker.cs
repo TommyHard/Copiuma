@@ -1,15 +1,18 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using System.Diagnostics;
+using Microsoft.EntityFrameworkCore;
 using Music.API.Data;
 using Music.API.Models;
+using Music.API.Telemetry;
 
 namespace Music.API.Services;
 
 /// <summary>
 /// Фоновый worker. Слушает AudioProcessingQueue, скачивает трек из MinIO,
-/// гонит в IAudioAnalyzer, пишет результат в Track.
+/// отправляет в IAudioAnalyzer, пишет результат в Track
 ///
-/// После анализа запускает HLS multi-bitrate транскодинг
-/// (IHlsTranscoder) и обновляет Track.HlsStatus
+/// Observability: на каждый трек — Stopwatch + инкрементируем
+/// CopiumaMetrics.AudioAnalysisSeconds / HlsTranscodeSeconds, считаем
+/// успехи/ошибки
 /// </summary>
 public class AudioProcessingWorker : BackgroundService
 {
@@ -44,6 +47,7 @@ public class AudioProcessingWorker : BackgroundService
             catch (Exception ex)
             {
                 _log.LogError(ex, "Audio processing failed for {TrackId}", trackId);
+                CopiumaMetrics.AudioAnalysisFailures.Add(1);
                 await MarkAnalysisFailedAsync(trackId, stoppingToken);
             }
         }
@@ -89,23 +93,29 @@ public class AudioProcessingWorker : BackgroundService
             track.ProcessingStatus = TrackProcessingStatus.Processing;
             await db.SaveChangesAsync(ct);
 
+            var analysisSw = Stopwatch.StartNew();
+
             await using var buffer = new MemoryStream();
             await storage.StreamToAsync(track.FileName, buffer, ct);
             buffer.Position = 0;
 
             var result = await analyzer.AnalyzeAsync(buffer, track.ContentType, ct);
 
+            analysisSw.Stop();
+            CopiumaMetrics.AudioAnalysisSeconds.Record(CopiumaMetrics.ElapsedSeconds(analysisSw));
+
             track.Duration = result.Duration;
             track.LoudnessLufs = result.LoudnessLufs;
             track.WaveformPeaks = result.WaveformPeaks.ToList();
             track.AcousticFingerprint = result.AcousticFingerprint;
             track.ProcessingStatus = TrackProcessingStatus.Ready;
-
             if (hls is not null && track.HlsStatus == TrackHlsStatus.NotRequested)
                 track.HlsStatus = TrackHlsStatus.Pending;
 
             await db.SaveChangesAsync(ct);
-            _log.LogInformation("Audio processed: {TrackId} duration={Duration}", trackId, track.Duration);
+            _log.LogInformation(
+                "Audio processed: {TrackId} duration={Duration} elapsed={Elapsed:0.000}s",
+                trackId, track.Duration, analysisSw.Elapsed.TotalSeconds);
         }
 
         if (hls is null)
@@ -117,6 +127,7 @@ public class AudioProcessingWorker : BackgroundService
         if (track.HlsStatus is TrackHlsStatus.Ready or TrackHlsStatus.NotRequested)
             return;
 
+        var hlsSw = Stopwatch.StartNew();
         try
         {
             track.HlsStatus = TrackHlsStatus.Processing;
@@ -130,7 +141,14 @@ public class AudioProcessingWorker : BackgroundService
 
             track.HlsStatus = TrackHlsStatus.Ready;
             await db.SaveChangesAsync(ct);
-            _log.LogInformation("HLS ready: {TrackId}", trackId);
+
+            hlsSw.Stop();
+            CopiumaMetrics.HlsTranscodeSeconds.Record(CopiumaMetrics.ElapsedSeconds(hlsSw));
+            CopiumaMetrics.HlsTranscodeSuccess.Add(1);
+
+            _log.LogInformation(
+                "HLS ready: {TrackId} elapsed={Elapsed:0.000}s",
+                trackId, hlsSw.Elapsed.TotalSeconds);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -138,6 +156,9 @@ public class AudioProcessingWorker : BackgroundService
         }
         catch (Exception ex)
         {
+            hlsSw.Stop();
+            CopiumaMetrics.HlsTranscodeSeconds.Record(CopiumaMetrics.ElapsedSeconds(hlsSw));
+            CopiumaMetrics.HlsTranscodeFailures.Add(1);
             _log.LogError(ex, "HLS transcode failed for {TrackId}", trackId);
             await MarkHlsFailedAsync(trackId, ct);
         }

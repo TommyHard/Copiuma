@@ -6,6 +6,7 @@ using Music.API.Data;
 using Music.API.Dtos;
 using Music.API.Models;
 using Music.API.Services;
+using Music.API.Telemetry;
 using StackExchange.Redis;
 using System.Security.Claims;
 using System.Text.Json;
@@ -135,6 +136,8 @@ public class TracksController : ControllerBase
 
         _context.Tracks.Add(track);
         await _context.SaveChangesAsync();
+
+        CopiumaMetrics.TracksUploaded.Add(1);
 
         try
         {
@@ -275,6 +278,8 @@ public class TracksController : ControllerBase
     [HttpGet("{id}/play")]
     public async Task<IActionResult> PlayTrack(Guid id, [FromQuery] bool inline = false)
     {
+        CopiumaMetrics.PlaybackRequests.Add(1);
+
         var track = await _context.Tracks.FindAsync(id);
         if (track is null) return NotFound("Трек не найден.");
 
@@ -302,7 +307,7 @@ public class TracksController : ControllerBase
     }
 
     /// <summary>
-    /// Клиент репортит проигранный трек (или попытку). Для 
+    /// Клиент репортит проигранный трек (или попытку). Для
     /// рекомендаций: popular/similar/for-you строятся на этих событиях
     /// PlayedMs — длительность реального воспроизведения в мс. Completed —
     /// true, если дослушали до конца (клиент сам решает по >= 90%)

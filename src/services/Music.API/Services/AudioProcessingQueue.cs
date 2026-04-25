@@ -4,6 +4,7 @@ namespace Music.API.Services;
 
 /// <summary>
 /// In-process очередь задач обработки аудио
+/// Observability: Count — для метрики copiuma_audio_queue_depth
 /// </summary>
 public class AudioProcessingQueue
 {
@@ -19,4 +20,10 @@ public class AudioProcessingQueue
 
     public IAsyncEnumerable<Guid> ReadAllAsync(CancellationToken ct) =>
         _channel.Reader.ReadAllAsync(ct);
+
+    /// <summary>
+    /// Текущее число элементов в очереди (для observability)
+    /// Возвращает -1, если реализация Channel не поддерживает счётчик
+    /// </summary>
+    public long Count => _channel.Reader.CanCount ? _channel.Reader.Count : -1L;
 }
