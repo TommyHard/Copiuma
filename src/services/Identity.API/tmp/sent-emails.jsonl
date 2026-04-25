@@ -1,0 +1,12 @@
+"Email": {
+  "Provider": "log",                       // "log" | "smtp"
+  "From": { "Address": "...", "DisplayName": "Copiuma" },
+  "Smtp": {
+    "Host": "smtp.gmail.com",
+    "Port": 587,
+    "UserName": "...",
+    "Password": "...",
+    "UseStartTls": true
+  },
+  "LogSink": { "FilePath": "" }            // default tmp/sent-emails.jsonl
+}

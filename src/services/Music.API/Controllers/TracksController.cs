@@ -79,6 +79,7 @@ public class TracksController : ControllerBase
     }
 
     [HttpPost("upload")]
+    [Authorize(Policy = "ArtistOnly")]
     [RequestSizeLimit(200_000_000)]
     public async Task<IActionResult> UploadTrack([FromForm] UploadTrackRequest request)
     {

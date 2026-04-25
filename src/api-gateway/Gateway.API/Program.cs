@@ -17,7 +17,6 @@ public class Program
 
         var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
                              ?? new[] { "http://localhost:3000" };
-
         builder.Services.AddCors(options =>
         {
             options.AddDefaultPolicy(policy =>
@@ -33,7 +32,6 @@ public class Program
         builder.Services.AddSwaggerGen(options =>
         {
             options.SwaggerDoc("v1", new OpenApiInfo { Title = "Copiuma Gateway", Version = "v1" });
-
             options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
             {
                 Name = "Authorization",
@@ -43,7 +41,6 @@ public class Program
                 In = ParameterLocation.Header,
                 Description = "Введите токен в формате: Bearer {ваш_токен}"
             });
-
             options.AddSecurityRequirement(new OpenApiSecurityRequirement
             {
                 {
@@ -103,18 +100,27 @@ public class Program
                     var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
                     var email = user.FindFirstValue(ClaimTypes.Email);
                     var displayName = user.FindFirstValue("DisplayName");
+                    var role = user.FindFirstValue(ClaimTypes.Role);
+                    var emailVerified = user.FindFirstValue("email_verified");
 
-                    transformContext.ProxyRequest.Headers.Remove("X-User-Id");
-                    transformContext.ProxyRequest.Headers.Remove("X-User-Email");
-                    transformContext.ProxyRequest.Headers.Remove("X-User-Name");
+                    var headers = transformContext.ProxyRequest.Headers;
+                    headers.Remove("X-User-Id");
+                    headers.Remove("X-User-Email");
+                    headers.Remove("X-User-Name");
+                    headers.Remove("X-User-Role");
+                    headers.Remove("X-User-Email-Verified");
 
                     if (!string.IsNullOrEmpty(userId))
                     {
-                        transformContext.ProxyRequest.Headers.Add("X-User-Id", userId);
+                        headers.Add("X-User-Id", userId);
                         if (!string.IsNullOrEmpty(email))
-                            transformContext.ProxyRequest.Headers.Add("X-User-Email", email);
+                            headers.Add("X-User-Email", email);
                         if (!string.IsNullOrEmpty(displayName))
-                            transformContext.ProxyRequest.Headers.Add("X-User-Name", displayName);
+                            headers.Add("X-User-Name", displayName);
+                        if (!string.IsNullOrEmpty(role))
+                            headers.Add("X-User-Role", role);
+                        if (!string.IsNullOrEmpty(emailVerified))
+                            headers.Add("X-User-Email-Verified", emailVerified);
                     }
 
                     return ValueTask.CompletedTask;
@@ -137,7 +143,7 @@ public class Program
 
         app.MapReverseProxy();
 
-        app.MapGet("/test-security", () => "JWT работает.")
+        app.MapGet("/test-security", () => "JWT принимается.")
            .RequireAuthorization("AuthenticatedUser");
 
         app.Run();

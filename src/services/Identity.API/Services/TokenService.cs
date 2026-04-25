@@ -11,10 +11,7 @@ public class TokenService
 {
     private readonly IConfiguration _config;
 
-    public TokenService(IConfiguration config)
-    {
-        _config = config;
-    }
+    public TokenService(IConfiguration config) => _config = config;
 
     public string CreateToken(User user)
     {
@@ -22,7 +19,9 @@ public class TokenService
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new Claim(ClaimTypes.Email, user.Email),
-            new Claim("DisplayName", user.DisplayName ?? "")
+            new Claim("DisplayName", user.DisplayName ?? ""),
+            new Claim(ClaimTypes.Role, user.Role.ToString()),
+            new Claim("email_verified", (user.EmailVerifiedAt is not null).ToString().ToLowerInvariant())
         };
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["JwtSettings:Key"]!));
@@ -39,7 +38,6 @@ public class TokenService
 
         var tokenHandler = new JwtSecurityTokenHandler();
         var token = tokenHandler.CreateToken(tokenDescriptor);
-
         return tokenHandler.WriteToken(token);
     }
 

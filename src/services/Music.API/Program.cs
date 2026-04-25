@@ -1,5 +1,6 @@
 using HealthChecks.UI.Client;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Minio;
@@ -99,7 +100,24 @@ public class Program
                 .AddScheme<GatewayUserAuthenticationOptions, GatewayUserAuthenticationHandler>(
                     GatewayUserAuthenticationHandler.SchemeName, _ => { });
 
-            builder.Services.AddAuthorization();
+            // Auth-hardening: policies
+            builder.Services.AddAuthorization(options =>
+            {
+                // DefaultPolicy Ч то, что использует [Authorize] без €вного policy-имени
+                // ∆Єсткое требование: authenticated + email подтверждЄн
+                options.DefaultPolicy = new AuthorizationPolicyBuilder()
+                    .AddAuthenticationSchemes(GatewayUserAuthenticationHandler.SchemeName)
+                    .RequireAuthenticatedUser()
+                    .RequireClaim("email_verified", "true")
+                    .Build();
+
+                // ArtistOnly Ч навешиваем “ќЋ№ ќ на upload (POST /tracks/upload, future POST /albums и т.п.)
+                options.AddPolicy("ArtistOnly", p => p
+                    .AddAuthenticationSchemes(GatewayUserAuthenticationHandler.SchemeName)
+                    .RequireAuthenticatedUser()
+                    .RequireClaim("email_verified", "true")
+                    .RequireRole("Artist", "Moderator", "Admin"));
+            });
 
             var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
                                  ?? new[] { "http://localhost:3000" };
@@ -180,7 +198,6 @@ public class Program
                     });
             }
 
-            // Health checks
             builder.Services.AddHealthChecks()
                 .AddNpgSql(
                     connectionStringFactory: _ =>
