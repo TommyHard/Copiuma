@@ -13,6 +13,11 @@ services:
       POSTGRES_PASSWORD: password123
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   minio:
     image: minio/minio
@@ -37,22 +42,23 @@ services:
 
   identity-api:
       build:
-        context: ./src/services/Identity.API
-        dockerfile: Dockerfile
+        context: .
+        dockerfile: src/services/Identity.API/Dockerfile
       container_name: identity_api
       ports:
-        - "5001:8080" # ПОРТ ДЛЯ СВАГГЕРА
+        - "5001:8080"
       environment:
-        - ASPNETCORE_ENVIRONMENT=Development # РЕЖИМ РАЗРАБОТКИ
+        - ASPNETCORE_ENVIRONMENT=Development
         - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=copiuma_identity;Username=admin;Password=password123
         - JwtSettings__Key=C0piuma_Super_Secret_Security_Key_2077
       depends_on:
-        - postgres
+        postgres:
+          condition: service_healthy
 
   music-api:
     build:
-      context: ./src/services/Music.API
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: src/services/Music.API/Dockerfile
     container_name: music_api
     ports:
       - "5002:8080"
@@ -64,15 +70,19 @@ services:
       - RabbitMQ__HostName=rabbitmq
       - Redis__Configuration=redis:6379
     depends_on:
-      - postgres
-      - minio
-      - rabbitmq
-      - redis
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+      redis:
+        condition: service_started
 
   gateway-api:
     build:
-      context: ./src/api-gateway/Gateway.API
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: src/api-gateway/Gateway.API/Dockerfile
     container_name: gateway_api
     ports:
       - "7161:8080"
