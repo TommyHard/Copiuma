@@ -4,20 +4,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Music.API.Dtos;
+using Music.Shared.Contracts.Audio;
 
-namespace Music.API.Services;
+namespace Music.AudioProcessing.Worker.Audio;
 
-/// <summary>
-/// Анализатор аудио через external process: ffprobe, ffmpeg, fpcalc
-///
-/// Что умеет:
-///   1. Сохраняет входной поток во временный файл
-///   2. Duration   -> ffprobe -show_entries format=duration
-///   3. LUFS       -> ffmpeg  -af ebur128 ... -f null
-///   4. Peaks      -> ffmpeg  -f s16le mono 8kHz
-///   5. Fingerprint-> fpcalc -json
-/// </summary>
 public class FFMpegAudioAnalyzer : IAudioAnalyzer
 {
     private readonly ILogger<FFMpegAudioAnalyzer> _log;
@@ -45,10 +35,7 @@ public class FFMpegAudioAnalyzer : IAudioAnalyzer
             var duration = await ProbeDurationAsync(tempPath, ct);
 
             double lufs;
-            try
-            {
-                lufs = await MeasureLufsAsync(tempPath, ct);
-            }
+            try { lufs = await MeasureLufsAsync(tempPath, ct); }
             catch (Exception ex)
             {
                 _log.LogWarning(ex, "LUFS measurement failed for {Path}, using fallback -14.0", tempPath);
@@ -56,10 +43,7 @@ public class FFMpegAudioAnalyzer : IAudioAnalyzer
             }
 
             IReadOnlyList<float> peaks;
-            try
-            {
-                peaks = await BuildWaveformPeaksAsync(tempPath, ct);
-            }
+            try { peaks = await BuildWaveformPeaksAsync(tempPath, ct); }
             catch (Exception ex)
             {
                 _log.LogWarning(ex, "Waveform generation failed for {Path}, using flat fallback", tempPath);
@@ -256,10 +240,7 @@ public class FFMpegAudioAnalyzer : IAudioAnalyzer
         var stdoutTask = proc.StandardOutput.ReadToEndAsync(cts.Token);
         var stderrTask = proc.StandardError.ReadToEndAsync(cts.Token);
 
-        try
-        {
-            await proc.WaitForExitAsync(cts.Token);
-        }
+        try { await proc.WaitForExitAsync(cts.Token); }
         catch (OperationCanceledException)
         {
             try { proc.Kill(entireProcessTree: true); } catch { }

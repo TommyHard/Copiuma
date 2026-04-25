@@ -1,16 +1,12 @@
-﻿using RabbitMQ.Client;
+﻿using Music.Shared.Contracts.Messaging;
+using RabbitMQ.Client;
 using RabbitMQ.Client.Exceptions;
-using System.Text;
 using System.Text.Json;
 
 namespace Music.API.Services;
 
 public class MessageBusClient : IAsyncDisposable
 {
-    public const string MainQueue = "track_processing_queue";
-    public const string DeadLetterExchange = "track_processing_dlx";
-    public const string DeadLetterQueue = "track_processing_dlq";
-
     private readonly IConfiguration _configuration;
     private readonly ILogger<MessageBusClient> _log;
     private readonly SemaphoreSlim _initLock = new(1, 1);
@@ -51,22 +47,13 @@ public class MessageBusClient : IAsyncDisposable
             {
                 try
                 {
-                    _connection = factory.CreateConnection();
+                    _connection = factory.CreateConnection("copiuma-music-api");
                     _channel = _connection.CreateModel();
 
-                    _channel.ExchangeDeclare(DeadLetterExchange, ExchangeType.Direct, durable: true);
-                    _channel.QueueDeclare(DeadLetterQueue, durable: true, exclusive: false, autoDelete: false);
-                    _channel.QueueBind(DeadLetterQueue, DeadLetterExchange, routingKey: MainQueue);
-
-                    var args = new Dictionary<string, object>
-                    {
-                        ["x-dead-letter-exchange"] = DeadLetterExchange,
-                        ["x-dead-letter-routing-key"] = MainQueue
-                    };
-                    _channel.QueueDeclare(MainQueue, durable: true, exclusive: false, autoDelete: false, arguments: args);
+                    DeclareTopology(_channel);
 
                     _channel.ConfirmSelect();
-                    _log.LogInformation("Подключились к RabbitMQ (попытка {Attempt}).", attempt);
+                    _log.LogInformation("RabbitMQ подключен (попытка {Attempt}).", attempt);
                     return;
                 }
                 catch (BrokerUnreachableException ex)
@@ -85,12 +72,17 @@ public class MessageBusClient : IAsyncDisposable
         }
     }
 
-    public async Task PublishNewTrackEventAsync(Guid trackId, CancellationToken ct = default)
+    public async Task PublishAudioProcessingJobAsync(
+        Guid trackId, string source = "upload", CancellationToken ct = default)
     {
         await EnsureConnectedAsync(ct);
 
-        var message = JsonSerializer.Serialize(new { TrackId = trackId, Event = "TrackUploaded" });
-        var body = Encoding.UTF8.GetBytes(message);
+        var job = new AudioProcessingJob(
+            TrackId: trackId,
+            EnqueuedAt: DateTime.UtcNow,
+            Source: source);
+
+        var body = JsonSerializer.SerializeToUtf8Bytes(job);
 
         lock (_channelLock)
         {
@@ -98,17 +90,64 @@ public class MessageBusClient : IAsyncDisposable
             props.Persistent = true;
             props.ContentType = "application/json";
             props.MessageId = Guid.NewGuid().ToString();
+            props.Type = nameof(AudioProcessingJob);
 
             _channel.BasicPublish(
-                exchange: string.Empty,
-                routingKey: MainQueue,
+                exchange: AudioJobRouting.Exchange,
+                routingKey: AudioJobRouting.RoutingKey,
+                mandatory: false,
                 basicProperties: props,
                 body: body);
 
             _channel.WaitForConfirmsOrDie(TimeSpan.FromSeconds(5));
         }
 
-        _log.LogInformation("Событие TrackUploaded {TrackId} опубликовано.", trackId);
+        _log.LogInformation(
+            "AudioProcessingJob {TrackId} опубликован (source={Source}).", trackId, source);
+    }
+
+    private static void DeclareTopology(IModel channel)
+    {
+        channel.ExchangeDeclare(
+            exchange: AudioJobRouting.Exchange,
+            type: ExchangeType.Direct,
+            durable: true,
+            autoDelete: false);
+
+        channel.ExchangeDeclare(
+            exchange: AudioJobRouting.DeadLetterExchange,
+            type: ExchangeType.Direct,
+            durable: true,
+            autoDelete: false);
+
+        channel.QueueDeclare(
+            queue: AudioJobRouting.DeadLetterQueue,
+            durable: true,
+            exclusive: false,
+            autoDelete: false);
+
+        channel.QueueBind(
+            queue: AudioJobRouting.DeadLetterQueue,
+            exchange: AudioJobRouting.DeadLetterExchange,
+            routingKey: AudioJobRouting.RoutingKey);
+
+        var args = new Dictionary<string, object>
+        {
+            ["x-dead-letter-exchange"] = AudioJobRouting.DeadLetterExchange,
+            ["x-dead-letter-routing-key"] = AudioJobRouting.RoutingKey,
+        };
+
+        channel.QueueDeclare(
+            queue: AudioJobRouting.Queue,
+            durable: true,
+            exclusive: false,
+            autoDelete: false,
+            arguments: args);
+
+        channel.QueueBind(
+            queue: AudioJobRouting.Queue,
+            exchange: AudioJobRouting.Exchange,
+            routingKey: AudioJobRouting.RoutingKey);
     }
 
     public ValueTask DisposeAsync()
@@ -118,7 +157,7 @@ public class MessageBusClient : IAsyncDisposable
             _channel?.Close();
             _connection?.Close();
         }
-        catch { /* ignore */ }
+        catch { }
         _channel?.Dispose();
         _connection?.Dispose();
         return ValueTask.CompletedTask;

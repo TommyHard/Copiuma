@@ -6,4 +6,6 @@
   <Project Path="../src/api-gateway/Gateway.API/Gateway.API.csproj" />
   <Project Path="../src/services/Identity.API/Identity.API.csproj" />
   <Project Path="../src/services/Music.API/Music.API.csproj" />
+  <Project Path="../src/services/Music.AudioProcessing.Worker/Music.AudioProcessing.Worker.csproj" Id="c5391abf-7707-43a6-afad-bdf4254fcc99" />
+  <Project Path="../src/shared/Music.Shared.Contracts/Music.Shared.Contracts.csproj" Id="bb88a9af-790f-4457-a4d7-0b4ed3b74b6b" />
 </Solution>

@@ -1,38 +1,35 @@
 using HealthChecks.UI.Client;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Minio;
-using Music.API.Auth;
-using Music.API.Data;
-using Music.API.HealthChecks;
-using Music.API.Hubs;
-using Music.API.Middleware;
-using Music.API.Services;
-using Music.API.Telemetry;
+using Music.AudioProcessing.Worker.Audio;
+using Music.AudioProcessing.Worker.Data;
+using Music.AudioProcessing.Worker.HealthChecks;
+using Music.AudioProcessing.Worker.Hls;
+using Music.AudioProcessing.Worker.Loudnorm;
+using Music.AudioProcessing.Worker.Messaging;
+using Music.AudioProcessing.Worker.Pipeline;
+using Music.AudioProcessing.Worker.Recovery;
+using Music.AudioProcessing.Worker.Storage;
+using Music.AudioProcessing.Worker.Telemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
 using Serilog.Events;
-using StackExchange.Redis;
 
-namespace Music.API;
+namespace Music.AudioProcessing.Worker;
 
 public class Program
 {
     public static async Task Main(string[] args)
     {
-        // Serilog bootstrap
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Information()
-            .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
-            .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
             .Enrich.FromLogContext()
             .Enrich.WithMachineName()
             .Enrich.WithEnvironmentName()
-            .Enrich.WithThreadId()
-            .Enrich.WithProperty("Service", "Music.API")
+            .Enrich.WithProperty("Service", "Music.AudioProcessing.Worker")
             .WriteTo.Console()
             .CreateBootstrapLogger();
 
@@ -49,7 +46,7 @@ public class Program
                     .Enrich.WithMachineName()
                     .Enrich.WithEnvironmentName()
                     .Enrich.WithThreadId()
-                    .Enrich.WithProperty("Service", "Music.API");
+                    .Enrich.WithProperty("Service", "Music.AudioProcessing.Worker");
 
                 var seqUrl = ctx.Configuration["Serilog:Seq:ServerUrl"];
                 if (!string.IsNullOrWhiteSpace(seqUrl))
@@ -59,7 +56,7 @@ public class Program
                 {
                     cfg.WriteTo.Console(
                         outputTemplate:
-                        "[{Timestamp:HH:mm:ss} {Level:u3}] {CorrelationId} {Message:lj} {Properties:j}{NewLine}{Exception}");
+                        "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}");
                 }
                 else
                 {
@@ -67,21 +64,11 @@ public class Program
                 }
             });
 
-            builder.Services.AddControllers();
-            builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen();
+            // DB
+            builder.Services.AddDbContext<AudioProcessingDbContext>(options =>
+                options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-            builder.Services.AddHttpContextAccessor();
-            builder.Services.AddScoped<ChangelogInterceptor>();
-            builder.Services.AddDbContext<AppDbContext>((sp, options) =>
-                options
-                    .UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
-                    .AddInterceptors(sp.GetRequiredService<ChangelogInterceptor>()));
-
-            var redisConn = builder.Configuration["Redis:Configuration"] ?? "localhost:6379";
-            builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConn));
-            builder.Services.AddStackExchangeRedisCache(options => options.Configuration = redisConn);
-
+            // MinIO
             builder.Services.AddMinio(client => client
                 .WithEndpoint(builder.Configuration["Minio:Endpoint"])
                 .WithCredentials(
@@ -89,54 +76,47 @@ public class Program
                     builder.Configuration["Minio:SecretKey"])
                 .WithSSL(false)
                 .Build());
+            builder.Services.AddScoped<AudioStorageService>();
 
-            builder.Services
-                .AddSignalR()
-                .AddStackExchangeRedis(redisConn, opts => opts.Configuration.ChannelPrefix = "copiuma");
+            // Audio analysis
+            var analyzerType = builder.Configuration["AudioAnalyzer:Type"]?.ToLowerInvariant() ?? "ffmpeg";
+            if (analyzerType == "stub")
+                builder.Services.AddSingleton<IAudioAnalyzer, StubAudioAnalyzer>();
+            else
+                builder.Services.AddSingleton<IAudioAnalyzer, FFMpegAudioAnalyzer>();
 
-            builder.Services
-                .AddAuthentication(GatewayUserAuthenticationHandler.SchemeName)
-                .AddScheme<GatewayUserAuthenticationOptions, GatewayUserAuthenticationHandler>(
-                    GatewayUserAuthenticationHandler.SchemeName, _ => { });
+            // HLS
+            var hlsEnabled = builder.Configuration.GetValue<bool?>("Hls:Enabled") ?? true;
+            if (hlsEnabled)
+                builder.Services.AddScoped<IHlsTranscoder, HlsTranscoder>();
 
-            builder.Services.AddAuthorization();
+            // Loudnorm (OFF by default)
+            var loudnormEnabled = builder.Configuration.GetValue<bool?>("Loudnorm:Enabled") ?? false;
+            if (loudnormEnabled)
+                builder.Services.AddSingleton<ILoudnormService, FFMpegLoudnormService>();
 
-            var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-                                 ?? new[] { "http://localhost:3000" };
-            builder.Services.AddCors(options =>
-            {
-                options.AddDefaultPolicy(policy =>
-                {
-                    policy.WithOrigins(allowedOrigins)
-                          .AllowAnyHeader()
-                          .AllowAnyMethod()
-                          .AllowCredentials();
-                });
-            });
+            // Pipeline
+            builder.Services.AddScoped<AudioPipeline>();
 
-            builder.Services.AddScoped<FileStorageService>();
-            builder.Services.AddScoped<NotificationService>();
-            builder.Services.AddScoped<RecommendationsService>();
-            builder.Services.AddScoped<SearchService>();
-            builder.Services.AddScoped<FollowFanoutService>();
-            builder.Services.AddScoped<ModerationService>();
-            builder.Services.AddSingleton<MessageBusClient>();
-            builder.Services.AddSingleton<RoomStore>();
-            builder.Services.AddHostedService<BucketInitializer>();
+            // Messaging
+            builder.Services.AddSingleton<RabbitConnection>();
+            builder.Services.AddSingleton<AudioJobPublisher>();
+            builder.Services.AddHostedService<AudioJobConsumer>();
+            builder.Services.AddHostedService<StuckTracksRecoveryService>();
 
             // OpenTelemetry
+            var otelEnabled = builder.Configuration.GetValue<bool?>("Otel:Enabled") ?? true;
+            var otlpEndpoint = builder.Configuration["Otel:OtlpEndpoint"];
+
             var otelResource = ResourceBuilder.CreateDefault()
                 .AddService(
-                    serviceName: "copiuma-music-api",
+                    serviceName: "copiuma-audio-processing-worker",
                     serviceVersion: typeof(Program).Assembly.GetName().Version?.ToString() ?? "1.0.0",
                     serviceInstanceId: Environment.MachineName)
                 .AddAttributes(new KeyValuePair<string, object>[]
                 {
                     new("deployment.environment", builder.Environment.EnvironmentName),
                 });
-
-            var otlpEndpoint = builder.Configuration["Otel:OtlpEndpoint"];
-            var otelEnabled = builder.Configuration.GetValue<bool?>("Otel:Enabled") ?? true;
 
             if (otelEnabled)
             {
@@ -145,7 +125,7 @@ public class Program
                     {
                         tracing
                             .SetResourceBuilder(otelResource)
-                            .AddSource("Copiuma.Music.API")
+                            .AddSource("Copiuma.Music.AudioProcessing")
                             .AddAspNetCoreInstrumentation(opts =>
                             {
                                 opts.Filter = ctx =>
@@ -159,8 +139,7 @@ public class Program
                             .AddEntityFrameworkCoreInstrumentation(opts =>
                             {
                                 opts.SetDbStatementForText = true;
-                            })
-                            .AddRedisInstrumentation();
+                            });
 
                         if (!string.IsNullOrWhiteSpace(otlpEndpoint))
                             tracing.AddOtlpExporter(o => o.Endpoint = new Uri(otlpEndpoint));
@@ -180,7 +159,6 @@ public class Program
                     });
             }
 
-            // Health checks
             builder.Services.AddHealthChecks()
                 .AddNpgSql(
                     connectionStringFactory: _ =>
@@ -188,28 +166,17 @@ public class Program
                         ?? throw new InvalidOperationException("DefaultConnection не сконфигурирован"),
                     name: "postgres",
                     tags: new[] { "ready", "db" })
-                .AddRedis(
-                    redisConnectionString: redisConn,
-                    name: "redis",
-                    tags: new[] { "ready", "cache" })
                 .AddCheck<MinioHealthCheck>(
                     name: "minio",
-                    tags: new[] { "ready", "storage" });
+                    tags: new[] { "ready", "storage" })
+                .AddCheck<RabbitMqHealthCheck>(
+                    name: "rabbitmq",
+                    tags: new[] { "ready", "messaging" });
 
             var app = builder.Build();
 
-            using (var scope = app.Services.CreateScope())
-            {
-                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                await db.Database.MigrateAsync();
-            }
-
-            app.UseMiddleware<CorrelationIdMiddleware>();
-
             app.UseSerilogRequestLogging(opts =>
             {
-                opts.MessageTemplate =
-                    "HTTP {RequestMethod} {RequestPath} -> {StatusCode} in {Elapsed:0.0} ms";
                 opts.GetLevel = (httpCtx, _, ex) =>
                 {
                     if (ex is not null) return LogEventLevel.Error;
@@ -221,25 +188,7 @@ public class Program
                         return LogEventLevel.Debug;
                     return LogEventLevel.Information;
                 };
-                opts.EnrichDiagnosticContext = (diag, httpCtx) =>
-                {
-                    diag.Set("UserAgent", httpCtx.Request.Headers.UserAgent.ToString());
-                    diag.Set("ClientIP", httpCtx.Connection.RemoteIpAddress?.ToString() ?? "-");
-                };
             });
-
-            app.UseSwagger();
-            app.UseSwaggerUI(c =>
-            {
-                c.SwaggerEndpoint("/swagger/v1/swagger.json", "Copiuma Music API v1");
-                c.RoutePrefix = "swagger";
-            });
-
-            app.UseCors();
-            app.UseAuthentication();
-            app.UseAuthorization();
-
-            app.UseMiddleware<AuditMiddleware>();
 
             if (otelEnabled)
                 app.MapPrometheusScrapingEndpoint();
@@ -257,14 +206,19 @@ public class Program
                 AllowCachingResponses = false
             });
 
-            app.MapControllers();
-            app.MapHub<NotificationHub>("/notifications-hub");
+            app.MapGet("/", () => Results.Ok(new
+            {
+                service = "Music.AudioProcessing.Worker",
+                health = "/health/live",
+                ready = "/health/ready",
+                metrics = otelEnabled ? "/metrics" : null
+            }));
 
             await app.RunAsync();
         }
         catch (Exception ex)
         {
-            Log.Fatal(ex, "Music.API не смог стартовать");
+            Log.Fatal(ex, "Music.AudioProcessing.Worker не смог стартовать");
             throw;
         }
         finally

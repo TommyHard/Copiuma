@@ -1,27 +1,9 @@
-﻿using System.Security.Cryptography;
-using Music.API.Dtos;
+﻿using Music.Shared.Contracts.Audio;
+using System.Diagnostics;
+using System.Security.Cryptography;
 
-namespace Music.API.Services;
+namespace Music.AudioProcessing.Worker.Audio;
 
-/// <summary>
-/// Анализатор аудио. Прод — FFMpegAudioAnalyzer (ffmpeg + fpcalc)
-/// Dev/CI без внешних бинарей — StubAudioAnalyzer (TagLibSharp + SHA256)
-/// </summary>
-public interface IAudioAnalyzer
-{
-    Task<AudioAnalysisResult> AnalyzeAsync(
-        Stream audioStream,
-        string contentType,
-        CancellationToken ct = default);
-}
-
-/// <summary>
-/// Лёгкий fallback без ffmpeg:
-///   - Duration      — читается TagLibSharp из метаданных файла
-///   - Fingerprint   — SHA256 всего файла
-///   - LoudnessLufs  — статическая заглушка -14.0 (EBU R128 target)
-///   - WaveformPeaks — статическая заглушка (синусоида)
-/// </summary>
 public class StubAudioAnalyzer : IAudioAnalyzer
 {
     private const int PeakCount = 500;
@@ -78,10 +60,6 @@ public class StubAudioAnalyzer : IAudioAnalyzer
         _ => ".mp3"
     };
 
-    /// <summary>
-    /// Обёртка MemoryStream под TagLib.File.IFileAbstraction, чтобы
-    /// не торкать реальный диск в Stub-режиме
-    /// </summary>
     private sealed class MemoryStreamFileAbstraction : TagLib.File.IFileAbstraction
     {
         public MemoryStreamFileAbstraction(string name, Stream stream)
@@ -95,9 +73,6 @@ public class StubAudioAnalyzer : IAudioAnalyzer
         public Stream ReadStream { get; }
         public Stream WriteStream { get; }
 
-        public void CloseStream(Stream stream)
-        {
-            stream.Position = 0;
-        }
+        public void CloseStream(Stream stream) => stream.Position = 0;
     }
 }

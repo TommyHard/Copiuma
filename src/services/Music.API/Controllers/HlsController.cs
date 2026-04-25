@@ -5,17 +5,18 @@ using Microsoft.EntityFrameworkCore;
 using Music.API.Data;
 using Music.API.Models;
 using Music.API.Services;
+using Music.Shared.Contracts.Audio;
 
 namespace Music.API.Controllers;
 
 /// <summary>
-/// HTTP Live Streaming endpoints. Прокси к bucket "tracks-hls"
+/// HTTP Live Streaming endpoints
 ///
-///   GET /tracks/{id}/hls/master.m3u8                   — мастер-плейлист
-///   GET /tracks/{id}/hls/{variant}/index.m3u8          — плейлист варианта
-///   GET /tracks/{id}/hls/{variant}/{segment}.ts        — TS-сегмент
+/// GET /tracks/{id}/hls/master.m3u8                   — мастер-плейлист
+/// GET /tracks/{id}/hls/{variant}/index.m3u8          — плейлист варианта
+/// GET /tracks/{id}/hls/{variant}/{segment}.ts        — TS-сегмент
 ///
-/// Доступные варианты: low / mid / high (64/128/256 kbps AAC)
+/// Доступные варианты: low / mid / high (64/128/256 kbps AAC).
 /// </summary>
 [ApiController]
 [Authorize]

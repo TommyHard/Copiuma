@@ -7,6 +7,7 @@ using Music.API.Dtos;
 using Music.API.Models;
 using Music.API.Services;
 using Music.API.Telemetry;
+using Music.Shared.Contracts.Audio;
 using StackExchange.Redis;
 using System.Security.Claims;
 using System.Text.Json;
@@ -24,7 +25,6 @@ public class TracksController : ControllerBase
     private readonly IDistributedCache _cache;
     private readonly IConnectionMultiplexer _redis;
     private readonly ModerationService _moderation;
-    private readonly AudioProcessingQueue _audioQueue;
     private readonly ILogger<TracksController> _log;
 
     private static readonly HashSet<string> AllowedContentTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -40,7 +40,6 @@ public class TracksController : ControllerBase
         IDistributedCache cache,
         IConnectionMultiplexer redis,
         ModerationService moderation,
-        AudioProcessingQueue audioQueue,
         ILogger<TracksController> log)
     {
         _storage = storage;
@@ -49,7 +48,6 @@ public class TracksController : ControllerBase
         _cache = cache;
         _redis = redis;
         _moderation = moderation;
-        _audioQueue = audioQueue;
         _log = log;
     }
 
@@ -70,10 +68,6 @@ public class TracksController : ControllerBase
         await db.StringIncrementAsync(CacheVersionKey);
     }
 
-    /// <summary>
-    /// Нормализация массива жанров:
-    /// trim -> lower-case -> фильтр пустых -> дедупликация
-    /// </summary>
     internal static List<string> NormalizeGenres(IEnumerable<string>? input)
     {
         if (input is null) return new List<string>();
@@ -85,7 +79,7 @@ public class TracksController : ControllerBase
     }
 
     [HttpPost("upload")]
-    [RequestSizeLimit(200_000_000)] // 200 MB upper bound
+    [RequestSizeLimit(200_000_000)]
     public async Task<IActionResult> UploadTrack([FromForm] UploadTrackRequest request)
     {
         if (request.File is null || request.File.Length == 0)
@@ -141,14 +135,14 @@ public class TracksController : ControllerBase
 
         try
         {
-            await _bus.PublishNewTrackEventAsync(track.Id);
+            await _bus.PublishAudioProcessingJobAsync(track.Id, source: "upload");
         }
         catch (Exception ex)
         {
-            _log.LogError(ex, "Не удалось опубликовать событие TrackUploaded для {TrackId}.", track.Id);
+            _log.LogError(ex,
+                "Не удалось опубликовать AudioProcessingJob для {TrackId}. Будет подхвачен recovery'ей при старте воркера.",
+                track.Id);
         }
-
-        await _audioQueue.EnqueueAsync(track.Id);
 
         await BumpCacheVersionAsync();
 
@@ -166,9 +160,7 @@ public class TracksController : ControllerBase
 
         var cached = await _cache.GetStringAsync(cacheKey);
         if (!string.IsNullOrEmpty(cached))
-        {
             return Content(cached, "application/json");
-        }
 
         var visibleTracks = _moderation.ApplyVisibilityFilter(_context.Tracks, UserId);
 
@@ -228,10 +220,6 @@ public class TracksController : ControllerBase
         return Ok(tracks);
     }
 
-    /// <summary>
-    /// Soft-delete вместо hard. Запись остаётся (для аудита/возможного
-    /// восстановления в случае ошибки), но скрывается из всех листингов
-    /// </summary>
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteTrack(Guid id)
     {
@@ -272,9 +260,6 @@ public class TracksController : ControllerBase
         return track is null ? NotFound() : Ok(track);
     }
 
-    /// <summary>
-    /// По умолчанию отдается presigned URL на MinIO
-    /// </summary>
     [HttpGet("{id}/play")]
     public async Task<IActionResult> PlayTrack(Guid id, [FromQuery] bool inline = false)
     {
@@ -306,12 +291,6 @@ public class TracksController : ControllerBase
         return new EmptyResult();
     }
 
-    /// <summary>
-    /// Клиент репортит проигранный трек (или попытку). Для
-    /// рекомендаций: popular/similar/for-you строятся на этих событиях
-    /// PlayedMs — длительность реального воспроизведения в мс. Completed —
-    /// true, если дослушали до конца (клиент сам решает по >= 90%)
-    /// </summary>
     [HttpPost("{id}/play-event")]
     public async Task<IActionResult> ReportPlay(
         Guid id,
@@ -378,9 +357,6 @@ public class TracksController : ControllerBase
         return Ok(new TrackProcessingStatusResponse(t.Id, t.ProcessingStatus, t.HasWaveform, t.Duration));
     }
 
-    /// <summary>
-    /// Массив peaks для рендеринга waveform в UI
-    /// </summary>
     [HttpGet("{id}/waveform")]
     public async Task<IActionResult> GetWaveform(Guid id, CancellationToken ct)
     {

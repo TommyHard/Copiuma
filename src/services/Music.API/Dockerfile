@@ -1,23 +1,19 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-COPY ["Music.API.csproj", "./"]
-RUN dotnet restore "Music.API.csproj"
+COPY ["shared/Music.Shared.Contracts/Music.Shared.Contracts.csproj", "shared/Music.Shared.Contracts/"]
+COPY ["services/Music.API/Music.API.csproj", "services/Music.API/"]
 
-COPY . .
-RUN dotnet build "Music.API.csproj" -c Release -o /app/build
+RUN dotnet restore "services/Music.API/Music.API.csproj"
 
-FROM build AS publish
-RUN dotnet publish "Music.API.csproj" -c Release -o /app/publish
+COPY shared/Music.Shared.Contracts/ shared/Music.Shared.Contracts/
+COPY services/Music.API/ services/Music.API/
+
+WORKDIR /src/services/Music.API
+RUN dotnet publish "Music.API.csproj" -c Release -o /app/publish --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app
-
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        ffmpeg \
-        libchromaprint-tools && \
-    rm -rf /var/lib/apt/lists/*
-
 COPY --from=publish /app/publish .
+
 ENTRYPOINT ["dotnet", "Music.API.dll"]

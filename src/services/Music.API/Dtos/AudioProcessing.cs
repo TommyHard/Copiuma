@@ -1,16 +1,6 @@
-﻿using Music.API.Models;
+﻿using Music.Shared.Contracts.Audio;
 
 namespace Music.API.Dtos;
-
-/// <summary>
-/// Результат работы AudioAnalyzer — одной пачкой, которые worker
-/// потом записывает в Track
-/// </summary>
-public record AudioAnalysisResult(
-    TimeSpan Duration,
-    double LoudnessLufs,
-    IReadOnlyList<float> WaveformPeaks,
-    string AcousticFingerprint);
 
 /// <summary>
 /// Ответ GET /tracks/{id}/waveform — массив peaks (каждый [-1 +1]) +

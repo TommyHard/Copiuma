@@ -1,4 +1,5 @@
-﻿using NpgsqlTypes;
+﻿using Music.Shared.Contracts.Audio;
+using NpgsqlTypes;
 
 namespace Music.API.Models;
 
@@ -23,7 +24,6 @@ public class Track
     public Guid UploadedByUserId { get; set; }
 
     public TimeSpan? Duration { get; set; }
-
 
     /// <summary>
     /// Ссылка на сущность Artist. null = legacy/без каталога
@@ -67,7 +67,8 @@ public class Track
 
     /// <summary>
     /// Состояние фоновой обработки (ffmpeg -> duration/loudness/waveform)
-    /// Upload создаёт трек со статусом Pending; worker меняет на Ready/Failed
+    /// Upload создаёт трек со статусом Pending; worker (теперь — отдельный сервис)
+    /// меняет на Ready/Failed.
     /// </summary>
     public TrackProcessingStatus ProcessingStatus { get; set; } = TrackProcessingStatus.Pending;
 
@@ -83,13 +84,13 @@ public class Track
 
     /// <summary>
     /// Chromaprint-fingerprint для дедупликации и антипиратства
-    ///</summary>
+    /// </summary>
     public string? AcousticFingerprint { get; set; }
 
     /// <summary>
     /// Состояние HLS-транскодинга (multi-bitrate AAC → .m3u8 + .ts)
     /// Ставится воркером после завершения базового анализа (ProcessingStatus = Ready)
-    /// NotRequested = HLS ещё никто не запрашивал (по умолчанию для старых треков)
+    /// NotRequested = HLS ещё никто не запрашивал
     /// </summary>
     public TrackHlsStatus HlsStatus { get; set; } = TrackHlsStatus.NotRequested;
 
@@ -101,39 +102,4 @@ public enum TrackDeletionReason
     SelfDeleted = 0,
     ModeratorRemoved = 1,
     DmcaTakedown = 2
-}
-
-public enum TrackProcessingStatus
-{
-    Pending = 0,
-    Processing = 1,
-    Ready = 2,
-    Failed = 3
-}
-
-/// <summary>
-/// [!] Hotfix: Состояние HLS-транскодинга трека.
-/// </summary>
-public enum TrackHlsStatus
-{
-    /// <summary>
-    /// HLS ещё не запрашивался (удалить плесень потом)
-    /// </summary>
-    NotRequested = 0,
-    /// <summary>
-    /// Ждёт обработки в HlsTranscodingQueue.
-    ///</summary>
-    Pending = 1,
-    /// <summary>
-    /// Воркер в процессе транскодинга / заливки
-    /// </summary>
-    Processing = 2,
-    /// <summary>
-    /// master.m3u8 + варианты готовы, можно стримить.
-    ///</summary>
-    Ready = 3,
-    /// <summary>
-    /// Транскодинг не удался (ffmpeg/MinIO упали). Смотри логи
-    /// </summary>
-    Failed = 4
 }

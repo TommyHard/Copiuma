@@ -1,40 +1,16 @@
 ﻿using System.Diagnostics;
+using Music.AudioProcessing.Worker.Storage;
 
-namespace Music.API.Services;
-
-/// <summary>
-/// HLS-транскодинг multi-bitrate AAC через ffmpeg
-///
-/// Один запуск ffmpeg с -var_stream_map порождает 3 варианта (low/mid/high) +
-/// мастер-плейлист. Все артефакты заливаются в MinIO bucket "tracks-hls" по ключам:
-///   {trackId}/master.m3u8
-///   {trackId}/stream_low/index.m3u8 + seg_NNN.ts
-///   {trackId}/stream_mid/index.m3u8 + seg_NNN.ts
-///   {trackId}/stream_high/index.m3u8 + seg_NNN.ts
-/// </summary>
-public interface IHlsTranscoder
-{
-    /// <summary>
-    /// Транскодирует исходный аудио-стрим в HLS multi-bitrate и заливает в MinIO
-    /// </summary>
-    Task TranscodeAndUploadAsync(
-        Guid trackId,
-        Stream source,
-        string contentType,
-        CancellationToken ct = default);
-}
+namespace Music.AudioProcessing.Worker.Hls;
 
 public class HlsTranscoder : IHlsTranscoder
 {
-    private readonly FileStorageService _storage;
+    private readonly AudioStorageService _storage;
     private readonly ILogger<HlsTranscoder> _log;
 
     private static readonly TimeSpan ProcessTimeout = TimeSpan.FromMinutes(10);
     private const int HlsSegmentSeconds = 6;
 
-    /// <summary>
-    /// Имя варианта -> битрейт. Имя попадает в ключ MinIO и в master.m3u8
-    /// </summary>
     private static readonly (string Name, int BitrateKbps)[] Variants =
     {
         ("low",  64),
@@ -42,7 +18,7 @@ public class HlsTranscoder : IHlsTranscoder
         ("high", 256)
     };
 
-    public HlsTranscoder(FileStorageService storage, ILogger<HlsTranscoder> log)
+    public HlsTranscoder(AudioStorageService storage, ILogger<HlsTranscoder> log)
     {
         _storage = storage;
         _log = log;
@@ -64,7 +40,6 @@ public class HlsTranscoder : IHlsTranscoder
                 await source.CopyToAsync(fs, ct);
 
             await RunFfmpegAsync(inputPath, workDir, ct);
-
             await UploadAllArtifactsAsync(trackId, workDir, ct);
 
             _log.LogInformation("HLS transcode complete for {TrackId} in {Dir}", trackId, workDir);
@@ -132,10 +107,7 @@ public class HlsTranscoder : IHlsTranscoder
         var stderrTask = proc.StandardError.ReadToEndAsync(cts.Token);
         var stdoutTask = proc.StandardOutput.ReadToEndAsync(cts.Token);
 
-        try
-        {
-            await proc.WaitForExitAsync(cts.Token);
-        }
+        try { await proc.WaitForExitAsync(cts.Token); }
         catch (OperationCanceledException)
         {
             try { proc.Kill(entireProcessTree: true); } catch { }
@@ -154,28 +126,24 @@ public class HlsTranscoder : IHlsTranscoder
     {
         var prefix = $"{trackId:D}";
 
-        // master.m3u8
         await UploadOneAsync(
             Path.Combine(workDir, "master.m3u8"),
             $"{prefix}/master.m3u8",
             "application/vnd.apple.mpegurl",
             ct);
 
-        // Варианты
         foreach (var (name, _) in Variants)
         {
             var variantDir = Path.Combine(workDir, $"stream_{name}");
             if (!Directory.Exists(variantDir))
                 throw new InvalidOperationException($"ffmpeg не создал директорию варианта: {variantDir}");
 
-            // index.m3u8
             await UploadOneAsync(
                 Path.Combine(variantDir, "index.m3u8"),
                 $"{prefix}/stream_{name}/index.m3u8",
                 "application/vnd.apple.mpegurl",
                 ct);
 
-            // seg_*.ts
             var segments = Directory.EnumerateFiles(variantDir, "seg_*.ts").OrderBy(f => f);
             foreach (var seg in segments)
             {
