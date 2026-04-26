@@ -51,9 +51,12 @@ services:
         - ASPNETCORE_ENVIRONMENT=Development
         - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=copiuma_identity;Username=admin;Password=password123
         - JwtSettings__Key=C0piuma_Super_Secret_Security_Key_2077
+        - Redis__Configuration=redis:6379
       depends_on:
         postgres:
           condition: service_healthy
+        redis:
+          condition: service_started
 
   music-api:
     build:

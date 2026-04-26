@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    color-scheme: dark;
+    --bg: 11 11 16;
+    --bg-elevated: 22 22 30;
+    --fg: 240 240 245;
+    --fg-muted: 160 160 175;
+    --border: 38 38 48;
+    --accent: 124 92 255;
+    --accent-fg: 255 255 255;
+    --danger: 240 80 90;
+    --success: 80 200 130;
+}
+
+html, body, #root {
+    height: 100%;
+}
+
+body {
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+}
+
+input, textarea, select, button {
+    font: inherit;
+}
+
+    input:-webkit-autofill {
+        -webkit-text-fill-color: rgb(var(--fg));
+        transition: background-color 600000s 0s, color 600000s 0s;
+    }
