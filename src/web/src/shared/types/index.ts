@@ -40,6 +40,7 @@ export interface TrackListItem {
     albumId: string | null;
     trackNumber: number | null;
     isExplicit: boolean;
+    isLikedByMe?: boolean;
 }
 
 export interface TrackDetail {
@@ -53,6 +54,7 @@ export interface TrackDetail {
     isExplicit: boolean;
     processingStatus: TrackProcessingStatus;
     uploadedByUserId?: string;
+    isLikedByMe?: boolean;
 }
 
 export interface TrackProcessingStatusResponse {
@@ -173,6 +175,7 @@ export interface PlaylistTrack {
     position: number;
     addedAt: string;
     addedByUserId?: string;
+    isLikedByMe?: boolean;
 }
 
 export interface PlaylistDetail extends PlaylistSummary {
@@ -204,11 +207,11 @@ export interface RoomParticipant {
 export interface ReviewItem {
     id: string;
     trackId: string;
-    authorUserId: string;
+    authorId: string;
     authorName?: string | null;
     text: string;
-    likes: number;
-    isLikedByMe?: boolean;
+    likeCount: number;
+    likedByMe: boolean;
     createdAt: string;
     updatedAt?: string | null;
 }

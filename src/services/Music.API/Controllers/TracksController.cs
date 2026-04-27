@@ -179,7 +179,8 @@ public class TracksController : ControllerBase
                 t.ArtistId,
                 t.AlbumId,
                 t.TrackNumber,
-                t.IsExplicit
+                t.IsExplicit,
+                IsLikedByMe = _context.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == UserId)
             })
             .ToListAsync();
 
@@ -214,7 +215,15 @@ public class TracksController : ControllerBase
 
         var tracks = await _moderation.ApplyVisibilityFilter(_context.Tracks, UserId)
             .Where(t => t.SearchVector!.Matches(EF.Functions.WebSearchToTsQuery("russian", q)))
-            .Select(t => new { t.Id, t.Title, t.Artist, t.Duration, t.UploadedAt, t.IsExplicit })
+            .Select(t => new { 
+                t.Id, 
+                t.Title, 
+                t.Artist, 
+                t.Duration, 
+                t.UploadedAt, 
+                t.IsExplicit,
+                IsLikedByMe = _context.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == UserId)
+            })
             .Take(20)
             .ToListAsync();
 
@@ -254,7 +263,9 @@ public class TracksController : ControllerBase
                 t.AlbumId,
                 t.TrackNumber,
                 t.IsExplicit,
-                t.ProcessingStatus
+                t.ProcessingStatus,
+                IsLikedByMe = _context.LikedTracks.Any(l => l.TrackId == id && l.UserId == UserId),
+                UploadedByUserId = t.UploadedByUserId
             })
             .FirstOrDefaultAsync();
 

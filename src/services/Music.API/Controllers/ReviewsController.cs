@@ -45,6 +45,7 @@ public class ReviewsController : ControllerBase
             Id = Guid.NewGuid(),
             TrackId = trackId,
             AuthorId = UserId,
+            AuthorName = UserName,
             Text = text,
             CreatedAt = DateTime.UtcNow
         };
@@ -193,5 +194,5 @@ public class ReviewsController : ControllerBase
     }
 
     private static ReviewResponse ToResponse(TrackReview r, int likeCount, bool likedByMe) =>
-        new(r.Id, r.TrackId, r.AuthorId, r.Text, likeCount, likedByMe, r.CreatedAt, r.UpdatedAt);
+        new(r.Id, r.TrackId, r.AuthorId, r.AuthorName, r.Text, likeCount, likedByMe, r.CreatedAt, r.UpdatedAt);
 }

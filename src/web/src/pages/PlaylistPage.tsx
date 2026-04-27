@@ -13,7 +13,11 @@ import { useAuth } from '@/features/auth/useAuth';
 import { usePlayer } from '@/features/player/store';
 import { InvitePeopleDialog } from '@/features/playlists/InvitePeopleDialog';
 import type { PlaylistTrack, PlaylistVisibility } from '@/shared/types';
+import { toggleLike } from '@/shared/api/tracks';
+import { AddToPlaylistMenu } from '@/features/playlists/AddToPlaylistMenu';
+import { usePlayTrack } from '@/features/player/usePlayTrack';
 import { cn } from '@/shared/lib/cn';
+
 
 export function PlaylistPage() {
     const { id } = useParams();
@@ -66,12 +70,16 @@ export function PlaylistPage() {
 
     const p = q.data;
     const isOwner = !!user && user.id === p.ownerId;
-    const myMember = p.members.find((m) => m.userId === user?.id);
+
+    const members = p.members || [];
+    const tracks = p.tracks || [];
+
+    const myMember = members.find((m) => m.userId === user?.id);
 
     function playAll() {
-        if (p.tracks.length === 0) return;
+        if (tracks.length === 0) return;
         playQueue(
-            p.tracks.map((t) => ({
+            tracks.map((t) => ({
                 id: t.trackId,
                 title: t.title,
                 artist: t.artist,
@@ -101,11 +109,11 @@ export function PlaylistPage() {
                     </p>
                     <h1 className="truncate text-3xl font-semibold">{p.title}</h1>
                     <p className="text-sm text-fg-muted">
-                        {p.ownerName ?? 'без автора'} · {p.trackCount} треков
+                        {p.ownerName || 'Загрузка...'} · {p.trackCount ?? 0} треков
                     </p>
 
                     <div className="flex flex-wrap items-center gap-2 pt-2">
-                        {p.tracks.length > 0 && (
+                        {tracks.length > 0 && (
                             <button
                                 onClick={playAll}
                                 className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:opacity-90"
@@ -160,14 +168,14 @@ export function PlaylistPage() {
             {/* tracks */}
             <section className="space-y-3">
                 <h2 className="text-xl font-semibold">Треки</h2>
-                {p.tracks.length === 0 && (
+                {tracks.length === 0 && (
                     <p className="text-fg-muted">
                         Пусто. Добавь треки кнопкой «＋» в любом списке.
                     </p>
                 )}
-                {p.tracks.length > 0 && (
+                {tracks.length > 0 && (
                     <ul className="divide-y divide-border rounded-md border border-border">
-                        {p.tracks
+                        {tracks
                             .slice()
                             .sort((a, b) => a.position - b.position)
                             .map((t) => (
@@ -187,10 +195,12 @@ export function PlaylistPage() {
             <section className="space-y-3">
                 <h2 className="text-xl font-semibold">Участники</h2>
                 <ul className="divide-y divide-border rounded-md border border-border">
-                    {p.members.map((m) => (
+                    {members.map((m) => (
                         <li key={m.userId} className="flex items-center gap-4 p-3 text-sm">
                             <div className="min-w-0 flex-1">
-                                <div className="truncate font-medium">{m.displayName ?? m.userId.slice(0, 8)}</div>
+                                <div className="truncate font-medium">
+                                    {m.displayName || (m.userId === user?.id ? user.displayName : m.userId.slice(0, 8))}
+                                </div>
                                 <div className="text-xs text-fg-muted">
                                     {m.role} · с {new Date(m.joinedAt).toLocaleDateString('ru')}
                                 </div>
@@ -231,22 +241,70 @@ function PlaylistTrackRow({
     onRemove: () => void;
     removing: boolean;
 }) {
+    const play = usePlayTrack();
+    const qc = useQueryClient();
+
+    const like = useMutation({
+        mutationFn: () => toggleLike(t.trackId),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['playlist'] });
+            qc.invalidateQueries({ queryKey: ['favorites'] });
+        },
+    });
+
+    // Маппинг данных для плеера
+    const trackForPlayer = {
+        id: t.trackId,
+        title: t.title,
+        artist: t.artist,
+        duration: t.duration,
+        uploadedAt: '',
+        artistId: null,
+        albumId: null,
+        trackNumber: null,
+        isExplicit: t.isExplicit,
+    };
+
     return (
-        <li
-            className={cn(
-                'flex items-center gap-3 px-4 py-3 hover:bg-bg-elevated/50',
-            )}
-        >
-            <span className="w-6 text-right text-xs tabular-nums text-fg-muted">{t.position}</span>
+        <li className="flex items-center gap-3 px-4 py-3 hover:bg-bg-elevated/50">
+            <button
+                onClick={() => play(trackForPlayer as any)}
+                className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg hover:opacity-90"
+                title="Играть"
+            >
+                ▶
+            </button>
+
+            <span className="hidden w-6 text-right text-xs tabular-nums text-fg-muted md:inline-block">
+                {t.position}
+            </span>
+
             <div className="min-w-0 flex-1">
                 <div className="truncate font-medium">{t.title}</div>
                 <div className="truncate text-xs text-fg-muted">{t.artist ?? '—'}</div>
             </div>
+
+            <span className="text-xs tabular-nums text-fg-muted">{formatDuration(t.duration)}</span>
+
+            <button
+                onClick={() => like.mutate()}
+                disabled={like.isPending}
+                className={cn(
+                    "text-lg transition-colors hover:scale-110 disabled:opacity-50",
+                    t.isLikedByMe ? "text-accent" : "text-fg-muted hover:text-fg"
+                )}
+                title={t.isLikedByMe ? "Убрать из избранного" : "В избранное"}
+            >
+                ♥
+            </button>
+
+            <AddToPlaylistMenu trackId={t.trackId} />
+
             {canRemove && (
                 <button
                     onClick={onRemove}
                     disabled={removing}
-                    className="text-xs text-fg-muted hover:text-danger disabled:opacity-50"
+                    className="ml-2 text-xs text-fg-muted hover:text-danger disabled:opacity-50"
                     title="Убрать из плейлиста"
                 >
                     ✕
@@ -254,4 +312,15 @@ function PlaylistTrackRow({
             )}
         </li>
     );
+}
+
+function formatDuration(d: string | null): string {
+    if (!d) return '—';
+    const m = /^(?:\d+\.)?(\d{2}):(\d{2}):(\d{2})/.exec(d);
+    if (!m) return d;
+    const h = parseInt(m[1], 10);
+    const mm = parseInt(m[2], 10);
+    const ss = parseInt(m[3], 10);
+    if (h > 0) return `${h}:${mm.toString().padStart(2, '0')}:${ss.toString().padStart(2, '0')}`;
+    return `${mm}:${ss.toString().padStart(2, '0')}`;
 }

@@ -21,7 +21,7 @@ export function Reviews({ trackId }: { trackId: string }) {
 
     const list = useQuery({ queryKey: ['reviews', trackId], queryFn: () => listReviews(trackId) });
 
-    const myReview = list.data?.find((r) => r.authorUserId === user?.id) ?? null;
+    const myReview = list.data?.find((r) => r.authorId === user?.id) ?? null;
 
     return (
         <section className="space-y-4">
@@ -34,7 +34,7 @@ export function Reviews({ trackId }: { trackId: string }) {
             {list.data && list.data.length > 0 && (
                 <ul className="space-y-3">
                     {list.data.map((rev) => (
-                        <ReviewRow key={rev.id} review={rev} canEdit={rev.authorUserId === user?.id} trackId={trackId} />
+                        <ReviewRow key={rev.id} review={rev} canEdit={rev.authorId === user?.id} trackId={trackId} />
                     ))}
                 </ul>
             )}
@@ -120,7 +120,7 @@ function ReviewRow({
     const [editing, setEditing] = useState(false);
 
     const like = useMutation({
-        mutationFn: () => (review.isLikedByMe ? unlikeReview(review.id) : likeReview(review.id)),
+        mutationFn: () => (review.likedByMe ? unlikeReview(review.id) : likeReview(review.id)),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['reviews', trackId] }),
     });
     const remove = useMutation({
@@ -149,7 +149,7 @@ function ReviewRow({
         <li className="rounded-md border border-border bg-bg-elevated p-3">
             <header className="mb-1 flex items-baseline justify-between gap-2 text-xs text-fg-muted">
                 <span className="truncate font-medium text-fg">
-                    {review.authorName ?? review.authorUserId.slice(0, 8)}
+                    {review.authorName ?? review.authorId.slice(0, 8)}
                 </span>
                 <span>{new Date(review.createdAt).toLocaleString('ru')}</span>
             </header>
@@ -160,10 +160,10 @@ function ReviewRow({
                     disabled={like.isPending}
                     className={cn(
                         'rounded-full border border-border px-2 py-0.5 hover:bg-bg disabled:opacity-50',
-                        review.isLikedByMe && 'border-accent/60 text-accent',
+                        review.likedByMe && 'border-accent/60 text-accent',
                     )}
                 >
-                    ♥ {review.likes}
+                    ♥ {review.likeCount}
                 </button>
                 {canEdit && (
                     <>

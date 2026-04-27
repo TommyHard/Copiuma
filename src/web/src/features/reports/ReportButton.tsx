@@ -6,8 +6,9 @@ import type { ReportTargetType } from '@/shared/types';
 const REASONS: { value: string; label: string }[] = [
     { value: 'copyright', label: 'Нарушение авторских прав' },
     { value: 'spam', label: 'Спам / рекламный контент' },
-    { value: 'hate', label: 'Hate speech / экстремизм' },
-    { value: 'sexual', label: '18+ контент без пометки' },
+    { value: 'offensive', label: 'Hate speech / экстремизм' },
+    { value: 'harassment', label: 'Оскорбление / Травля' },
+    { value: 'illegal', label: 'Запрещенный 18+ контент' },
     { value: 'other', label: 'Другое (опиши ниже)' },
 ];
 

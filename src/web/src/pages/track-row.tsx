@@ -1,16 +1,28 @@
 import { Link } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { TrackListItem } from '@/shared/types';
 import { usePlayTrack } from '@/features/player/usePlayTrack';
 import { AddToPlaylistMenu } from '@/features/playlists/AddToPlaylistMenu';
+import { toggleLike } from '@/shared/api/tracks';
+import { cn } from '@/shared/lib/cn';
 
 export function TrackRow({ track, number }: { track: TrackListItem; number?: number }) {
     const play = usePlayTrack();
+    const qc = useQueryClient();
+
+    const like = useMutation({
+        mutationFn: () => toggleLike(track.id),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['catalog'] });
+            qc.invalidateQueries({ queryKey: ['favorites'] });
+        },
+    });
 
     return (
         <li className="flex items-center gap-3 px-4 py-3 hover:bg-bg-elevated/50">
             <button
                 onClick={() => play(track)}
-                className="flex size-9 items-center justify-center rounded-full bg-accent text-accent-fg hover:opacity-90"
+                className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg hover:opacity-90"
                 title="Играть"
             >
                 ▶
@@ -35,6 +47,18 @@ export function TrackRow({ track, number }: { track: TrackListItem; number?: num
             </div>
 
             <span className="text-xs tabular-nums text-fg-muted">{formatDuration(track.duration)}</span>
+
+            <button
+                onClick={() => like.mutate()}
+                disabled={like.isPending}
+                className={cn(
+                    "text-lg transition-colors hover:scale-110 disabled:opacity-50",
+                    track.isLikedByMe ? "text-accent" : "text-fg-muted hover:text-fg"
+                )}
+                title={track.isLikedByMe ? "Убрать из избранного" : "В избранное"}
+            >
+                ♥
+            </button>
 
             <AddToPlaylistMenu trackId={track.id} />
         </li>

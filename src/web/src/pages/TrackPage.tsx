@@ -39,7 +39,10 @@ export function TrackPage() {
 
     const like = useMutation({
         mutationFn: () => toggleLike(id!),
-        onSuccess: () => qc.invalidateQueries({ queryKey: ['favorites'] }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['favorites'] });
+            qc.invalidateQueries({ queryKey: ['track', id] });
+        },
     });
 
     const remove = useMutation({
@@ -112,9 +115,11 @@ export function TrackPage() {
                 <button
                     onClick={() => like.mutate()}
                     disabled={like.isPending}
-                    className="rounded-md border border-border px-4 py-2 hover:bg-bg-elevated disabled:opacity-50"
-                >
-                    ♥ В избранное
+                    className={`rounded-md border px-4 py-2 transition-colors disabled:opacity-50 ${t.isLikedByMe
+                            ? 'border-accent/60 bg-accent/10 text-accent hover:bg-accent/20'
+                            : 'border-border hover:bg-bg-elevated'
+                        }`}>
+                    {t.isLikedByMe ? '♥ В избранном' : '♥ В избранное'}
                 </button>
 
                 {isOwner ? (
@@ -123,8 +128,7 @@ export function TrackPage() {
                             if (confirm('Удалить трек безвозвратно?')) remove.mutate();
                         }}
                         disabled={remove.isPending}
-                        className="rounded-md border border-danger/40 px-4 py-2 text-danger hover:bg-danger/10 disabled:opacity-50"
-                    >
+                        className="rounded-md border border-danger/40 px-4 py-2 text-danger hover:bg-danger/10 disabled:opacity-50">
                         Удалить
                     </button>
                 ) : (

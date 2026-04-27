@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Music.API.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -13,9 +14,11 @@ using NpgsqlTypes;
 namespace Music.API.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260427175954_AddAuthorNameToReviews")]
+    partial class AddAuthorNameToReviews
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -423,9 +426,6 @@ namespace Music.API.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("DisplayName")
-                        .HasColumnType("text");
-
                     b.Property<DateTime>("JoinedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -795,7 +795,7 @@ namespace Music.API.Migrations
             modelBuilder.Entity("Music.API.Models.PlaylistMember", b =>
                 {
                     b.HasOne("Music.API.Models.Playlist", "Playlist")
-                        .WithMany("PlaylistMembers")
+                        .WithMany()
                         .HasForeignKey("PlaylistId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -874,8 +874,6 @@ namespace Music.API.Migrations
 
             modelBuilder.Entity("Music.API.Models.Playlist", b =>
                 {
-                    b.Navigation("PlaylistMembers");
-
                     b.Navigation("PlaylistTracks");
                 });
 #pragma warning restore 612, 618

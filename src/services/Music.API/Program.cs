@@ -17,6 +17,7 @@ using OpenTelemetry.Trace;
 using Serilog;
 using Serilog.Events;
 using StackExchange.Redis;
+using Npgsql;
 
 namespace Music.API;
 
@@ -74,9 +75,15 @@ public class Program
 
             builder.Services.AddHttpContextAccessor();
             builder.Services.AddScoped<ChangelogInterceptor>();
+
+            var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+            var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+            dataSourceBuilder.EnableDynamicJson();
+            var dataSource = dataSourceBuilder.Build();
+
             builder.Services.AddDbContext<AppDbContext>((sp, options) =>
                 options
-                    .UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
+                    .UseNpgsql(dataSource)
                     .AddInterceptors(sp.GetRequiredService<ChangelogInterceptor>()));
 
             var redisConn = builder.Configuration["Redis:Configuration"] ?? "localhost:6379";

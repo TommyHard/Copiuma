@@ -44,12 +44,20 @@ public class NotificationsController : ControllerBase
             .Select(n => new { n.Id, n.Type, n.Payload, n.IsRead, n.CreatedAt })
             .ToListAsync();
 
-        var result = items.Select(n => new NotificationResponse(
-            n.Id,
-            n.Type,
-            JsonSerializer.Deserialize<JsonElement>(n.Payload),
-            n.IsRead,
-            n.CreatedAt));
+        var result = items.Select(n =>
+        {
+            var payloadJson = JsonSerializer.Deserialize<JsonElement>(n.Payload);
+            var (title, message) = NotificationFormatter.Format(n.Type, payloadJson);
+
+            return new NotificationResponse(
+                n.Id,
+                n.Type,
+                title,
+                message,
+                payloadJson,
+                n.IsRead,
+                n.CreatedAt);
+        });
 
         return Ok(result);
     }

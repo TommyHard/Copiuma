@@ -9,6 +9,7 @@ public class TrackReview
 
     public Guid AuthorId { get; set; }
 
+    public string? AuthorName { get; set; }
     public required string Text { get; set; }
 
     public bool IsDeleted { get; set; }

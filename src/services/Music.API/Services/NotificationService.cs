@@ -25,6 +25,9 @@ public class NotificationService
         CancellationToken ct = default)
     {
         var json = JsonSerializer.Serialize(payload);
+        var payloadElement = JsonSerializer.Deserialize<JsonElement>(json);
+
+        var (title, message) = NotificationFormatter.Format(type, payloadElement);
 
         var n = new Notification
         {
@@ -43,6 +46,8 @@ public class NotificationService
             {
                 id = n.Id,
                 type = n.Type,
+                title = title,
+                message = message,
                 payload,
                 isRead = false,
                 createdAt = n.CreatedAt

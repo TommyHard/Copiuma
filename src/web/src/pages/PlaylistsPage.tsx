@@ -124,10 +124,15 @@ function PlaylistGrid({
                             style={{ backgroundImage: p.coverUrl ? `url(${p.coverUrl})` : undefined }}
                             aria-hidden
                         />
-                        <div className="truncate text-sm font-medium">{p.title}</div>
-                        <div className="flex items-center justify-between text-xs text-fg-muted">
-                            <span>{p.trackCount} треков</span>
-                            <span>{p.visibility}</span>
+                        <div className="flex flex-col min-w-0">
+                            <span className="truncate font-medium">{p.title}</span>
+                            <div className="flex items-center gap-1 text-xs text-fg-muted">
+                                <span className="text-accent/80 font-medium">
+                                    {p.ownerName || 'Автор'}
+                                </span>
+                                <span>·</span>
+                                <span>{p.trackCount ?? 0} треков</span>
+                            </div>
                         </div>
                     </Link>
                 </li>

@@ -12,8 +12,8 @@ import type { ReviewItem } from '@/shared/types';
  */
 
 export async function listReviews(trackId: string): Promise<ReviewItem[]> {
-    const r = await api.get<ReviewItem[]>(`/tracks/${trackId}/reviews`);
-    return r.data;
+    const r = await api.get<{ total: number; items: ReviewItem[] }>(`/tracks/${trackId}/reviews`);
+    return r.data.items;
 }
 
 export async function createReview(trackId: string, text: string): Promise<ReviewItem> {

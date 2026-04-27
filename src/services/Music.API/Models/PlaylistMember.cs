@@ -6,6 +6,7 @@ public class PlaylistMember
     public Playlist? Playlist { get; set; }
 
     public Guid UserId { get; set; }
+    public string? DisplayName { get; set; }
 
     public PlaylistRole Role { get; set; }
     public DateTime JoinedAt { get; set; } = DateTime.UtcNow;

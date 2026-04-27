@@ -32,14 +32,22 @@ public class PlaylistsController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Title))
             return BadRequest("Название плейлиста обязательно.");
 
+        Enum.TryParse<PlaylistVisibility>(request.Visibility, true, out var visibility);
+
         using var tx = await _context.Database.BeginTransactionAsync();
 
-        var playlist = new Playlist { Id = Guid.NewGuid(), Title = request.Title.Trim() };
+        var playlist = new Playlist { 
+            Id = Guid.NewGuid(), 
+            Title = request.Title.Trim(),
+            Visibility = visibility
+        };
+
         _context.Playlists.Add(playlist);
         _context.PlaylistMembers.Add(new PlaylistMember
         {
             PlaylistId = playlist.Id,
             UserId = UserId,
+            DisplayName = UserName,
             Role = PlaylistRole.Owner
         });
 
@@ -62,7 +70,7 @@ public class PlaylistsController : ControllerBase
         return Ok();
     }
 
-    // ---------- Invitations ----------
+    // Invitations
 
     [HttpPost("{playlistId}/invite")]
     public async Task<IActionResult> Invite(Guid playlistId, [FromBody] InviteToPlaylistRequest request)
@@ -156,7 +164,7 @@ public class PlaylistsController : ControllerBase
         return NoContent();
     }
 
-    // ---------- Members ----------
+    // Members
 
     [HttpDelete("{playlistId}/members/{userId}")]
     public async Task<IActionResult> RemoveMember(Guid playlistId, Guid userId)
@@ -191,7 +199,7 @@ public class PlaylistsController : ControllerBase
         return Ok();
     }
 
-    // ---------- Tracks ----------
+    // Tracks
 
     [HttpPost("{playlistId}/tracks/{trackId}")]
     public async Task<IActionResult> AddTrackToPlaylist(Guid playlistId, Guid trackId)
@@ -233,7 +241,7 @@ public class PlaylistsController : ControllerBase
         return Ok();
     }
 
-    // ---------- Queries ----------
+    // Queries
 
     [HttpGet]
     public async Task<IActionResult> GetMyPlaylists()
@@ -241,17 +249,26 @@ public class PlaylistsController : ControllerBase
         var list = await _context.PlaylistMembers
             .Where(pm => pm.UserId == UserId)
             .Include(pm => pm.Playlist)
+                .ThenInclude(p => p!.PlaylistTracks)
+            .Include(pm => pm.Playlist!.PlaylistMembers)
             .OrderByDescending(pm => pm.JoinedAt)
-            .Select(pm => new
+            .ToListAsync();
+
+        var result = list.Select(pm => {
+            var owner = pm.Playlist!.PlaylistMembers.FirstOrDefault(m => m.Role == PlaylistRole.Owner);
+            return new
             {
                 pm.Playlist!.Id,
                 pm.Playlist.Title,
                 pm.Playlist.CreatedAt,
+                Visibility = pm.Playlist.Visibility.ToString(),
+                OwnerName = owner?.DisplayName ?? "Автор",
+                TrackCount = pm.Playlist.PlaylistTracks.Count,
                 YourRole = pm.Role.ToString()
-            })
-            .ToListAsync();
+            };
+        });
 
-        return Ok(list);
+        return Ok(result);
     }
 
     [HttpGet("{id}")]
@@ -259,30 +276,52 @@ public class PlaylistsController : ControllerBase
     {
         var playlist = await _context.Playlists
             .Include(p => p.PlaylistTracks)
-                .ThenInclude(pt => pt.Track)
+            .ThenInclude(pt => pt.Track)
+            .Include(p => p.PlaylistMembers)
             .FirstOrDefaultAsync(p => p.Id == id);
+
         if (playlist is null) return NotFound();
 
-        var member = await _context.PlaylistMembers
-            .FirstOrDefaultAsync(pm => pm.PlaylistId == id && pm.UserId == UserId);
-
-        if (member is null && playlist.Visibility != PlaylistVisibility.Public)
+        var myMember = playlist.PlaylistMembers.FirstOrDefault(pm => pm.UserId == UserId);
+        if (myMember is null && playlist.Visibility == PlaylistVisibility.Private)
             return NotFound();
+
+        var owner = playlist.PlaylistMembers.FirstOrDefault(pm => pm.Role == PlaylistRole.Owner);
 
         return Ok(new
         {
-            playlist.Id,
-            playlist.Title,
-            playlist.CreatedAt,
+            Id = playlist.Id,
+            Title = playlist.Title,
+            OwnerId = owner?.UserId ?? Guid.Empty,
+            OwnerName = owner?.DisplayName ?? "Автор",
             Visibility = playlist.Visibility.ToString(),
-            YourRole = member?.Role.ToString(),
+            IsCollaborative = playlist.PlaylistMembers.Any(m => m.Role == PlaylistRole.Editor),
+            TrackCount = playlist.PlaylistTracks.Count,
+            CreatedAt = playlist.CreatedAt,
+            UpdatedAt = playlist.CreatedAt,
+
             Tracks = playlist.PlaylistTracks
-                .OrderByDescending(pt => pt.AddedAt)
-                .Select(pt => new { pt.Track!.Id, pt.Track.Title, pt.Track.Artist, pt.AddedAt })
+                .OrderBy(pt => pt.AddedAt)
+                .Select((pt, i) => new {
+                    TrackId = pt.Track!.Id,
+                    pt.Track.Title,
+                    pt.Track.Artist,
+                    pt.Track.Duration,
+                    pt.Track.IsExplicit,
+                    Position = i + 1,
+                    pt.AddedAt,
+                    IsLikedByMe = _context.LikedTracks.Any(l => l.TrackId == pt.TrackId && l.UserId == UserId),
+                }),
+            Members = playlist.PlaylistMembers.Select(m => new {
+                m.UserId,
+                m.DisplayName,
+                Role = m.Role.ToString(),
+                m.JoinedAt
+            })
         });
     }
 
-    // ---------- Visibility / public ----------
+    // Visibility / public
 
     /// <summary>
     /// Смена видимости. Только Owner может менять
@@ -296,7 +335,7 @@ public class PlaylistsController : ControllerBase
         if (!await IsCallerInRole(playlistId, PlaylistRole.Owner)) return Forbid();
 
         if (!Enum.TryParse<PlaylistVisibility>(request.Visibility, ignoreCase: true, out var v))
-            return BadRequest($"Неизвестная видимость: {request.Visibility}. Допустимо: Private, Public.");
+            return BadRequest($"Неизвестная видимость: {request.Visibility}. Допустимо: Private, Unlisted, Public.");
 
         if (playlist.Visibility == v) return Ok(new { Visibility = v.ToString() });
 
@@ -338,7 +377,11 @@ public class PlaylistsController : ControllerBase
                 p.Id,
                 p.Title,
                 p.CreatedAt,
-                TrackCount = p.PlaylistTracks.Count
+                TrackCount = p.PlaylistTracks.Count,
+                OwnerName = p.PlaylistMembers
+                    .Where(m => m.Role == PlaylistRole.Owner)
+                    .Select(m => m.DisplayName)
+                    .FirstOrDefault() ?? "Автор"
             })
             .ToListAsync(ct);
 

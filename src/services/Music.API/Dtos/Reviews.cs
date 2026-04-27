@@ -16,6 +16,7 @@ public record ReviewResponse(
     Guid Id,
     Guid TrackId,
     Guid AuthorId,
+    string? AuthorName,
     string Text,
     int LikeCount,
     bool LikedByMe,

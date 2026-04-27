@@ -5,6 +5,8 @@ namespace Music.API.Dtos;
 public record NotificationResponse(
     Guid Id,
     string Type,
+    string Title,
+    string? Message,
     JsonElement Payload,
     bool IsRead,
     DateTime CreatedAt);
