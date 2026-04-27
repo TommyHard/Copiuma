@@ -34,7 +34,7 @@ export interface TrackListItem {
     id: string;
     title: string;
     artist: string | null;
-    duration: string | null; // backend сериализует TimeSpan как "00:03:42"
+    duration: string | null;
     uploadedAt: string;
     artistId: string | null;
     albumId: string | null;
@@ -42,7 +42,6 @@ export interface TrackListItem {
     isExplicit: boolean;
 }
 
-/** Полная карточка из GET /tracks/{id} */
 export interface TrackDetail {
     id: string;
     title: string;
@@ -53,6 +52,7 @@ export interface TrackDetail {
     trackNumber: number | null;
     isExplicit: boolean;
     processingStatus: TrackProcessingStatus;
+    uploadedByUserId?: string;
 }
 
 export interface TrackProcessingStatusResponse {
@@ -60,6 +60,13 @@ export interface TrackProcessingStatusResponse {
     status: TrackProcessingStatus;
     hasWaveform: boolean;
     duration: string | null;
+}
+
+export interface WaveformResponse {
+    trackId: string;
+    peaks: number[];
+    duration: string;       // TimeSpan
+    loudnessLufs: number;
 }
 
 export interface FavoriteItem {
@@ -73,4 +80,61 @@ export interface UploadResult {
     message: string;
     trackId: string;
     fileName: string;
+}
+
+// Catalog: artists / albums
+
+export interface ArtistSummary {
+    id: string;
+    name: string;
+    bio?: string | null;
+    avatarUrl?: string | null;
+    followers?: number;
+}
+
+export interface AlbumSummary {
+    id: string;
+    title: string;
+    artistId: string;
+    artistName?: string | null;
+    releasedAt?: string | null;
+    coverUrl?: string | null;
+    trackCount?: number;
+}
+
+// Notifications
+
+export type NotificationType =
+    | 'TrackProcessed'
+    | 'NewTrackByFollowed'
+    | 'NewFollower'
+    | 'PlaylistInvitation'
+    | 'ReviewReceived'
+    | string;
+
+export interface NotificationItem {
+    id: string;
+    type: NotificationType;
+    title: string;
+    message: string | null;
+    payload?: Record<string, unknown> | null;
+    isRead: boolean;
+    createdAt: string;
+}
+
+// Follows
+
+export interface FollowedArtist {
+    id: string;
+    name: string;
+    followedAt: string;
+}
+
+export interface FeedItem {
+    trackId: string;
+    title: string;
+    artist: string | null;
+    artistId: string | null;
+    uploadedAt: string;
+    duration: string | null;
 }

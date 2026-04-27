@@ -11,6 +11,9 @@ import { TrackPage } from '@/pages/TrackPage';
 import { SearchPage } from '@/pages/SearchPage';
 import { FavoritesPage } from '@/pages/FavoritesPage';
 import { UploadPage } from '@/pages/UploadPage';
+import { ArtistPage } from '@/pages/ArtistPage';
+import { AlbumPage } from '@/pages/AlbumPage';
+import { NotificationsPage } from '@/pages/NotificationsPage';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { RegisterPage } from '@/pages/auth/RegisterPage';
 import { VerifyEmailPage } from '@/pages/auth/VerifyEmailPage';
@@ -21,54 +24,54 @@ import { DeviceGrantPage } from '@/pages/auth/DeviceGrantPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
 export const router = createBrowserRouter([
-    {
-        path: '/auth',
-        element: <AuthLayout />,
-        children: [
-            { path: 'login', element: <LoginPage /> },
-            { path: 'register', element: <RegisterPage /> },
-            { path: 'verify-email', element: <VerifyEmailPage /> },
-            { path: 'resend-verification', element: <ResendVerificationPage /> },
-            { path: 'forgot-password', element: <ForgotPasswordPage /> },
-            { path: 'reset-password', element: <ResetPasswordPage /> },
-            { path: 'device-grant', element: <DeviceGrantPage /> },
-        ],
-    },
-    {
-        path: '/',
+  {
+    path: '/auth',
+    element: <AuthLayout />,
+    children: [
+      { path: 'login', element: <LoginPage /> },
+      { path: 'register', element: <RegisterPage /> },
+      { path: 'verify-email', element: <VerifyEmailPage /> },
+      { path: 'resend-verification', element: <ResendVerificationPage /> },
+      { path: 'forgot-password', element: <ForgotPasswordPage /> },
+      { path: 'reset-password', element: <ResetPasswordPage /> },
+      { path: 'device-grant', element: <DeviceGrantPage /> },
+    ],
+  },
+  {
+    path: '/',
+    element: (
+      <RequireAuth>
+        <AppLayout />
+      </RequireAuth>
+    ),
+    children: [
+      { index: true, element: <HomePage /> },
+      {
         element: (
-            <RequireAuth>
-                <AppLayout />
-            </RequireAuth>
+          <RequireVerified>
+            <Outlet />
+          </RequireVerified>
         ),
         children: [
-            { index: true, element: <HomePage /> },
-
-            // ¬се приватные страницы внутри: guard RequireVerified прокидывает <Outlet/>
-            // только если email подтверждЄн, иначе показывает заглушку
-            {
-                element: (
-                    <RequireVerified>
-                        <Outlet />
-                    </RequireVerified>
-                ),
-                children: [
-                    { path: 'catalog', element: <CatalogPage /> },
-                    { path: 'tracks/:id', element: <TrackPage /> },
-                    { path: 'search', element: <SearchPage /> },
-                    { path: 'favorites', element: <FavoritesPage /> },
-                    { path: 'me', element: <MePage /> },
-                    {
-                        path: 'upload',
-                        element: (
-                            <RequireRole atLeast="Artist">
-                                <UploadPage />
-                            </RequireRole>
-                        ),
-                    },
-                ],
-            },
+          { path: 'catalog', element: <CatalogPage /> },
+          { path: 'tracks/:id', element: <TrackPage /> },
+          { path: 'artists/:id', element: <ArtistPage /> },
+          { path: 'albums/:id', element: <AlbumPage /> },
+          { path: 'search', element: <SearchPage /> },
+          { path: 'favorites', element: <FavoritesPage /> },
+          { path: 'notifications', element: <NotificationsPage /> },
+          { path: 'me', element: <MePage /> },
+          {
+            path: 'upload',
+            element: (
+              <RequireRole atLeast="Artist">
+                <UploadPage />
+              </RequireRole>
+            ),
+          },
         ],
-    },
-    { path: '*', element: <NotFoundPage /> },
+      },
+    ],
+  },
+  { path: '*', element: <NotFoundPage /> },
 ]);

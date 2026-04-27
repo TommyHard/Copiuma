@@ -3,6 +3,7 @@ import type {
     TrackDetail,
     TrackListItem,
     TrackProcessingStatusResponse,
+    WaveformResponse,
 } from '@/shared/types';
 
 export async function listTracks(page = 1, pageSize = 20): Promise<TrackListItem[]> {
@@ -22,6 +23,11 @@ export async function getTrack(id: string): Promise<TrackDetail> {
 
 export async function getTrackStatus(id: string): Promise<TrackProcessingStatusResponse> {
     const r = await api.get<TrackProcessingStatusResponse>(`/tracks/${id}/status`);
+    return r.data;
+}
+
+export async function getWaveform(id: string): Promise<WaveformResponse> {
+    const r = await api.get<WaveformResponse>(`/tracks/${id}/waveform`);
     return r.data;
 }
 

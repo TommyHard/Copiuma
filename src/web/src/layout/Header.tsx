@@ -1,6 +1,7 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/useAuth';
 import { cn } from '@/shared/lib/cn';
+import { NotificationsBell } from '@/features/notifications/NotificationsBell';
 
 const ARTIST_PLUS = new Set(['Artist', 'Moderator', 'Admin', 1, 2, 3]);
 
@@ -29,7 +30,8 @@ export function Header() {
                     {user && ARTIST_PLUS.has(user.role) && <NavItem to="/upload">Загрузить</NavItem>}
                 </nav>
 
-                <div className="ml-auto flex items-center gap-3 text-sm">
+                <div className="ml-auto flex items-center gap-2 text-sm">
+                    {user && <NotificationsBell />}
                     {user && (
                         <Link to="/me" className="hidden text-fg-muted hover:text-fg md:block">
                             {user.displayName ?? user.email}
@@ -47,7 +49,8 @@ export function Header() {
                     )}
                     <button
                         onClick={onLogout}
-                        className="rounded-md border border-border px-3 py-1.5 hover:bg-bg-elevated">
+                        className="rounded-md border border-border px-3 py-1.5 hover:bg-bg-elevated"
+                    >
                         Выйти
                     </button>
                 </div>
