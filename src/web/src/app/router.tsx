@@ -1,10 +1,16 @@
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, Outlet } from 'react-router-dom';
 import { AppLayout } from '@/layout/AppLayout';
 import { AuthLayout } from '@/layout/AuthLayout';
 import { RequireAuth } from '@/features/auth/RequireAuth';
 import { RequireVerified } from '@/features/auth/RequireVerified';
+import { RequireRole } from '@/features/auth/RequireRole';
 import { HomePage } from '@/pages/HomePage';
 import { MePage } from '@/pages/MePage';
+import { CatalogPage } from '@/pages/CatalogPage';
+import { TrackPage } from '@/pages/TrackPage';
+import { SearchPage } from '@/pages/SearchPage';
+import { FavoritesPage } from '@/pages/FavoritesPage';
+import { UploadPage } from '@/pages/UploadPage';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { RegisterPage } from '@/pages/auth/RegisterPage';
 import { VerifyEmailPage } from '@/pages/auth/VerifyEmailPage';
@@ -37,13 +43,30 @@ export const router = createBrowserRouter([
         ),
         children: [
             { index: true, element: <HomePage /> },
+
+            // ¬се приватные страницы внутри: guard RequireVerified прокидывает <Outlet/>
+            // только если email подтверждЄн, иначе показывает заглушку
             {
-                path: 'me',
                 element: (
                     <RequireVerified>
-                        <MePage />
+                        <Outlet />
                     </RequireVerified>
                 ),
+                children: [
+                    { path: 'catalog', element: <CatalogPage /> },
+                    { path: 'tracks/:id', element: <TrackPage /> },
+                    { path: 'search', element: <SearchPage /> },
+                    { path: 'favorites', element: <FavoritesPage /> },
+                    { path: 'me', element: <MePage /> },
+                    {
+                        path: 'upload',
+                        element: (
+                            <RequireRole atLeast="Artist">
+                                <UploadPage />
+                            </RequireRole>
+                        ),
+                    },
+                ],
             },
         ],
     },

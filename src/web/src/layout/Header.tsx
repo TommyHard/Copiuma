@@ -2,6 +2,8 @@ import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/useAuth';
 import { cn } from '@/shared/lib/cn';
 
+const ARTIST_PLUS = new Set(['Artist', 'Moderator', 'Admin', 1, 2, 3]);
+
 export function Header() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
@@ -21,18 +23,31 @@ export function Header() {
 
                 <nav className="hidden items-center gap-4 text-sm md:flex">
                     <NavItem to="/">Главная</NavItem>
-                    <NavItem to="/me">Профиль</NavItem>
+                    <NavItem to="/catalog">Каталог</NavItem>
+                    <NavItem to="/search">Поиск</NavItem>
+                    <NavItem to="/favorites">Избранное</NavItem>
+                    {user && ARTIST_PLUS.has(user.role) && <NavItem to="/upload">Загрузить</NavItem>}
                 </nav>
 
                 <div className="ml-auto flex items-center gap-3 text-sm">
                     {user && (
-                        <span className="hidden text-fg-muted md:block">
+                        <Link to="/me" className="hidden text-fg-muted hover:text-fg md:block">
                             {user.displayName ?? user.email}
-                            {user.role !== 'User' && <RoleBadge role={user.role} />}
-                            {!user.emailVerified && <UnverifiedBadge />}
-                        </span>
+                            {user.role !== 'User' && (
+                                <span className="ml-2 rounded bg-accent/20 px-2 py-0.5 text-xs text-accent">
+                                    {user.role}
+                                </span>
+                            )}
+                            {!user.emailVerified && (
+                                <span className="ml-2 rounded bg-danger/20 px-2 py-0.5 text-xs text-danger">
+                                    email не подтверждён
+                                </span>
+                            )}
+                        </Link>
                     )}
-                    <button onClick={onLogout} className="rounded-md border border-border px-3 py-1.5 hover:bg-bg-elevated">
+                    <button
+                        onClick={onLogout}
+                        className="rounded-md border border-border px-3 py-1.5 hover:bg-bg-elevated">
                         Выйти
                     </button>
                 </div>
@@ -45,26 +60,12 @@ function NavItem({ to, children }: { to: string; children: React.ReactNode }) {
     return (
         <NavLink
             to={to}
-            end
+            end={to === '/'}
             className={({ isActive }) =>
                 cn('hover:text-fg', isActive ? 'text-fg' : 'text-fg-muted')
             }
         >
             {children}
         </NavLink>
-    );
-}
-
-function RoleBadge({ role }: { role: string }) {
-    return (
-        <span className="ml-2 rounded bg-accent/20 px-2 py-0.5 text-xs text-accent">{role}</span>
-    );
-}
-
-function UnverifiedBadge() {
-    return (
-        <span className="ml-2 rounded bg-danger/20 px-2 py-0.5 text-xs text-danger">
-            email не подтверждён
-        </span>
     );
 }
