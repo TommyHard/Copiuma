@@ -53,7 +53,7 @@ public class HlsController : ControllerBase
     public Task<IActionResult> Master(Guid id, CancellationToken ct)
         => ServeAsync(id, $"{id:D}/master.m3u8", M3u8ContentType, ct);
 
-    [HttpGet("{variant}/index.m3u8")]
+    [HttpGet("stream_{variant}/index.m3u8")]
     public Task<IActionResult> VariantPlaylist(Guid id, string variant, CancellationToken ct)
     {
         if (!AllowedVariants.Contains(variant))
@@ -62,7 +62,7 @@ public class HlsController : ControllerBase
         return ServeAsync(id, $"{id:D}/stream_{variant}/index.m3u8", M3u8ContentType, ct);
     }
 
-    [HttpGet("{variant}/{segment}")]
+    [HttpGet("stream_{variant}/{segment}")]
     public Task<IActionResult> Segment(Guid id, string variant, string segment, CancellationToken ct)
     {
         if (!AllowedVariants.Contains(variant))

@@ -17,6 +17,7 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
 using Serilog.Events;
+using Npgsql;
 
 namespace Music.AudioProcessing.Worker;
 
@@ -65,8 +66,13 @@ public class Program
             });
 
             // DB
+            var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+            var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+            dataSourceBuilder.EnableDynamicJson();
+            var dataSource = dataSourceBuilder.Build();
+
             builder.Services.AddDbContext<AudioProcessingDbContext>(options =>
-                options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+                options.UseNpgsql(dataSource));
 
             // MinIO
             builder.Services.AddMinio(client => client

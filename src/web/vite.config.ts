@@ -16,6 +16,8 @@ export default defineConfig({
             '/api': {
                 target: 'http://127.0.0.1:7161',
                 changeOrigin: true,
+                secure: false,
+                ws: true
             },
             '/identity': {
                 target: process.env.VITE_IDENTITY_URL || 'http://127.0.0.1:5001',

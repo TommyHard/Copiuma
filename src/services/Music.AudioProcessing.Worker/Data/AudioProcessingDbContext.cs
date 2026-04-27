@@ -24,6 +24,8 @@ public class AudioProcessingDbContext : DbContext
 
             b.Property(x => x.AcousticFingerprint).HasMaxLength(200);
 
+            b.Property(x => x.WaveformPeaks).HasColumnType("jsonb");
+
             b.Property(x => x.ProcessingStatus).HasConversion<int>();
             b.Property(x => x.HlsStatus).HasConversion<int>();
         });

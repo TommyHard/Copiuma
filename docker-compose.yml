@@ -96,3 +96,23 @@ services:
     depends_on:
       - identity-api
       - music-api
+   
+  audio-processing-worker:
+    build:
+      context: .
+      dockerfile: src/services/Music.AudioProcessing.Worker/Dockerfile
+    container_name: audio_processing_worker
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=copiuma_music;Username=admin;Password=password123
+      - Minio__Endpoint=minio:9000
+      - Minio__AccessKey=minioadmin
+      - Minio__SecretKey=minioadmin
+      - RabbitMQ__HostName=rabbitmq
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      rabbitmq:
+        condition: service_started

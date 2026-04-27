@@ -6,14 +6,25 @@ import type {
     WaveformResponse,
 } from '@/shared/types';
 
+function normalizeTrack(t: any): TrackListItem {
+    return {
+        ...t,
+        id: t.id ?? t.Id,
+        title: t.title ?? t.Title,
+        artist: t.artist ?? t.Artist,
+        duration: t.duration ?? t.Duration,
+        isExplicit: t.isExplicit ?? t.IsExplicit ?? false,
+    };
+}
+
 export async function listTracks(page = 1, pageSize = 20): Promise<TrackListItem[]> {
-    const r = await api.get<TrackListItem[]>('/tracks', { params: { page, pageSize } });
-    return r.data;
+    const r = await api.get<any[]>('/tracks', { params: { page, pageSize } });
+    return r.data.map(normalizeTrack);
 }
 
 export async function searchTracks(q: string): Promise<TrackListItem[]> {
-    const r = await api.get<TrackListItem[]>('/tracks/search', { params: { q } });
-    return r.data;
+    const r = await api.get<any[]>('/tracks/search', { params: { q } });
+    return r.data.map(normalizeTrack);
 }
 
 export async function getTrack(id: string): Promise<TrackDetail> {

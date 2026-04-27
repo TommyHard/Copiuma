@@ -100,6 +100,12 @@ public class Program
                 .AddScheme<GatewayUserAuthenticationOptions, GatewayUserAuthenticationHandler>(
                     GatewayUserAuthenticationHandler.SchemeName, _ => { });
 
+            builder.Services.AddControllers()
+                .AddJsonOptions(options =>
+                {
+                    options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+                });
+
             // Auth-hardening: policies
             builder.Services.AddAuthorization(options =>
             {
@@ -250,6 +256,22 @@ public class Program
             {
                 c.SwaggerEndpoint("/swagger/v1/swagger.json", "Copiuma Music API v1");
                 c.RoutePrefix = "swagger";
+            });
+
+            app.UseRouting();
+
+            app.Use(async (context, next) =>
+            {
+                var path = context.Request.Path;
+                if (path.StartsWithSegments("/notifications-hub"))
+                {
+                    var accessToken = context.Request.Query["access_token"];
+                    if (!string.IsNullOrEmpty(accessToken) && !context.Request.Headers.ContainsKey("Authorization"))
+                    {
+                        context.Request.Headers.Append("Authorization", $"Bearer {accessToken}");
+                    }
+                }
+                await next();
             });
 
             app.UseCors();

@@ -109,7 +109,7 @@ public class FFMpegAudioAnalyzer : IAudioAnalyzer
             {
                 "-nostdin", "-hide_banner",
                 "-i", path,
-                "-af", "ebur128=framelog=quiet",
+                "-af", "ebur128",
                 "-f", "null", "-"
             },
             ct);

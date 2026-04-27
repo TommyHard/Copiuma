@@ -25,6 +25,8 @@ export function useNotificationHub() {
         const c = new signalR.HubConnectionBuilder()
             .withUrl(url, {
                 accessTokenFactory: () => tokenStore.getAccess() ?? '',
+                skipNegotiation: true,
+                transport: signalR.HttpTransportType.WebSockets
             })
             .withAutomaticReconnect([0, 2000, 5000, 10000, 30000])
             .configureLogging(signalR.LogLevel.Warning)
@@ -54,17 +56,27 @@ export function useNotificationHub() {
             }
         });
 
-        c.start()
+        let isMounted = true;
+
+        const startPromise = c.start()
             .then(() => {
-                conn.current = c;
+                if (isMounted) {
+                    conn.current = c;
+                }
             })
             .catch((err) => {
                 console.warn('[notifications-hub] connect failed', err);
             });
 
         return () => {
+            isMounted = false;
             conn.current = null;
-            void c.stop().catch(() => { });
+
+            startPromise.then(() => {
+                if (c.state === signalR.HubConnectionState.Connected) {
+                    void c.stop().catch(() => { });
+                }
+            });
         };
     }, [status, qc, push]);
 }

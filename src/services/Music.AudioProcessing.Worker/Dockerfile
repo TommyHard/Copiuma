@@ -21,7 +21,7 @@ RUN apt-get update && \
         libchromaprint-tools && \
     rm -rf /var/lib/apt/lists/*
 
-COPY --from=publish /app/publish .
+COPY --from=build /app/publish .
 EXPOSE 8080
 
 ENTRYPOINT ["dotnet", "Music.AudioProcessing.Worker.dll"]
