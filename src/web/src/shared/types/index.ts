@@ -25,7 +25,7 @@ export interface SessionResponse {
     isCurrent: boolean;
 }
 
-// Tracks (catalog)
+// Tracks
 
 export type TrackProcessingStatus = 'Pending' | 'Processing' | 'Ready' | 'Failed';
 export type TrackHlsStatus = 'NotRequested' | 'Pending' | 'Processing' | 'Ready' | 'Failed';
@@ -65,7 +65,7 @@ export interface TrackProcessingStatusResponse {
 export interface WaveformResponse {
     trackId: string;
     peaks: number[];
-    duration: string;       // TimeSpan
+    duration: string;
     loudnessLufs: number;
 }
 
@@ -137,4 +137,63 @@ export interface FeedItem {
     artistId: string | null;
     uploadedAt: string;
     duration: string | null;
+}
+
+// Playlists
+
+export type PlaylistVisibility = 'Private' | 'Unlisted' | 'Public';
+
+export interface PlaylistSummary {
+    id: string;
+    title: string;
+    ownerId: string;
+    ownerName?: string | null;
+    visibility: PlaylistVisibility;
+    isCollaborative: boolean;
+    trackCount: number;
+    coverUrl?: string | null;
+    updatedAt: string;
+}
+
+export interface PlaylistMember {
+    userId: string;
+    displayName?: string | null;
+    role: string;            // "Owner" | "Member" | "Editor"
+    joinedAt: string;
+}
+
+export interface PlaylistTrack {
+    trackId: string;
+    title: string;
+    artist: string | null;
+    duration: string | null;
+    isExplicit: boolean;
+    position: number;
+    addedAt: string;
+    addedByUserId?: string;
+}
+
+export interface PlaylistDetail extends PlaylistSummary {
+    tracks: PlaylistTrack[];
+    members: PlaylistMember[];
+}
+
+export interface PlaylistInvitation {
+    id: string;
+    playlistId: string;
+    playlistTitle: string;
+    inviterId: string;
+    inviterName: string | null;
+    proposedRole: string;
+    status: 'Pending' | 'Accepted' | 'Declined' | string;
+    createdAt: string;
+}
+
+// DJ rooms
+
+/** —етева€ "карточка участника" комнаты Ч обновл€етс€ по ParticipantJoined/Left */
+export interface RoomParticipant {
+    userId: string;
+    userName: string;
+    isDj: boolean;
 }

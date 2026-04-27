@@ -26,7 +26,9 @@ export function Header() {
                     <NavItem to="/">Главная</NavItem>
                     <NavItem to="/catalog">Каталог</NavItem>
                     <NavItem to="/search">Поиск</NavItem>
+                    <NavItem to="/playlists">Плейлисты</NavItem>
                     <NavItem to="/favorites">Избранное</NavItem>
+                    <NavItem to="/rooms">DJ-комнаты</NavItem>
                     {user && ARTIST_PLUS.has(user.role) && <NavItem to="/upload">Загрузить</NavItem>}
                 </nav>
 

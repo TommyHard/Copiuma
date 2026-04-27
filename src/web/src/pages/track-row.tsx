@@ -1,12 +1,13 @@
 import { Link } from 'react-router-dom';
 import type { TrackListItem } from '@/shared/types';
 import { usePlayTrack } from '@/features/player/usePlayTrack';
+import { AddToPlaylistMenu } from '@/features/playlists/AddToPlaylistMenu';
 
 export function TrackRow({ track, number }: { track: TrackListItem; number?: number }) {
     const play = usePlayTrack();
 
     return (
-        <li className="flex items-center gap-4 px-4 py-3 hover:bg-bg-elevated/50">
+        <li className="flex items-center gap-3 px-4 py-3 hover:bg-bg-elevated/50">
             <button
                 onClick={() => play(track)}
                 className="flex size-9 items-center justify-center rounded-full bg-accent text-accent-fg hover:opacity-90"
@@ -34,6 +35,8 @@ export function TrackRow({ track, number }: { track: TrackListItem; number?: num
             </div>
 
             <span className="text-xs tabular-nums text-fg-muted">{formatDuration(track.duration)}</span>
+
+            <AddToPlaylistMenu trackId={track.id} />
         </li>
     );
 }
