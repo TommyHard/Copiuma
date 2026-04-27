@@ -15,3 +15,21 @@ export async function listAlbums(page = 1, pageSize = 30): Promise<AlbumSummary[
     const r = await api.get<AlbumSummary[]>('/albums', { params: { page, pageSize } });
     return r.data;
 }
+
+/**
+ * загрузка обложки альбома. Backend "POST /albums/{id}/cover" принимает
+ * multipart с файлом. Возвращает обновлённый AlbumSummary с coverUrl
+ */
+export async function uploadAlbumCover(albumId: string, file: File): Promise<AlbumSummary> {
+    const fd = new FormData();
+    fd.append('File', file);
+    const r = await api.post<AlbumSummary>(`/albums/${albumId}/cover`, fd, {
+        headers: { 'Content-Type': undefined },
+    });
+    return r.data;
+}
+
+export async function deleteAlbumCover(albumId: string): Promise<AlbumSummary> {
+    const r = await api.delete<AlbumSummary>(`/albums/${albumId}/cover`);
+    return r.data;
+}

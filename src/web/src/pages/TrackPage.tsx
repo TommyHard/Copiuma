@@ -7,6 +7,9 @@ import { usePlayTrack } from '@/features/player/usePlayTrack';
 import { Waveform } from '@/features/track/Waveform';
 import { TrackRow } from './track-row';
 import { useAuth } from '@/features/auth/useAuth';
+import { StarRating } from '@/features/ratings/StarRating';
+import { Reviews } from '@/features/reviews/Reviews';
+import { ReportButton } from '@/features/reports/ReportButton';
 
 export function TrackPage() {
     const { id } = useParams();
@@ -85,7 +88,7 @@ export function TrackPage() {
 
             {ready && id && <Waveform trackId={id} className="h-24 w-full" />}
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap items-start gap-3">
                 <button
                     disabled={!ready}
                     onClick={() =>
@@ -101,26 +104,31 @@ export function TrackPage() {
                             isExplicit: t.isExplicit,
                         })
                     }
-                    className="rounded-md bg-accent px-4 py-2 font-medium text-accent-fg hover:opacity-90 disabled:opacity-50">
+                    className="rounded-md bg-accent px-4 py-2 font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
+                >
                     {ready ? '▶ Играть' : 'Обрабатывается…'}
                 </button>
 
                 <button
                     onClick={() => like.mutate()}
                     disabled={like.isPending}
-                    className="rounded-md border border-border px-4 py-2 hover:bg-bg-elevated disabled:opacity-50">
+                    className="rounded-md border border-border px-4 py-2 hover:bg-bg-elevated disabled:opacity-50"
+                >
                     ♥ В избранное
                 </button>
 
-                {isOwner && (
+                {isOwner ? (
                     <button
                         onClick={() => {
                             if (confirm('Удалить трек безвозвратно?')) remove.mutate();
                         }}
                         disabled={remove.isPending}
-                        className="rounded-md border border-danger/40 px-4 py-2 text-danger hover:bg-danger/10 disabled:opacity-50">
+                        className="rounded-md border border-danger/40 px-4 py-2 text-danger hover:bg-danger/10 disabled:opacity-50"
+                    >
                         Удалить
                     </button>
+                ) : (
+                    <ReportButton targetType="Track" targetId={t.id} />
                 )}
             </div>
 
@@ -130,6 +138,15 @@ export function TrackPage() {
                     когда трек станет Ready.
                 </p>
             )}
+
+            {ready && id && (
+                <section className="space-y-3">
+                    <h2 className="text-xl font-semibold">Оценка</h2>
+                    <StarRating trackId={id} />
+                </section>
+            )}
+
+            {ready && id && <Reviews trackId={id} />}
 
             {similarQ.data && similarQ.data.length > 0 && (
                 <section className="space-y-3">

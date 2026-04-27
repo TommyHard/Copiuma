@@ -90,6 +90,7 @@ export interface ArtistSummary {
     bio?: string | null;
     avatarUrl?: string | null;
     followers?: number;
+    ownerUserId?: string;
 }
 
 export interface AlbumSummary {
@@ -100,6 +101,7 @@ export interface AlbumSummary {
     releasedAt?: string | null;
     coverUrl?: string | null;
     trackCount?: number;
+    ownerUserId?: string;
 }
 
 // Notifications
@@ -158,7 +160,7 @@ export interface PlaylistSummary {
 export interface PlaylistMember {
     userId: string;
     displayName?: string | null;
-    role: string;            // "Owner" | "Member" | "Editor"
+    role: string;
     joinedAt: string;
 }
 
@@ -191,9 +193,67 @@ export interface PlaylistInvitation {
 
 // DJ rooms
 
-/** —етева€ "карточка участника" комнаты Ч обновл€етс€ по ParticipantJoined/Left */
 export interface RoomParticipant {
     userId: string;
     userName: string;
     isDj: boolean;
+}
+
+// Reviews / Ratings
+
+export interface ReviewItem {
+    id: string;
+    trackId: string;
+    authorUserId: string;
+    authorName?: string | null;
+    text: string;
+    likes: number;
+    isLikedByMe?: boolean;
+    createdAt: string;
+    updatedAt?: string | null;
+}
+
+export interface TrackRatingResponse {
+    trackId: string;
+    yourValue: number | null;
+    average: number;
+    count: number;
+    distribution: number[];
+}
+
+// Reports
+
+export type ReportTargetType = 'Track' | 'Review' | 'User';
+export type ReportStatus = 'Open' | 'Actioned' | 'Dismissed';
+
+export interface ReportItem {
+    id: string;
+    reporterUserId: string;
+    targetType: ReportTargetType;
+    targetId: string;
+    reason: string;
+    details: string | null;
+    status: ReportStatus;
+    createdAt: string;
+    resolvedAt: string | null;
+    resolutionNote: string | null;
+}
+
+// History
+
+export interface HistoryTrackEntry {
+    trackId: string;
+    title: string;
+    artist: string | null;
+    artistId: string | null;
+    lastPlayedAt: string;
+    playCount: number;
+    totalPlayedMs: number;
+}
+
+export interface HistoryArtistEntry {
+    artistId: string;
+    name: string;
+    lastPlayedAt: string;
+    playCount: number;
 }

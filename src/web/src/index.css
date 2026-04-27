@@ -2,7 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+:root,
+:root[data-theme='dark'] {
     color-scheme: dark;
     --bg: 11 11 16;
     --bg-elevated: 22 22 30;
@@ -14,6 +15,19 @@
     --danger: 240 80 90;
     --success: 80 200 130;
 }
+
+    :root[data-theme='light'] {
+        color-scheme: light;
+        --bg: 250 250 252;
+        --bg-elevated: 255 255 255;
+        --fg: 22 22 30;
+        --fg-muted: 102 102 120;
+        --border: 224 224 232;
+        --accent: 102 71 240;
+        --accent-fg: 255 255 255;
+        --danger: 220 60 70;
+        --success: 50 160 100;
+    }
 
 html, body, #root {
     height: 100%;

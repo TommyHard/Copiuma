@@ -18,6 +18,7 @@ import { PlaylistsPage } from '@/pages/PlaylistsPage';
 import { PlaylistPage } from '@/pages/PlaylistPage';
 import { RoomsLandingPage } from '@/pages/RoomsLandingPage';
 import { RoomPage } from '@/pages/RoomPage';
+import { HistoryPage } from '@/pages/HistoryPage';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { RegisterPage } from '@/pages/auth/RegisterPage';
 import { VerifyEmailPage } from '@/pages/auth/VerifyEmailPage';
@@ -63,6 +64,7 @@ export const router = createBrowserRouter([
                     { path: 'albums/:id', element: <AlbumPage /> },
                     { path: 'search', element: <SearchPage /> },
                     { path: 'favorites', element: <FavoritesPage /> },
+                    { path: 'history', element: <HistoryPage /> },
                     { path: 'notifications', element: <NotificationsPage /> },
                     { path: 'playlists', element: <PlaylistsPage /> },
                     { path: 'playlists/:id', element: <PlaylistPage /> },

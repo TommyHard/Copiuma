@@ -20,3 +20,20 @@ export async function listArtistTracks(artistId: string): Promise<TrackListItem[
     const r = await api.get<TrackListItem[]>(`/artists/${artistId}/tracks`);
     return r.data;
 }
+
+/**
+ * аватар артиста. Backend "POST /artists/{id}/avatar", multipart
+ */
+export async function uploadArtistAvatar(artistId: string, file: File): Promise<ArtistSummary> {
+    const fd = new FormData();
+    fd.append('File', file);
+    const r = await api.post<ArtistSummary>(`/artists/${artistId}/avatar`, fd, {
+        headers: { 'Content-Type': undefined },
+    });
+    return r.data;
+}
+
+export async function deleteArtistAvatar(artistId: string): Promise<ArtistSummary> {
+    const r = await api.delete<ArtistSummary>(`/artists/${artistId}/avatar`);
+    return r.data;
+}
