@@ -40,6 +40,10 @@ public class AppDbContext : DbContext
 
     public DbSet<Follow> Follows { get; set; }
 
+    public DbSet<Genre> Genres { get; set; }
+    public DbSet<TrackGenre> TrackGenres { get; set; }
+    public DbSet<TrackFeaturedArtist> TrackFeaturedArtists { get; set; }
+
     public DbSet<Report> Reports { get; set; }
     public DbSet<UserFlag> UserFlags { get; set; }
 
@@ -245,7 +249,7 @@ public class AppDbContext : DbContext
             b.HasIndex(x => new { x.Visibility, x.CreatedAt });
         });
 
-        // ---- Moderation ----
+        // Moderation
 
         modelBuilder.Entity<Track>(b =>
         {
@@ -279,6 +283,43 @@ public class AppDbContext : DbContext
             b.Property(x => x.Kind).HasConversion<int>();
             b.Property(x => x.Note).HasMaxLength(1000);
             b.HasIndex(x => new { x.Kind, x.ExpiresAt });
+        });
+
+        // Genres
+
+        modelBuilder.Entity<Genre>(b =>
+        {
+            b.HasKey(x => x.Id);
+            b.Property(x => x.Slug).HasMaxLength(50);
+            b.Property(x => x.DisplayName).HasMaxLength(100);
+            b.HasIndex(x => x.Slug).IsUnique();
+        });
+
+        modelBuilder.Entity<TrackGenre>(b =>
+        {
+            b.HasKey(x => new { x.TrackId, x.GenreId });
+            b.HasOne(x => x.Track)
+             .WithMany(t => t.TrackGenres)
+             .HasForeignKey(x => x.TrackId)
+             .OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.Genre)
+             .WithMany()
+             .HasForeignKey(x => x.GenreId)
+             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TrackFeaturedArtist>(b =>
+        {
+            b.HasKey(x => new { x.TrackId, x.ArtistId });
+            b.HasOne(x => x.Track)
+             .WithMany(t => t.FeaturedArtists)
+             .HasForeignKey(x => x.TrackId)
+             .OnDelete(DeleteBehavior.Cascade);
+            b.HasOne(x => x.Artist)
+             .WithMany()
+             .HasForeignKey(x => x.ArtistId)
+             .OnDelete(DeleteBehavior.Cascade);
+            b.HasIndex(x => x.TrackId);
         });
     }
 }

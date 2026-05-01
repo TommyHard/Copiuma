@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { uploadTrack, type UploadFields } from '@/shared/api/tracks';
 import { getTrackStatus } from '@/shared/api/catalog';
-import type { TrackProcessingStatus } from '@/shared/types';
+import { getMyArtist, searchArtists } from '@/shared/api/artists';
+import { listGenres } from '@/shared/api/genres';
+import { searchUsers } from '@/shared/api/users';
+import type { ArtistSummary, TrackProcessingStatus, UserSearchResult } from '@/shared/types';
+import { cn } from '@/shared/lib/cn';
 
 const ALLOWED = [
     'audio/mpeg',
@@ -17,22 +22,76 @@ const ALLOWED = [
 ];
 const MAX_BYTES = 200 * 1024 * 1024;
 
+
 export function UploadPage() {
     const navigate = useNavigate();
+
+    const myArtistQ = useQuery({
+        queryKey: ['my-artist'],
+        queryFn: getMyArtist,
+        staleTime: 5 * 60 * 1000,
+    });
+
+    const genresQ = useQuery({
+        queryKey: ['genres'],
+        queryFn: listGenres,
+        staleTime: 10 * 60 * 1000,
+    });
 
     const [file, setFile] = useState<File | null>(null);
     const [title, setTitle] = useState('');
     const [artistName, setArtistName] = useState('');
-    const [genres, setGenres] = useState('');
+    const [artistId, setArtistId] = useState<string | null>(null);
+    const [artistQuery, setArtistQuery] = useState('');
+    const [artistResults, setArtistResults] = useState<ArtistSummary[]>([]);
+    const [artistSearching, setArtistSearching] = useState(false);
+    const [genres, setGenres] = useState<string[]>([]);
+    const [featuredArtists, setFeaturedArtists] = useState<{ id: string; name: string }[]>([]);
+    const [featQuery, setFeatQuery] = useState('');
+    const [featResults, setFeatResults] = useState<UserSearchResult[]>([]);
+    const [featSearching, setFeatSearching] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [progress, setProgress] = useState(0);
     const [error, setError] = useState<string | null>(null);
+    const [artistAutoFilled, setArtistAutoFilled] = useState(false);
 
     const [trackId, setTrackId] = useState<string | null>(null);
     const [status, setStatus] = useState<TrackProcessingStatus | null>(null);
     const pollingRef = useRef<number | null>(null);
+    const artistDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const featDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // polling после загрузки
+    useEffect(() => {
+        if (!artistAutoFilled && myArtistQ.data) {
+            setArtistId(myArtistQ.data.id);
+            setArtistName(myArtistQ.data.name);
+            setArtistAutoFilled(true);
+        }
+    }, [myArtistQ.data, artistAutoFilled]);
+
+    useEffect(() => {
+        if (artistDebounceRef.current) clearTimeout(artistDebounceRef.current);
+        if (artistQuery.trim().length < 2) { setArtistResults([]); return; }
+        artistDebounceRef.current = setTimeout(async () => {
+            setArtistSearching(true);
+            try { setArtistResults(await searchArtists(artistQuery)); }
+            catch { setArtistResults([]); }
+            finally { setArtistSearching(false); }
+        }, 300);
+    }, [artistQuery]);
+
+    // Поиск доп. исполнителей среди пользователей
+    useEffect(() => {
+        if (featDebounceRef.current) clearTimeout(featDebounceRef.current);
+        if (featQuery.trim().length < 2) { setFeatResults([]); return; }
+        featDebounceRef.current = setTimeout(async () => {
+            setFeatSearching(true);
+            try { setFeatResults(await searchUsers(featQuery)); }
+            catch { setFeatResults([]); }
+            finally { setFeatSearching(false); }
+        }, 300);
+    }, [featQuery]);
+
     useEffect(() => {
         if (!trackId) return;
         let cancelled = false;
@@ -58,24 +117,29 @@ export function UploadPage() {
 
     function onPickFile(f: File | null) {
         setError(null);
-        if (!f) {
-            setFile(null);
-            return;
-        }
-        if (f.size > MAX_BYTES) {
-            setError('Файл больше 200 МБ.');
-            setFile(null);
-            return;
-        }
-        if (f.type && !ALLOWED.includes(f.type)) {
-            setError(`Тип "${f.type}" не разрешён.`);
-            setFile(null);
-            return;
-        }
+        if (!f) { setFile(null); return; }
+        if (f.size > MAX_BYTES) { setError('Файл больше 200 МБ.'); setFile(null); return; }
+        if (f.type && !ALLOWED.includes(f.type)) { setError(`Тип "${f.type}" не разрешён.`); setFile(null); return; }
         setFile(f);
-        if (!title) {
-            setTitle(f.name.replace(/\.[^.]+$/, ''));
-        }
+        if (!title) setTitle(f.name.replace(/\.[^.]+$/, ''));
+    }
+
+    function toggleGenre(g: string) {
+        setGenres((prev) => prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]);
+    }
+
+    function selectArtist(a: ArtistSummary) {
+        setArtistId(a.id);
+        setArtistName(a.name);
+        setArtistQuery('');
+        setArtistResults([]);
+    }
+
+    function clearArtist() {
+        setArtistId(null);
+        setArtistName('');
+        setArtistQuery('');
+        setArtistResults([]);
     }
 
     async function onSubmit(e: FormEvent) {
@@ -90,11 +154,10 @@ export function UploadPage() {
 
         const fields: UploadFields = {
             title: title.trim(),
-            artist: artistName.trim() || undefined,
-            genres: genres
-                .split(',')
-                .map((g) => g.trim().toLowerCase())
-                .filter(Boolean),
+            artist: artistId ? undefined : (artistName.trim() || undefined),
+            artistId: artistId ?? undefined,
+            genres,
+            featuredArtistIds: featuredArtists.length > 0 ? featuredArtists.map(a => a.id) : undefined,
         };
 
         try {
@@ -108,8 +171,7 @@ export function UploadPage() {
         }
     }
 
-    // Render
-
+    // After upload view
     if (trackId) {
         return (
             <section className="mx-auto max-w-md space-y-4 text-center">
@@ -149,10 +211,10 @@ export function UploadPage() {
                 </p>
             </header>
 
-            <form onSubmit={onSubmit} className="space-y-4">
+            <form onSubmit={onSubmit} className="space-y-5">
                 <FilePicker file={file} onPick={onPickFile} disabled={submitting} />
 
-                <Field label="Название">
+                <Field label="Название *">
                     <input
                         type="text"
                         required
@@ -164,25 +226,165 @@ export function UploadPage() {
                     />
                 </Field>
 
-                <Field label="Исполнитель (если без привязки к каталогу)">
-                    <input
-                        type="text"
-                        value={artistName}
-                        onChange={(e) => setArtistName(e.target.value)}
-                        disabled={submitting}
-                        className={inputClass}
-                    />
-                </Field>
+                {/* Artist search */}
+                <div>
+                    <span className="mb-1 block text-sm text-fg-muted">Исполнитель</span>
 
-                <Field label="Жанры (через запятую: rock, post-punk)">
-                    <input
-                        type="text"
-                        value={genres}
-                        onChange={(e) => setGenres(e.target.value)}
-                        disabled={submitting}
-                        className={inputClass}
-                    />
-                </Field>
+                    {artistId ? (
+                        /* Selected artist */
+                        <div className="flex items-center gap-2">
+                            <Link
+                                to={`/artists/${artistId}`}
+                                className="rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 text-sm text-accent hover:underline"
+                                target="_blank"
+                            >
+                                {artistName}
+                            </Link>
+                            <button
+                                type="button"
+                                onClick={clearArtist}
+                                disabled={submitting}
+                                className="text-xs text-fg-muted hover:text-danger"
+                            >
+                                × Сменить
+                            </button>
+                        </div>
+                    ) : (
+                        /* Artist search input */
+                        <div className="relative">
+                            <input
+                                type="text"
+                                value={artistQuery || artistName}
+                                onChange={(e) => {
+                                    setArtistName(e.target.value);
+                                    setArtistQuery(e.target.value);
+                                }}
+                                placeholder="Найди исполнителя из каталога или введи имя вручную…"
+                                disabled={submitting}
+                                className={inputClass}
+                            />
+                            {artistSearching && (
+                                <p className="mt-1 text-xs text-fg-muted">Поиск…</p>
+                            )}
+                            {artistResults.length > 0 && (
+                                <ul className="absolute z-10 mt-1 w-full rounded-md border border-border bg-bg-elevated shadow-lg">
+                                    {artistResults.map((a) => (
+                                        <li key={a.id}>
+                                            <button
+                                                type="button"
+                                                onClick={() => selectArtist(a)}
+                                                className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-bg"
+                                            >
+                                                {a.avatarUrl && (
+                                                    <img
+                                                        src={a.avatarUrl}
+                                                        alt=""
+                                                        className="size-6 rounded-full object-cover"
+                                                    />
+                                                )}
+                                                <span>{a.name}</span>
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    )}
+                    <p className="mt-1 text-xs text-fg-muted">
+                        Выбери артиста из каталога, чтобы трек привязался к странице артиста, или оставь как текст.
+                    </p>
+                </div>
+
+                {/* Featured artists (доп. исполнители) */}
+                <div>
+                    <span className="mb-1 block text-sm text-fg-muted">Доп. исполнители (feat.)</span>
+
+                    {featuredArtists.length > 0 && (
+                        <div className="mb-2 flex flex-wrap gap-2">
+                            {featuredArtists.map((a) => (
+                                <span
+                                    key={a.id}
+                                    className="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent/10 px-3 py-1 text-xs text-accent"
+                                >
+                                    {a.name}
+                                    <button
+                                        type="button"
+                                        onClick={() => setFeaturedArtists((prev) => prev.filter((x) => x.id !== a.id))}
+                                        disabled={submitting}
+                                        className="ml-0.5 text-fg-muted hover:text-danger"
+                                    >
+                                        ×
+                                    </button>
+                                </span>
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="relative max-w-md">
+                        <input
+                            type="text"
+                            value={featQuery}
+                            onChange={(e) => setFeatQuery(e.target.value)}
+                            placeholder="Поиск пользователя для добавления…"
+                            disabled={submitting}
+                            className={inputClass}
+                        />
+                        {featSearching && <p className="mt-1 text-xs text-fg-muted">Поиск…</p>}
+                        {featResults.length > 0 && (
+                            <ul className="absolute z-10 mt-1 w-full rounded-md border border-border bg-bg-elevated shadow-lg">
+                                {featResults
+                                    .filter((u) => !featuredArtists.some((a) => a.id === u.id))
+                                    .map((u) => (
+                                        <li key={u.id} className="flex items-center justify-between gap-3 px-3 py-2 hover:bg-bg">
+                                            <span className="text-sm">{u.displayName}</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setFeaturedArtists((prev) => [...prev, { id: u.id, name: u.displayName }]);
+                                                    setFeatQuery('');
+                                                    setFeatResults([]);
+                                                }}
+                                                className="rounded-md bg-accent px-2 py-1 text-xs text-accent-fg hover:opacity-90"
+                                            >
+                                                Добавить
+                                            </button>
+                                        </li>
+                                    ))}
+                            </ul>
+                        )}
+                    </div>
+                </div>
+
+                {/* Genre checkboxes */}
+                <div>
+                    <span className="mb-2 block text-sm text-fg-muted">Жанры</span>
+                    <div className="flex flex-wrap gap-2">
+                        {(genresQ.data ?? []).map((g) => {
+                            const selected = genres.includes(g.slug);
+                            return (
+                                <button
+                                    key={g.id}
+                                    type="button"
+                                    onClick={() => toggleGenre(g.slug)}
+                                    disabled={submitting}
+                                    className={cn(
+                                        'rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-50',
+                                        selected
+                                            ? 'border-accent bg-accent/15 text-accent'
+                                            : 'border-border text-fg-muted hover:border-accent/50 hover:text-fg',
+                                    )}
+                                >
+                                    {g.displayName}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    {genres.length > 0 && (
+                        <p className="mt-2 text-xs text-fg-muted">
+                            Выбрано: {genres.join(', ')}
+                        </p>
+                    )}
+                </div>
 
                 {submitting && (
                     <div className="space-y-1">
@@ -201,7 +403,8 @@ export function UploadPage() {
                 <button
                     type="submit"
                     disabled={submitting || !file || !title.trim()}
-                    className="rounded-md bg-accent px-4 py-2 font-medium text-accent-fg hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+                    className="rounded-md bg-accent px-4 py-2 font-medium text-accent-fg hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
                     {submitting ? 'Загружаем…' : 'Загрузить'}
                 </button>
             </form>

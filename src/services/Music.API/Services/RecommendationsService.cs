@@ -32,7 +32,7 @@ public class RecommendationsService
         _cache = cache;
     }
 
-    // ---- Popular ----
+    // Popular
 
     public async Task<IReadOnlyList<TrackRecommendationItem>> GetPopularAsync(
         int take, Guid? userId = null, CancellationToken ct = default)
@@ -60,14 +60,22 @@ public class RecommendationsService
             .Join(_db.Tracks,
                 p => p.TrackId, t => t.Id,
                 (p, t) => new TrackRecommendationItem(
-                    t.Id, t.Title, t.Artist, t.ArtistId, t.AlbumId, p.Plays))
+                    t.Id, 
+                    t.Title, 
+                    t.Artist, 
+                    t.ArtistId, 
+                    t.AlbumId, 
+                    p.Plays, 
+                    t.Duration, 
+                    t.IsExplicit,
+                    false))
             .ToListAsync(ct);
 
         await WriteCacheAsync(key, rows, TimeSpan.FromMinutes(15), ct);
         return rows;
     }
 
-    // ---- Similar (co-listened) ----
+    // Similar (co-listened)
 
     public async Task<IReadOnlyList<TrackRecommendationItem>> GetSimilarAsync(
         Guid trackId, int take, Guid? userId = null, CancellationToken ct = default)
@@ -105,14 +113,20 @@ public class RecommendationsService
             .Join(_db.Tracks,
                 p => p.TrackId, t => t.Id,
                 (p, t) => new TrackRecommendationItem(
-                    t.Id, t.Title, t.Artist, t.ArtistId, t.AlbumId, p.CoUsers))
+                    t.Id, 
+                    t.Title, 
+                    t.Artist, 
+                    t.ArtistId, 
+                    t.AlbumId, 
+                    p.CoUsers, 
+                    t.Duration, 
+                    t.IsExplicit, 
+                    false))
             .ToListAsync(ct);
 
         await WriteCacheAsync(key, rows, TimeSpan.FromMinutes(30), ct);
         return rows;
     }
-
-    // ---- Exclude set (user's dislikes + known history for for-you) ----
 
     private record Excluded(HashSet<Guid> TrackIds, HashSet<Guid> ArtistIds);
 
@@ -154,7 +168,7 @@ public class RecommendationsService
             .ToList();
     }
 
-    // ---- For-you ----
+    // For-you
 
     public async Task<IReadOnlyList<TrackRecommendationItem>> GetForYouAsync(
         Guid userId, int take, CancellationToken ct = default)
@@ -190,7 +204,7 @@ public class RecommendationsService
             .GroupBy(x => x.ArtistId)
             .Select(g => new { ArtistId = g.Key, Score = g.Sum(x => x.Score) })
             .OrderByDescending(x => x.Score)
-            .Take(20) // дизлайкнутых артистов выкидываем далее
+            .Take(20)
             .Select(x => x.ArtistId)
             .ToListAsync(ct);
 
@@ -199,11 +213,9 @@ public class RecommendationsService
 
         if (topArtists.Count == 0)
         {
-            // Нет истории / все любимые в mute — возвращаем popular с учётом дизлайков
             return await GetPopularAsync(take, userId, ct);
         }
 
-        // Что юзер уже слышал / лайкнул - исключаем
         var knownTrackIds = await _db.PlayEvents
             .Where(e => e.UserId == userId)
             .Select(e => e.TrackId)
@@ -212,10 +224,8 @@ public class RecommendationsService
 
         var knownSet = new HashSet<Guid>(knownTrackIds);
 
-        // Дизлайкнутые треки тоже исключаем
         foreach (var t in dislikes.TrackIds) knownSet.Add(t);
 
-        // Кандидаты: треки любимых артистов, ранжируем по популярности треков
         var popularityTable = _db.PlayEvents
             .Where(e => e.StartedAt >= since)
             .GroupBy(e => e.TrackId)
@@ -230,7 +240,15 @@ public class RecommendationsService
             .OrderByDescending(x => x.Plays)
             .Take(take * 3)
             .Select(x => new TrackRecommendationItem(
-                x.t.Id, x.t.Title, x.t.Artist, x.t.ArtistId, x.t.AlbumId, x.Plays))
+                x.t.Id, 
+                x.t.Title, 
+                x.t.Artist, 
+                x.t.ArtistId, 
+                x.t.AlbumId, 
+                x.Plays, 
+                x.t.Duration, 
+                x.t.IsExplicit, 
+                false))
             .ToListAsync(ct);
 
         var filtered = candidates.Where(c => !knownSet.Contains(c.TrackId)).Take(take).ToList();
@@ -244,7 +262,7 @@ public class RecommendationsService
         return filtered;
     }
 
-    // ---- Trending artists ----
+    // Trending artists
 
     public async Task<IReadOnlyList<ArtistRecommendationItem>> GetTrendingArtistsAsync(
         int take, Guid? userId = null, CancellationToken ct = default)

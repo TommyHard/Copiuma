@@ -25,6 +25,22 @@ public class ArtistsController : ControllerBase
 
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
+    /// <summary>
+    /// Возвращает первого артиста, созданного текущим пользователем (его "профиль артиста")
+    /// 200 + объект артиста, или 204 если артиста нет.
+    /// </summary>
+    [HttpGet("mine")]
+    public async Task<IActionResult> GetMine()
+    {
+        var artist = await _db.Artists
+            .Where(a => a.CreatedByUserId == UserId)
+            .OrderBy(a => a.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (artist is null) return NoContent();
+        return Ok(await BuildResponse(artist.Id));
+    }
+
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateArtistRequest request)
     {
@@ -201,7 +217,7 @@ public class ArtistsController : ControllerBase
         return NoContent();
     }
 
-    // ---- Avatar ----
+    // Avatar
 
     [HttpPost("{id:guid}/avatar")]
     [RequestSizeLimit(10_000_000)] // 10 MB

@@ -8,7 +8,10 @@ public record TrackRecommendationItem(
     string? Artist,
     Guid? ArtistId,
     Guid? AlbumId,
-    int Score);
+    int Score,
+    TimeSpan? Duration = null,
+    bool IsExplicit = false,
+    bool IsLikedByMe = false);
 
 public record ArtistRecommendationItem(
     Guid ArtistId,

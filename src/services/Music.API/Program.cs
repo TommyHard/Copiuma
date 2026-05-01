@@ -113,18 +113,17 @@ public class Program
                     options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
                 });
 
-            // Auth-hardening: policies
             builder.Services.AddAuthorization(options =>
             {
-                // DefaultPolicy — то, что использует [Authorize] без явного policy-имени
-                // Жёсткое требование: authenticated + email подтверждён
+                // DefaultPolicy вЂ” С‚Рѕ, С‡С‚Рѕ РёСЃРїРѕР»СЊР·СѓРµС‚ [Authorize] Р±РµР· СЏРІРЅРѕРіРѕ policy-РёРјРµРЅРё
+                // Р–С‘СЃС‚РєРѕРµ С‚СЂРµР±РѕРІР°РЅРёРµ: authenticated + email РїРѕРґС‚РІРµСЂР¶РґС‘РЅ
                 options.DefaultPolicy = new AuthorizationPolicyBuilder()
                     .AddAuthenticationSchemes(GatewayUserAuthenticationHandler.SchemeName)
                     .RequireAuthenticatedUser()
                     .RequireClaim("email_verified", "true")
                     .Build();
 
-                // ArtistOnly — навешиваем ТОЛЬКО на upload (POST /tracks/upload, future POST /albums и т.п.)
+                // ArtistOnly РўРћР›Р¬РљРћ РЅР° upload (POST /tracks/upload, future POST /albums Рё С‚.Рї.)
                 options.AddPolicy("ArtistOnly", p => p
                     .AddAuthenticationSchemes(GatewayUserAuthenticationHandler.SchemeName)
                     .RequireAuthenticatedUser()
@@ -215,7 +214,7 @@ public class Program
                 .AddNpgSql(
                     connectionStringFactory: _ =>
                         builder.Configuration.GetConnectionString("DefaultConnection")
-                        ?? throw new InvalidOperationException("DefaultConnection не сконфигурирован"),
+                        ?? throw new InvalidOperationException("DefaultConnection РЅРµ СЃРєРѕРЅС„РёРіСѓСЂРёСЂРѕРІР°РЅ"),
                     name: "postgres",
                     tags: new[] { "ready", "db" })
                 .AddRedis(
@@ -232,6 +231,7 @@ public class Program
             {
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                 await db.Database.MigrateAsync();
+                await SeedGenresAsync(db);
             }
 
             app.UseMiddleware<CorrelationIdMiddleware>();
@@ -310,12 +310,39 @@ public class Program
         }
         catch (Exception ex)
         {
-            Log.Fatal(ex, "Music.API не смог стартовать");
+            Log.Fatal(ex, "Music.API РЅРµ СЃРјРѕРі СЃС‚Р°СЂС‚РѕРІР°С‚СЊ");
             throw;
         }
         finally
         {
             await Log.CloseAndFlushAsync();
         }
+    }
+    private static async Task SeedGenresAsync(AppDbContext db)
+    {
+        if (await db.Genres.AnyAsync()) return;
+
+        var seeds = new (string slug, string display)[]
+        {
+            ("rock", "Rock"), ("pop", "Pop"), ("hip-hop", "Hip-Hop"),
+            ("electronic", "Electronic"), ("jazz", "Jazz"), ("classical", "Classical"),
+            ("r&b", "R&B"), ("soul", "Soul"), ("metal", "Metal"),
+            ("folk", "Folk"), ("indie", "Indie"), ("punk", "Punk"),
+            ("ambient", "Ambient"), ("lo-fi", "Lo-Fi"), ("blues", "Blues"),
+            ("country", "Country"), ("reggae", "Reggae"), ("alternative", "Alternative"),
+            ("post-punk", "Post-Punk"),
+        };
+
+        foreach (var (slug, display) in seeds)
+        {
+            db.Genres.Add(new Music.API.Models.Genre
+            {
+                Id = Guid.NewGuid(),
+                Slug = slug,
+                DisplayName = display,
+            });
+        }
+
+        await db.SaveChangesAsync();
     }
 }

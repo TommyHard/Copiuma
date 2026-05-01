@@ -20,7 +20,8 @@ public record FeedItem(
     Guid ArtistId,
     string ArtistName,
     string? CoverKey,
-    DateTime ReleasedAt);
+    DateTime ReleasedAt,
+    TimeSpan? Duration = null);
 
 /// <summary>
 /// Топ артистов юзера по истории прослушиваний. За окно sinceDays

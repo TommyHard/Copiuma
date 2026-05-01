@@ -1,12 +1,12 @@
 ﻿namespace Music.API.Dtos;
 
-// ---- Ratings ----
+// Ratings
 
 public record RateTrackRequest(int Value);
 
 public record TrackRatingResponse(Guid TrackId, int? YourValue, double Average, int Count, int[] Distribution);
 
-// ---- Reviews ----
+// Reviews
 
 public record CreateReviewRequest(string Text);
 

@@ -12,4 +12,9 @@ public class UploadTrackRequest
     public int? TrackNumber { get; set; }
 
     public List<string>? Genres { get; set; }
+
+    /// <summary>
+    /// ID доп. исполнителей
+    /// </summary>
+    public List<Guid>? FeaturedArtistIds { get; set; }
 }

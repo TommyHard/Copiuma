@@ -1,56 +1,62 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     followUser,
     unfollowUser,
     getFollowedUsers,
-    getFriends,
+    listFollowedArtists,
+    unfollowArtist,
 } from '@/shared/api/follows';
-import { searchUsers } from '@/shared/api/users';
-import type { UserSearchResult, FollowedUser, FriendItem } from '@/shared/types';
-import { cn } from '@/shared/lib/cn';
-
-type Tab = 'friends' | 'following';
+import { searchUsers, batchUsers } from '@/shared/api/users';
+import type { UserSearchResult, FollowedUser, FollowedArtist } from '@/shared/types';
 
 export function FriendsPage() {
-    const [tab, setTab] = useState<Tab>('friends');
     const qc = useQueryClient();
-
-    const friends = useQuery({
-        queryKey: ['friends'],
-        queryFn: getFriends,
-        enabled: tab === 'friends',
-    });
 
     const following = useQuery({
         queryKey: ['following-users'],
         queryFn: getFollowedUsers,
-        enabled: tab === 'following',
     });
+
+    const followedArtists = useQuery({
+        queryKey: ['followed-artists'],
+        queryFn: listFollowedArtists,
+    });
+
+    const userIds = (following.data ?? []).map((u) => u.userId);
+
+    const namesQuery = useQuery({
+        queryKey: ['user-names', ...userIds.sort()],
+        queryFn: () => batchUsers(userIds),
+        enabled: userIds.length > 0,
+    });
+
+    const nameMap: Record<string, string> = {};
+    for (const u of namesQuery.data ?? []) {
+        nameMap[u.id] = u.displayName;
+    }
 
     return (
         <section className="space-y-6">
-            <h1 className="text-2xl font-semibold">Люди</h1>
+            <h1 className="text-2xl font-semibold">Подписки</h1>
 
             {/* User search */}
             <UserSearch />
 
-            {/* Tabs */}
-            <div className="flex gap-4 border-b border-border text-sm">
-                <TabBtn active={tab === 'friends'} onClick={() => setTab('friends')}>
-                    Друзья (взаимные)
-                </TabBtn>
-                <TabBtn active={tab === 'following'} onClick={() => setTab('following')}>
-                    Подписки
-                </TabBtn>
-            </div>
+            {/* Подписки на артистов */}
+            {followedArtists.data && followedArtists.data.length > 0 && (
+                <div className="space-y-3">
+                    <h2 className="text-lg font-medium">Артисты</h2>
+                    <ArtistFollowsList data={followedArtists.data} qc={qc} />
+                </div>
+            )}
 
-            {tab === 'friends' && (
-                <FriendsList data={friends.data} loading={friends.isLoading} qc={qc} />
-            )}
-            {tab === 'following' && (
-                <FollowingList data={following.data} loading={following.isLoading} qc={qc} />
-            )}
+            {/* Подписки на пользователей */}
+            <div className="space-y-3">
+                <h2 className="text-lg font-medium">Пользователи</h2>
+                <FollowingList data={following.data} loading={following.isLoading} nameMap={nameMap} qc={qc} />
+            </div>
         </section>
     );
 }
@@ -78,7 +84,6 @@ function UserSearch() {
     const follow = useMutation({
         mutationFn: (userId: string) => followUser(userId),
         onSuccess: () => {
-            qc.invalidateQueries({ queryKey: ['friends'] });
             qc.invalidateQueries({ queryKey: ['following-users'] });
         },
     });
@@ -117,41 +122,39 @@ function UserSearch() {
     );
 }
 
-// Friends list
+// Artist follows list
 
-function FriendsList({
+function ArtistFollowsList({
     data,
-    loading,
     qc,
 }: {
-    data?: FriendItem[];
-    loading: boolean;
+    data: FollowedArtist[];
     qc: ReturnType<typeof useQueryClient>;
 }) {
     const unfollow = useMutation({
-        mutationFn: (userId: string) => unfollowUser(userId),
+        mutationFn: (artistId: string) => unfollowArtist(artistId),
         onSuccess: () => {
-            qc.invalidateQueries({ queryKey: ['friends'] });
-            qc.invalidateQueries({ queryKey: ['following-users'] });
+            qc.invalidateQueries({ queryKey: ['followed-artists'] });
         },
     });
 
-    if (loading) return <p className="text-fg-muted">Загружаем…</p>;
-    if (!data || data.length === 0)
-        return <p className="text-fg-muted">Взаимных подписок пока нет. Найди людей через поиск выше.</p>;
-
     return (
         <ul className="divide-y divide-border rounded-md border border-border">
-            {data.map((f) => (
-                <li key={f.userId} className="flex items-center gap-4 px-4 py-3 text-sm">
+            {data.map((a) => (
+                <li key={a.id} className="flex items-center gap-4 px-4 py-3 text-sm">
                     <div className="flex-1">
-                        <div className="font-medium font-mono text-xs text-fg-muted">{f.userId.slice(0, 8)}…</div>
+                        <Link
+                            to={`/artists/${a.id}`}
+                            className="font-medium hover:underline"
+                        >
+                            {a.name}
+                        </Link>
                         <div className="text-xs text-fg-muted">
-                            Друзья с {new Date(f.sinceAt).toLocaleDateString('ru')}
+                            с {new Date(a.followedAt).toLocaleDateString('ru')}
                         </div>
                     </div>
                     <button
-                        onClick={() => unfollow.mutate(f.userId)}
+                        onClick={() => unfollow.mutate(a.id)}
                         disabled={unfollow.isPending}
                         className="rounded-md border border-border px-3 py-1 text-xs hover:bg-bg-elevated disabled:opacity-50"
                     >
@@ -163,72 +166,50 @@ function FriendsList({
     );
 }
 
-// Following list
+// Following list (users)
 
 function FollowingList({
     data,
     loading,
+    nameMap,
     qc,
 }: {
     data?: FollowedUser[];
     loading: boolean;
+    nameMap: Record<string, string>;
     qc: ReturnType<typeof useQueryClient>;
 }) {
     const unfollow = useMutation({
         mutationFn: (userId: string) => unfollowUser(userId),
         onSuccess: () => {
-            qc.invalidateQueries({ queryKey: ['friends'] });
             qc.invalidateQueries({ queryKey: ['following-users'] });
         },
     });
 
     if (loading) return <p className="text-fg-muted">Загружаем…</p>;
     if (!data || data.length === 0)
-        return <p className="text-fg-muted">Ни на кого не подписан.</p>;
+        return <p className="text-fg-muted">Ни на кого не подписан. Найди людей через поиск выше.</p>;
 
     return (
         <ul className="divide-y divide-border rounded-md border border-border">
             {data.map((u) => (
                 <li key={u.userId} className="flex items-center gap-4 px-4 py-3 text-sm">
                     <div className="flex-1">
-                        <div className="font-medium font-mono text-xs text-fg-muted">{u.userId.slice(0, 8)}…</div>
+                        <div className="font-medium">
+                            {nameMap[u.userId] ?? <span className="font-mono text-xs text-fg-muted">{u.userId.slice(0, 8)}…</span>}
+                        </div>
                         <div className="text-xs text-fg-muted">
-                            {u.isMutual ? '👥 Взаимная подписка' : '-> Подписан'}
-                            {' · '}
                             с {new Date(u.subscribedAt).toLocaleDateString('ru')}
                         </div>
                     </div>
                     <button
                         onClick={() => unfollow.mutate(u.userId)}
                         disabled={unfollow.isPending}
-                        className="rounded-md border border-border px-3 py-1 text-xs hover:bg-bg-elevated disabled:opacity-50"
-                    >
+                        className="rounded-md border border-border px-3 py-1 text-xs hover:bg-bg-elevated disabled:opacity-50">
                         Отписаться
                     </button>
                 </li>
             ))}
         </ul>
-    );
-}
-
-function TabBtn({
-    active,
-    onClick,
-    children,
-}: {
-    active: boolean;
-    onClick: () => void;
-    children: React.ReactNode;
-}) {
-    return (
-        <button
-            onClick={onClick}
-            className={cn(
-                '-mb-px border-b-2 px-3 py-2 text-fg-muted hover:text-fg',
-                active ? 'border-accent text-fg' : 'border-transparent',
-            )}
-        >
-            {children}
-        </button>
     );
 }

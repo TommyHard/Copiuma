@@ -6,8 +6,19 @@ export async function getArtist(id: string): Promise<ArtistSummary> {
     return r.data;
 }
 
+export async function getMyArtist(): Promise<ArtistSummary | null> {
+    const r = await api.get<ArtistSummary>('/artists/mine', { validateStatus: (s) => s === 200 || s === 204 });
+    return r.status === 204 ? null : r.data;
+}
+
 export async function listArtists(page = 1, pageSize = 30): Promise<ArtistSummary[]> {
     const r = await api.get<ArtistSummary[]>('/artists', { params: { page, pageSize } });
+    return r.data;
+}
+
+export async function searchArtists(q: string): Promise<ArtistSummary[]> {
+    if (q.trim().length < 2) return [];
+    const r = await api.get<ArtistSummary[]>('/artists', { params: { q, take: 10 } });
     return r.data;
 }
 
@@ -22,7 +33,7 @@ export async function listArtistTracks(artistId: string): Promise<TrackListItem[
 }
 
 /**
- * àâàòàð àðòèñòà. Backend "POST /artists/{id}/avatar", multipart
+ * Ð°Ð²Ð°Ñ‚Ð°Ñ€ Ð°Ñ€Ñ‚Ð¸ÑÑ‚Ð°. Backend "POST /artists/{id}/avatar", multipart
  */
 export async function uploadArtistAvatar(artistId: string, file: File): Promise<ArtistSummary> {
     const fd = new FormData();

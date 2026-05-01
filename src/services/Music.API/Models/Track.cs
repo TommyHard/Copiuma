@@ -42,11 +42,14 @@ public class Track
     /// </summary>
     public int? TrackNumber { get; set; }
 
-    /// <summary>
-    /// Массив жанров в lower-case ("rock", "post-punk")
-    /// Пустой массив = жанр не указан
-    /// </summary>
     public List<string> Genres { get; set; } = new();
+
+    public List<TrackGenre> TrackGenres { get; set; } = new();
+
+    /// <summary>
+    /// Доп. исполнители
+    /// </summary>
+    public List<TrackFeaturedArtist> FeaturedArtists { get; set; } = new();
 
     /// <summary>
     /// Explicit-контент (мат / 18+)

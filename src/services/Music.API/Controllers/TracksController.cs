@@ -114,6 +114,8 @@ public class TracksController : ControllerBase
         var savedFileName = await _storage.UploadFileAsync(
             stream, request.File.FileName, request.File.ContentType, request.File.Length);
 
+        var normalizedGenres = NormalizeGenres(request.Genres);
+
         var track = new Track
         {
             Id = Guid.NewGuid(),
@@ -122,7 +124,7 @@ public class TracksController : ControllerBase
             ArtistId = request.ArtistId,
             AlbumId = request.AlbumId,
             TrackNumber = request.AlbumId.HasValue ? request.TrackNumber : null,
-            Genres = NormalizeGenres(request.Genres),
+            Genres = normalizedGenres,
             FileName = savedFileName,
             ContentType = request.File.ContentType,
             UploadedAt = DateTime.UtcNow,
@@ -130,6 +132,39 @@ public class TracksController : ControllerBase
         };
 
         _context.Tracks.Add(track);
+
+        if (normalizedGenres.Count > 0)
+        {
+            var genreEntities = await _context.Genres
+                .Where(g => normalizedGenres.Contains(g.Slug))
+                .ToListAsync();
+            foreach (var ge in genreEntities)
+            {
+                _context.TrackGenres.Add(new Models.TrackGenre
+                {
+                    TrackId = track.Id,
+                    GenreId = ge.Id
+                });
+            }
+        }
+
+        if (request.FeaturedArtistIds is { Count: > 0 })
+        {
+            var validArtistIds = await _context.Artists
+                .Where(a => request.FeaturedArtistIds.Contains(a.Id))
+                .Select(a => a.Id)
+                .ToListAsync();
+            for (int i = 0; i < validArtistIds.Count; i++)
+            {
+                _context.TrackFeaturedArtists.Add(new Models.TrackFeaturedArtist
+                {
+                    TrackId = track.Id,
+                    ArtistId = validArtistIds[i],
+                    Position = i
+                });
+            }
+        }
+
         await _context.SaveChangesAsync();
 
         CopiumaMetrics.TracksUploaded.Add(1);
@@ -242,9 +277,54 @@ public class TracksController : ControllerBase
         if (track.UploadedByUserId != UserId)
             return Forbid();
 
+        var normalizedGenres = NormalizeGenres(request.Genres);
+
         track.Title = request.Title.Trim();
-        track.Genres = NormalizeGenres(request.Genres);
+        track.Genres = normalizedGenres;
         track.IsExplicit = request.IsExplicit;
+
+        // Обновляем связи TrackGenre
+        var existingLinks = await _context.TrackGenres
+            .Where(tg => tg.TrackId == id)
+            .ToListAsync();
+        _context.TrackGenres.RemoveRange(existingLinks);
+
+        if (normalizedGenres.Count > 0)
+        {
+            var genreEntities = await _context.Genres
+                .Where(g => normalizedGenres.Contains(g.Slug))
+                .ToListAsync();
+            foreach (var ge in genreEntities)
+            {
+                _context.TrackGenres.Add(new Models.TrackGenre
+                {
+                    TrackId = id,
+                    GenreId = ge.Id
+                });
+            }
+        }
+
+        var existingFeatured = await _context.TrackFeaturedArtists
+            .Where(fa => fa.TrackId == id)
+            .ToListAsync();
+        _context.TrackFeaturedArtists.RemoveRange(existingFeatured);
+
+        if (request.FeaturedArtistIds is { Count: > 0 })
+        {
+            var validArtistIds = await _context.Artists
+                .Where(a => request.FeaturedArtistIds.Contains(a.Id))
+                .Select(a => a.Id)
+                .ToListAsync();
+            for (int i = 0; i < validArtistIds.Count; i++)
+            {
+                _context.TrackFeaturedArtists.Add(new Models.TrackFeaturedArtist
+                {
+                    TrackId = id,
+                    ArtistId = validArtistIds[i],
+                    Position = i
+                });
+            }
+        }
 
         await _context.SaveChangesAsync();
         await BumpCacheVersionAsync();
@@ -291,9 +371,15 @@ public class TracksController : ControllerBase
                 t.AlbumId,
                 t.TrackNumber,
                 t.IsExplicit,
+                t.Genres,
                 t.ProcessingStatus,
                 IsLikedByMe = _context.LikedTracks.Any(l => l.TrackId == id && l.UserId == UserId),
-                UploadedByUserId = t.UploadedByUserId
+                UploadedByUserId = t.UploadedByUserId,
+                FeaturedArtists = _context.TrackFeaturedArtists
+                    .Where(fa => fa.TrackId == id)
+                    .OrderBy(fa => fa.Position)
+                    .Select(fa => new { fa.Artist!.Id, fa.Artist!.Name })
+                    .ToList()
             })
             .FirstOrDefaultAsync();
 

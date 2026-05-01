@@ -11,7 +11,7 @@ namespace Music.API.Controllers;
 
 /// <summary>
 /// Полиморфные подписки юзера: на артистов, других юзеров, плейлисты
-/// Плюс лента новых релизов от артистов и вывод «друзей» = взаимных user-follows
+/// Плюс лента новых релизов от артистов
 /// </summary>
 [ApiController]
 [Authorize]
@@ -29,7 +29,7 @@ public class FollowsController : ControllerBase
 
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-    // ---- Artists ----
+    // Artists
 
     [HttpPost("artists/{artistId:guid}")]
     public async Task<IActionResult> FollowArtist(Guid artistId, CancellationToken ct)
@@ -69,7 +69,7 @@ public class FollowsController : ControllerBase
         return Ok(list);
     }
 
-    // ---- Users ----
+    // Users
 
     [HttpPost("users/{userId:guid}")]
     public async Task<IActionResult> FollowUser(Guid userId, CancellationToken ct)
@@ -127,7 +127,7 @@ public class FollowsController : ControllerBase
         return Ok(list);
     }
 
-    // ---- Playlists ----
+    // Playlists
 
     [HttpPost("playlists/{playlistId:guid}")]
     public async Task<IActionResult> FollowPlaylist(Guid playlistId, CancellationToken ct)
@@ -169,7 +169,7 @@ public class FollowsController : ControllerBase
         return Ok(list);
     }
 
-    // ---- Friends (взаимные user-follows) ----
+    // Friends
 
     [HttpGet("friends")]
     public async Task<IActionResult> GetFriends(CancellationToken ct)
@@ -192,7 +192,7 @@ public class FollowsController : ControllerBase
         return Ok(list);
     }
 
-    // ---- Feed (новые релизы от артистов, на которых подписан) ----
+    // Feed
 
     /// <summary>
     /// Лента новых релизов от артистов, на которых подписан пользователь
@@ -241,7 +241,8 @@ public class FollowsController : ControllerBase
                 a.ArtistId,
                 a.Artist!.Name,
                 a.CoverKey,
-                a.CreatedAt))
+                a.CreatedAt,
+                null))
             .ToListAsync(ct);
 
         var tracksQuery = _db.Tracks
@@ -261,7 +262,8 @@ public class FollowsController : ControllerBase
                 t.ArtistId!.Value,
                 t.ArtistEntity!.Name,
                 null,
-                t.UploadedAt))
+                t.UploadedAt,
+                t.Duration))
             .ToListAsync(ct);
 
         var merged = albums.Concat(tracks)
@@ -272,12 +274,8 @@ public class FollowsController : ControllerBase
         return Ok(merged);
     }
 
-    // ---- helpers ----
+    // helpers
 
-    /// <summary>
-    /// Вставка подписки. Возвращает true если реально добавили строку
-    /// (false если подписка уже была)
-    /// </summary>
     private async Task<bool> UpsertFollowAsync(FollowTargetType type, Guid targetId, CancellationToken ct)
     {
         var me = UserId;

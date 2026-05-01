@@ -17,4 +17,9 @@ public class UpdateTrackRequest
     /// Explicit-контент
     /// </summary>
     public bool IsExplicit { get; set; }
+
+    /// <summary>
+    /// ID доп. исполнителей
+    /// </summary>
+    public List<Guid>? FeaturedArtistIds { get; set; }
 }

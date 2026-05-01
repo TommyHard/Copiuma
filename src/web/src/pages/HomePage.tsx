@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/features/auth/useAuth';
 import { getFeed } from '@/shared/api/follows';
 import { forYouTracks, popularTracks, trendingArtists } from '@/shared/api/recommendations';
+import { listTracks } from '@/shared/api/catalog';
 import { TrackRow } from './track-row';
 
 export function HomePage() {
@@ -12,6 +13,13 @@ export function HomePage() {
     const popular = useQuery({ queryKey: ['popular'], queryFn: () => popularTracks(15) });
     const forYou = useQuery({ queryKey: ['for-you'], queryFn: () => forYouTracks(15) });
     const artists = useQuery({ queryKey: ['trending-artists'], queryFn: () => trendingArtists(8) });
+
+    const popularEmpty = !popular.isLoading && (!popular.data || popular.data.length === 0);
+    const catalog = useQuery({
+        queryKey: ['catalog', 1],
+        queryFn: () => listTracks(1, 15),
+        enabled: popularEmpty,
+    });
 
     return (
         <div className="space-y-12">
@@ -45,15 +53,27 @@ export function HomePage() {
                 </Section>
             )}
 
-            {popular.data && popular.data.length > 0 && (
-                <Section title="Популярное" actionTo="/catalog" actionLabel="Весь каталог →">
+            <Section title={popularEmpty ? 'Новые треки' : 'Популярное'} actionTo="/catalog" actionLabel="Весь каталог →">
+                {popular.isLoading && <p className="text-fg-muted">Загружаем…</p>}
+                {popular.data && popular.data.length > 0 && (
                     <ul className="divide-y divide-border rounded-md border border-border">
                         {popular.data.map((t, i) => (
                             <TrackRow key={t.id} track={t} number={i + 1} />
                         ))}
                     </ul>
-                </Section>
-            )}
+                )}
+                {popularEmpty && catalog.data && catalog.data.length > 0 && (
+                    <ul className="divide-y divide-border rounded-md border border-border">
+                        {catalog.data.map((t, i) => (
+                            <TrackRow key={t.id} track={t} number={i + 1} />
+                        ))}
+                    </ul>
+                )}
+                {popularEmpty && catalog.isLoading && <p className="text-fg-muted">Загружаем…</p>}
+                {popularEmpty && !catalog.isLoading && (!catalog.data || catalog.data.length === 0) && (
+                    <p className="text-fg-muted">Пока нет треков. Загляни в каталог.</p>
+                )}
+            </Section>
 
             {forYou.data && forYou.data.length > 0 && (
                 <Section title="Для тебя">

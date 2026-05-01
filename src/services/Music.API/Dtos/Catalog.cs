@@ -1,6 +1,6 @@
 ﻿namespace Music.API.Dtos;
 
-// ---- Artists ----
+// Artists
 
 public record CreateArtistRequest(string Name, string? Bio);
 public record UpdateArtistRequest(string? Name, string? Bio);
@@ -22,7 +22,7 @@ public record ArtistListItem(
     int AlbumCount,
     int TrackCount);
 
-// ---- Albums ----
+// Albums
 
 public record CreateAlbumRequest(Guid ArtistId, string Title, DateOnly? ReleaseDate, List<string>? Genres = null);
 public record UpdateAlbumRequest(string? Title, DateOnly? ReleaseDate, List<string>? Genres = null);

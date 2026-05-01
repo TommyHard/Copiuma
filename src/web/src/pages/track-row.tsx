@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { TrackListItem } from '@/shared/types';
@@ -11,11 +12,27 @@ export function TrackRow({ track, number }: { track: TrackListItem; number?: num
     const play = usePlayTrack();
     const qc = useQueryClient();
 
+    const [optimisticLiked, setOptimisticLiked] = useState(track.isLikedByMe ?? false);
+
+    useEffect(() => {
+        setOptimisticLiked(track.isLikedByMe ?? false);
+    }, [track.isLikedByMe]);
+
     const like = useMutation({
         mutationFn: () => toggleLike(track.id),
-        onSuccess: () => {
+        onMutate: () => {
+            setOptimisticLiked((prev) => !prev);
+        },
+        onError: () => {
+            setOptimisticLiked((prev) => !prev);
+        },
+        onSettled: () => {
             qc.invalidateQueries({ queryKey: ['catalog'] });
             qc.invalidateQueries({ queryKey: ['favorites'] });
+            qc.invalidateQueries({ queryKey: ['popular'] });
+            qc.invalidateQueries({ queryKey: ['for-you'] });
+            qc.invalidateQueries({ queryKey: ['track', track.id] });
+            qc.invalidateQueries({ queryKey: ['similar'] });
         },
     });
 
@@ -32,8 +49,7 @@ export function TrackRow({ track, number }: { track: TrackListItem; number?: num
             <button
                 onClick={() => play(track)}
                 className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg hover:opacity-90"
-                title="Играть"
-            >
+                title="Играть">
                 ▶
             </button>
 
@@ -52,7 +68,17 @@ export function TrackRow({ track, number }: { track: TrackListItem; number?: num
                         </span>
                     )}
                 </Link>
-                <div className="truncate text-xs text-fg-muted">{track.artist ?? '—'}</div>
+                {track.artistId ? (
+                    <Link
+                        to={`/artists/${track.artistId}`}
+                        className="block truncate text-xs text-fg-muted hover:text-fg hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {track.artist ?? '—'}
+                    </Link>
+                ) : (
+                    <div className="truncate text-xs text-fg-muted">{track.artist ?? '—'}</div>
+                )}
             </div>
 
             <span className="text-xs tabular-nums text-fg-muted">{formatDuration(track.duration)}</span>
@@ -62,10 +88,9 @@ export function TrackRow({ track, number }: { track: TrackListItem; number?: num
                 disabled={like.isPending}
                 className={cn(
                     "text-lg transition-colors hover:scale-110 disabled:opacity-50",
-                    track.isLikedByMe ? "text-accent" : "text-fg-muted hover:text-fg"
+                    optimisticLiked ? "text-accent" : "text-fg-muted hover:text-fg"
                 )}
-                title={track.isLikedByMe ? "Убрать из избранного" : "В избранное"}
-            >
+                title={optimisticLiked ? "Убрать из избранного" : "В избранное"}>
                 ♥
             </button>
 
@@ -80,7 +105,8 @@ export function TrackRow({ track, number }: { track: TrackListItem; number?: num
                     dislike.isSuccess
                         ? "text-fg-muted line-through"
                         : "text-fg-muted hover:text-danger"
-                )}>
+                )}
+            >
                 🚫
             </button>
         </li>

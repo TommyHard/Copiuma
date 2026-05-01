@@ -8,6 +8,7 @@ export interface UploadFields {
     albumId?: string;
     trackNumber?: number;
     genres?: string[];
+    featuredArtistIds?: string[];
 }
 
 export async function uploadTrack(
@@ -24,6 +25,7 @@ export async function uploadTrack(
     if (fields.albumId) fd.append('AlbumId', fields.albumId);
     if (fields.trackNumber !== undefined) fd.append('TrackNumber', String(fields.trackNumber));
     fields.genres?.forEach((g) => fd.append('Genres', g));
+    fields.featuredArtistIds?.forEach((id) => fd.append('FeaturedArtistIds', id));
 
     const r = await api.post<UploadResult>('/tracks/upload', fd, {
         headers: { 'Content-Type': undefined },
@@ -53,8 +55,17 @@ export interface UpdateTrackFields {
     title: string;
     genres?: string[];
     isExplicit: boolean;
+    featuredArtistIds?: string[];
 }
 
 export async function updateTrack(trackId: string, fields: UpdateTrackFields): Promise<void> {
     await api.put(`/tracks/${trackId}`, fields);
+}
+
+export async function reportPlayEvent(
+    trackId: string,
+    playedMs: number,
+    completed: boolean,
+): Promise<void> {
+    await api.post(`/tracks/${trackId}/play-event`, { playedMs, completed });
 }

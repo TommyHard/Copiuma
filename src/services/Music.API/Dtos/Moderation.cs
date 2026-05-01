@@ -2,7 +2,7 @@
 
 namespace Music.API.Dtos;
 
-// ---- Reports ----
+// Reports
 
 public record CreateReportRequest(
     ReportTargetType TargetType,
@@ -26,7 +26,7 @@ public record ResolveReportRequest(
     ReportStatus NewStatus, // Actioned / Dismissed
     string? Note);
 
-// ---- Admin actions ----
+// Admin actions
 
 public record ShadowbanRequest(
     string? Note,
@@ -37,6 +37,6 @@ public record DmcaTakedownRequest(
     string? ClaimantEmail,
     string? ClaimReference);
 
-// ---- Track flags ----
+// Track flags
 
 public record SetExplicitRequest(bool IsExplicit);

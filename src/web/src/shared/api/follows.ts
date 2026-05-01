@@ -15,8 +15,15 @@ export async function listFollowedArtists(): Promise<FollowedArtist[]> {
 }
 
 export async function getFeed(limit = 30): Promise<FeedItem[]> {
-    const r = await api.get<FeedItem[]>('/follows/feed', { params: { limit } });
-    return r.data;
+    const r = await api.get<any[]>('/follows/feed', { params: { limit } });
+    return r.data.map((item) => ({
+        trackId: item.trackId ?? item.entityId,
+        title: item.title,
+        artist: item.artist ?? item.artistName ?? null,
+        artistId: item.artistId ?? null,
+        uploadedAt: item.uploadedAt ?? item.releasedAt ?? '',
+        duration: item.duration ?? null,
+    }));
 }
 
 // User follows

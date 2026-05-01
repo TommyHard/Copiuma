@@ -11,9 +11,14 @@ function normalizeTrack(t: any): TrackListItem {
         ...t,
         id: t.id ?? t.Id,
         title: t.title ?? t.Title,
-        artist: t.artist ?? t.Artist,
-        duration: t.duration ?? t.Duration,
+        artist: t.artist ?? t.Artist ?? null,
+        duration: t.duration ?? t.Duration ?? null,
+        artistId: t.artistId ?? t.ArtistId ?? null,
+        albumId: t.albumId ?? t.AlbumId ?? null,
+        trackNumber: t.trackNumber ?? t.TrackNumber ?? null,
+        uploadedAt: t.uploadedAt ?? t.UploadedAt ?? '',
         isExplicit: t.isExplicit ?? t.IsExplicit ?? false,
+        isLikedByMe: t.isLikedByMe ?? t.IsLikedByMe ?? false,
     };
 }
 

@@ -1,7 +1,10 @@
-import { useState, type FormEvent } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useRef, type FormEvent } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { updateTrack } from '@/shared/api/tracks';
-import type { TrackDetail } from '@/shared/types';
+import { listGenres } from '@/shared/api/genres';
+import { searchUsers } from '@/shared/api/users';
+import type { TrackDetail, UserSearchResult } from '@/shared/types';
+import { cn } from '@/shared/lib/cn';
 
 interface Props {
     open: boolean;
@@ -9,32 +12,52 @@ interface Props {
     onClose: () => void;
 }
 
-const KNOWN_GENRES = [
-    'rock', 'pop', 'hip-hop', 'electronic', 'jazz', 'classical',
-    'r&b', 'soul', 'metal', 'folk', 'indie', 'punk', 'post-punk',
-    'ambient', 'lo-fi', 'blues', 'country', 'reggae', 'alternative',
-];
-
 export function TrackEditDialog({ open, track, onClose }: Props) {
     const qc = useQueryClient();
+    const genresQ = useQuery({
+        queryKey: ['genres'],
+        queryFn: listGenres,
+        staleTime: 10 * 60 * 1000,
+    });
     const [title, setTitle] = useState(track.title);
-    const [genreInput, setGenreInput] = useState('');
     const [genres, setGenres] = useState<string[]>([]);
     const [isExplicit, setIsExplicit] = useState(track.isExplicit);
+    const [featuredArtists, setFeaturedArtists] = useState<{ id: string; name: string }[]>([]);
+    const [featQuery, setFeatQuery] = useState('');
+    const [featResults, setFeatResults] = useState<UserSearchResult[]>([]);
+    const [featSearching, setFeatSearching] = useState(false);
+    const featDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [initialized, setInitialized] = useState(false);
 
     if (open && !initialized) {
         setTitle(track.title);
         setGenres((track as any).genres ?? []);
         setIsExplicit(track.isExplicit);
+        setFeaturedArtists((track as any).featuredArtists ?? []);
         setInitialized(true);
     }
     if (!open && initialized) {
         setInitialized(false);
     }
 
+    useEffect(() => {
+        if (featDebounceRef.current) clearTimeout(featDebounceRef.current);
+        if (featQuery.trim().length < 2) { setFeatResults([]); return; }
+        featDebounceRef.current = setTimeout(async () => {
+            setFeatSearching(true);
+            try { setFeatResults(await searchUsers(featQuery)); }
+            catch { setFeatResults([]); }
+            finally { setFeatSearching(false); }
+        }, 300);
+    }, [featQuery]);
+
     const save = useMutation({
-        mutationFn: () => updateTrack(track.id, { title: title.trim(), genres, isExplicit }),
+        mutationFn: () => updateTrack(track.id, {
+            title: title.trim(),
+            genres,
+            isExplicit,
+            featuredArtistIds: featuredArtists.map(a => a.id),
+        }),
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ['track', track.id] });
             qc.invalidateQueries({ queryKey: ['catalog'] });
@@ -42,14 +65,8 @@ export function TrackEditDialog({ open, track, onClose }: Props) {
         },
     });
 
-    function addGenre(g: string) {
-        const norm = g.trim().toLowerCase();
-        if (norm && !genres.includes(norm)) setGenres([...genres, norm]);
-        setGenreInput('');
-    }
-
-    function removeGenre(g: string) {
-        setGenres(genres.filter((x) => x !== g));
+    function toggleGenre(g: string) {
+        setGenres((prev) => prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]);
     }
 
     function onSubmit(e: FormEvent) {
@@ -84,56 +101,77 @@ export function TrackEditDialog({ open, track, onClose }: Props) {
                     />
                 </label>
 
-                {/* Genres */}
+                {/* Genres clickable */}
                 <div>
-                    <span className="mb-1 block text-sm text-fg-muted">Жанры</span>
-                    {genres.length > 0 && (
-                        <div className="mb-2 flex flex-wrap gap-1">
-                            {genres.map((g) => (
-                                <span
-                                    key={g}
-                                    className="flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-xs"
+                    <span className="mb-2 block text-sm text-fg-muted">Жанры</span>
+                    <div className="flex flex-wrap gap-2">
+                        {(genresQ.data ?? []).map((g) => {
+                            const selected = genres.includes(g.slug);
+                            return (
+                                <button
+                                    key={g.id}
+                                    type="button"
+                                    onClick={() => toggleGenre(g.slug)}
+                                    className={cn(
+                                        'rounded-full border px-3 py-1 text-xs transition-colors',
+                                        selected
+                                            ? 'border-accent bg-accent/15 text-accent'
+                                            : 'border-border text-fg-muted hover:border-accent/50 hover:text-fg',
+                                    )}
                                 >
-                                    {g}
-                                    <button
-                                        type="button"
-                                        onClick={() => removeGenre(g)}
-                                        className="leading-none text-fg-muted hover:text-danger"
-                                    >
-                                        ×
-                                    </button>
+                                    {g.displayName}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    {genres.length > 0 && (
+                        <p className="mt-2 text-xs text-fg-muted">
+                            Выбрано: {genres.join(', ')}
+                        </p>
+                    )}
+                </div>
+
+                {/* Featured artists */}
+                <div>
+                    <span className="mb-1 block text-sm text-fg-muted">Доп. исполнители (feat.)</span>
+                    {featuredArtists.length > 0 && (
+                        <div className="mb-2 flex flex-wrap gap-2">
+                            {featuredArtists.map((a) => (
+                                <span key={a.id} className="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent/10 px-3 py-1 text-xs text-accent">
+                                    {a.name}
+                                    <button type="button" onClick={() => setFeaturedArtists((p) => p.filter((x) => x.id !== a.id))} className="ml-0.5 text-fg-muted hover:text-danger">×</button>
                                 </span>
                             ))}
                         </div>
                     )}
-                    <div className="flex gap-2">
+                    <div className="relative">
                         <input
-                            list="genre-list"
-                            value={genreInput}
-                            onChange={(e) => setGenreInput(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    addGenre(genreInput);
-                                }
-                            }}
-                            placeholder="Добавить жанр…"
-                            className="flex-1 rounded-md border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
+                            type="text"
+                            value={featQuery}
+                            onChange={(e) => setFeatQuery(e.target.value)}
+                            placeholder="Поиск пользователя…"
+                            className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
                         />
-                        <button
-                            type="button"
-                            onClick={() => addGenre(genreInput)}
-                            disabled={!genreInput.trim()}
-                            className="rounded-md border border-border px-3 py-2 text-sm hover:bg-bg disabled:opacity-40"
-                        >
-                            +
-                        </button>
+                        {featSearching && <p className="mt-1 text-xs text-fg-muted">Поиск…</p>}
+                        {featResults.length > 0 && (
+                            <ul className="absolute z-10 mt-1 w-full rounded-md border border-border bg-bg-elevated shadow-lg">
+                                {featResults
+                                    .filter((u) => !featuredArtists.some((a) => a.id === u.id))
+                                    .map((u) => (
+                                        <li key={u.id} className="flex items-center justify-between gap-3 px-3 py-2 hover:bg-bg">
+                                            <span className="text-sm">{u.displayName}</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => { setFeaturedArtists((p) => [...p, { id: u.id, name: u.displayName }]); setFeatQuery(''); setFeatResults([]); }}
+                                                className="rounded-md bg-accent px-2 py-1 text-xs text-accent-fg hover:opacity-90"
+                                            >
+                                                Добавить
+                                            </button>
+                                        </li>
+                                    ))}
+                            </ul>
+                        )}
                     </div>
-                    <datalist id="genre-list">
-                        {KNOWN_GENRES.map((g) => (
-                            <option key={g} value={g} />
-                        ))}
-                    </datalist>
                 </div>
 
                 {/* Explicit */}

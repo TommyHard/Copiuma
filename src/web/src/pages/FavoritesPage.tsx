@@ -1,11 +1,20 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { listFavorites } from '@/shared/api/tracks';
+import { listFavorites, toggleLike } from '@/shared/api/tracks';
 import { usePlayTrack } from '@/features/player/usePlayTrack';
 
 export function FavoritesPage() {
+    const qc = useQueryClient();
     const q = useQuery({ queryKey: ['favorites'], queryFn: listFavorites });
     const play = usePlayTrack();
+
+    const unlike = useMutation({
+        mutationFn: (trackId: string) => toggleLike(trackId),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['favorites'] });
+            qc.invalidateQueries({ queryKey: ['catalog'] });
+        },
+    });
 
     if (q.isLoading) return <p className="text-fg-muted">Загружаем…</p>;
     if (q.isError) return <p className="text-danger">Не удалось загрузить.</p>;
@@ -41,9 +50,8 @@ export function FavoritesPage() {
                                     isExplicit: false,
                                 })
                             }
-                            className="flex size-9 items-center justify-center rounded-full bg-accent text-accent-fg hover:opacity-90"
-                            title="Играть"
-                        >
+                            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg hover:opacity-90"
+                            title="Играть">
                             ▶
                         </button>
                         <div className="min-w-0 flex-1">
@@ -53,8 +61,15 @@ export function FavoritesPage() {
                             <div className="truncate text-xs text-fg-muted">{f.artist ?? '—'}</div>
                         </div>
                         <span className="text-xs text-fg-muted">
-                            ♥ {new Date(f.likedAt).toLocaleDateString('ru')}
+                            {new Date(f.likedAt).toLocaleDateString('ru')}
                         </span>
+                        <button
+                            onClick={() => unlike.mutate(f.id)}
+                            disabled={unlike.isPending}
+                            title="Убрать из избранного"
+                            className="text-accent transition-colors hover:text-danger disabled:opacity-50">
+                            ♥
+                        </button>
                     </li>
                 ))}
             </ul>

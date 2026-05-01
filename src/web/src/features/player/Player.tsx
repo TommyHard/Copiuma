@@ -2,11 +2,31 @@ import { useEffect, useRef } from 'react';
 import { currentTrackSelector, usePlayer } from './store';
 import { HlsAudio } from './HlsAudio';
 import { hlsMasterUrl } from '@/shared/api/catalog';
+import { reportPlayEvent } from '@/shared/api/tracks';
 import { cn } from '@/shared/lib/cn';
+
+interface PlaySession {
+    trackId: string;
+    startMs: number | null;
+    accumulated: number;
+}
+
+function flushSession(session: PlaySession | null, completed: boolean) {
+    if (!session) return;
+    let total = session.accumulated;
+    if (session.startMs !== null) total += Date.now() - session.startMs;
+    if (total >= 1000) {
+        void reportPlayEvent(session.trackId, total, completed).catch(() => { });
+        session.accumulated = 0;
+        session.startMs = null;
+    }
+}
 
 export function Player() {
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const hlsRef = useRef<HlsAudio | null>(null);
+    const sessionRef = useRef<PlaySession | null>(null);
+    const isPlayingRef = useRef(false);
 
     const track = usePlayer(currentTrackSelector);
     const isPlaying = usePlayer((s) => s.isPlaying);
@@ -24,6 +44,41 @@ export function Player() {
     const seek = usePlayer((s) => s.seek);
     const setVolume = usePlayer((s) => s.setVolume);
     const toggleMute = usePlayer((s) => s.toggleMute);
+
+    useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
+
+    // При изменении времени воспроизведения/паузы: обновляются метки времени сессии
+    useEffect(() => {
+        const s = sessionRef.current;
+        if (!s) return;
+        if (isPlaying && s.startMs === null) {
+            s.startMs = Date.now();
+        } else if (!isPlaying && s.startMs !== null) {
+            s.accumulated += Date.now() - s.startMs;
+            s.startMs = null;
+            flushSession(s, false);
+        }
+    }, [isPlaying]);
+
+    // При смене трека: очистить предыдущую сессию и начать новую
+    useEffect(() => {
+        flushSession(sessionRef.current, false);
+        sessionRef.current = track
+            ? { trackId: track.id, startMs: isPlayingRef.current ? Date.now() : null, accumulated: 0 }
+            : null;
+    }, [track?.id]);
+
+    // При размонтировании / закрытии страницы: flush сессии
+    useEffect(() => {
+        const handleBeforeUnload = () => {
+            flushSession(sessionRef.current, false);
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+            flushSession(sessionRef.current, false);
+        };
+    }, []);
 
     // HLS lifecycle
     useEffect(() => {
@@ -130,7 +185,11 @@ export function Player() {
                 ref={audioRef}
                 onTimeUpdate={(e) => setPosition((e.target as HTMLAudioElement).currentTime)}
                 onLoadedMetadata={(e) => setDuration((e.target as HTMLAudioElement).duration)}
-                onEnded={next}
+                onEnded={() => {
+                    flushSession(sessionRef.current, true);
+                    sessionRef.current = null;
+                    next();
+                }}
                 preload="metadata"
                 playsInline
                 className="hidden"

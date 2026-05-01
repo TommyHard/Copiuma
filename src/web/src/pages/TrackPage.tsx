@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getTrack, getTrackStatus } from '@/shared/api/catalog';
 import { deleteTrack, toggleLike } from '@/shared/api/tracks';
+import { dislikeTrack } from '@/shared/api/dislikes';
 import { similarTracks } from '@/shared/api/recommendations';
 import { usePlayTrack } from '@/features/player/usePlayTrack';
 import { Waveform } from '@/features/track/Waveform';
@@ -54,6 +55,14 @@ export function TrackPage() {
             qc.invalidateQueries({ queryKey: ['catalog'] });
             qc.invalidateQueries({ queryKey: ['favorites'] });
             navigate('/catalog');
+        },
+    });
+
+    const dislike = useMutation({
+        mutationFn: () => dislikeTrack(id!),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['recommendations'] });
+            qc.invalidateQueries({ queryKey: ['for-you'] });
         },
     });
 
@@ -110,7 +119,8 @@ export function TrackPage() {
                             isExplicit: t.isExplicit,
                         })
                     }
-                    className="rounded-md bg-accent px-4 py-2 font-medium text-accent-fg hover:opacity-90 disabled:opacity-50">
+                    className="rounded-md bg-accent px-4 py-2 font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
+                >
                     {ready ? '▶ Играть' : 'Обрабатывается…'}
                 </button>
 
@@ -141,7 +151,19 @@ export function TrackPage() {
                         </button>
                     </>
                 ) : (
-                    <ReportButton targetType="Track" targetId={t.id} />
+                    <>
+                        <button
+                            onClick={() => dislike.mutate()}
+                            disabled={dislike.isPending || dislike.isSuccess}
+                            title="Не интересно — убрать из рекомендаций"
+                            className={`rounded-md border px-4 py-2 text-sm transition-colors disabled:opacity-50 ${dislike.isSuccess
+                                    ? 'border-border text-fg-muted line-through'
+                                    : 'border-border hover:border-danger/40 hover:text-danger'
+                                }`}>
+                            🚫 Не интересно
+                        </button>
+                        <ReportButton targetType="Track" targetId={t.id} />
+                    </>
                 )}
             </div>
 

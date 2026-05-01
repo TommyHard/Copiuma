@@ -7,7 +7,7 @@ using System.Security.Claims;
 namespace Identity.API.Controllers;
 
 /// <summary>
-/// Поиск пользователей. Возвращает мин. профиль (Id + DisplayName)
+/// Публичный поиск пользователей. Возвращает минимальный профиль (Id + DisplayName)
 /// </summary>
 [ApiController]
 [Authorize]
@@ -29,8 +29,38 @@ public class UsersController : ControllerBase
     private Guid CallerId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
     /// <summary>
+    /// Batch-резолв: список userId -> минимальный профиль.
+    /// Для отображения имён в списках друзей/подписок
+    /// </summary>
+    [HttpGet("batch")]
+    public async Task<IActionResult> Batch([FromQuery] string ids, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(ids)) return Ok(Array.Empty<object>());
+
+        var parsed = ids.Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(s => Guid.TryParse(s.Trim(), out var g) ? g : (Guid?)null)
+            .Where(g => g.HasValue)
+            .Select(g => g!.Value)
+            .Distinct()
+            .Take(50)
+            .ToList();
+
+        if (parsed.Count == 0) return Ok(Array.Empty<object>());
+
+        var results = await _context.Users
+            .Where(u => parsed.Contains(u.Id))
+            .Select(u => (object)new UserSearchResult(
+                u.Id,
+                u.DisplayName ?? u.Email.Substring(0, u.Email.IndexOf("@"))
+            ))
+            .ToListAsync(ct);
+
+        return Ok(results);
+    }
+
+    /// <summary>
     /// Поиск пользователей по отображаемому имени
-    /// или по email (только точное совпадение)
+    /// или по email (точное совпадение)
     /// </summary>
     [HttpGet("search")]
     public async Task<IActionResult> Search([FromQuery] string q, CancellationToken ct)
@@ -48,6 +78,7 @@ public class UsersController : ControllerBase
         if (looksLikeEmail)
         {
             var emailNorm = q.ToLowerInvariant();
+
             query = _context.Users
                 .Where(u => u.Id != callerId
                          && u.EmailVerifiedAt != null
