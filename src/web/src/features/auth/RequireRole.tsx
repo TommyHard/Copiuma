@@ -8,7 +8,7 @@ const ORDER: Record<UserRole, number> = { User: 0, Artist: 1, Moderator: 2, Admi
  * Guard по роли: проверяет «не ниже чем указанная»
  * Используется внутри RequireAuth + RequireVerified.
  *
- * Если у пользователя роль ниже — показываем плейсхолдер
+ * Если у пользователя роль ниже - показываем плейсхолдер
  */
 export function RequireRole({ atLeast, children }: { atLeast: UserRole; children: ReactNode }) {
     const { user } = useAuth();

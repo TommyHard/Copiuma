@@ -36,8 +36,9 @@ public class PlaylistsController : ControllerBase
 
         using var tx = await _context.Database.BeginTransactionAsync();
 
-        var playlist = new Playlist { 
-            Id = Guid.NewGuid(), 
+        var playlist = new Playlist
+        {
+            Id = Guid.NewGuid(),
             Title = request.Title.Trim(),
             Visibility = visibility
         };
@@ -217,9 +218,53 @@ public class PlaylistsController : ControllerBase
         if (await _context.PlaylistTracks.AnyAsync(pt => pt.PlaylistId == playlistId && pt.TrackId == trackId))
             return BadRequest("Трек уже в плейлисте.");
 
-        _context.PlaylistTracks.Add(new PlaylistTrack { PlaylistId = playlistId, TrackId = trackId });
+        var nextPosition = await _context.PlaylistTracks
+            .Where(pt => pt.PlaylistId == playlistId)
+            .Select(pt => (int?)pt.Position)
+            .MaxAsync() ?? 0;
+
+        _context.PlaylistTracks.Add(new PlaylistTrack
+        {
+            PlaylistId = playlistId,
+            TrackId = trackId,
+            Position = nextPosition + 1
+        });
         await _context.SaveChangesAsync();
         return Ok();
+    }
+
+    [HttpPatch("{playlistId}/tracks/order")]
+    public async Task<IActionResult> ReorderTracks(Guid playlistId, [FromBody] ReorderPlaylistTracksRequest request)
+    {
+        if (request.TrackIds is null || request.TrackIds.Count == 0)
+            return BadRequest("Список TrackIds не может быть пустым.");
+
+        if (!await PlaylistExists(playlistId)) return NotFound();
+
+        var canEdit = await _context.PlaylistMembers.AnyAsync(pm =>
+            pm.PlaylistId == playlistId && pm.UserId == UserId &&
+            (pm.Role == PlaylistRole.Owner || pm.Role == PlaylistRole.Editor));
+        if (!canEdit) return Forbid();
+
+        var existing = await _context.PlaylistTracks
+            .Where(pt => pt.PlaylistId == playlistId)
+            .ToListAsync();
+
+        var existingIds = existing.Select(pt => pt.TrackId).ToHashSet();
+        var requestIds = request.TrackIds.ToHashSet();
+
+        if (!existingIds.SetEquals(requestIds))
+            return BadRequest("Список TrackIds должен содержать ровно те треки, которые есть в плейлисте (не больше, не меньше).");
+
+        var positionMap = request.TrackIds
+            .Select((id, idx) => (id, position: idx + 1))
+            .ToDictionary(x => x.id, x => x.position);
+
+        foreach (var pt in existing)
+            pt.Position = positionMap[pt.TrackId];
+
+        await _context.SaveChangesAsync();
+        return NoContent();
     }
 
     [HttpDelete("{playlistId}/tracks/{trackId}")]
@@ -301,14 +346,14 @@ public class PlaylistsController : ControllerBase
             UpdatedAt = playlist.CreatedAt,
 
             Tracks = playlist.PlaylistTracks
-                .OrderBy(pt => pt.AddedAt)
-                .Select((pt, i) => new {
+                .OrderBy(pt => pt.Position).ThenBy(pt => pt.AddedAt)
+                .Select(pt => new {
                     TrackId = pt.Track!.Id,
                     pt.Track.Title,
                     pt.Track.Artist,
                     pt.Track.Duration,
                     pt.Track.IsExplicit,
-                    Position = i + 1,
+                    pt.Position,
                     pt.AddedAt,
                     IsLikedByMe = _context.LikedTracks.Any(l => l.TrackId == pt.TrackId && l.UserId == UserId),
                 }),

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getTrack, getTrackStatus } from '@/shared/api/catalog';
@@ -10,6 +11,7 @@ import { useAuth } from '@/features/auth/useAuth';
 import { StarRating } from '@/features/ratings/StarRating';
 import { Reviews } from '@/features/reviews/Reviews';
 import { ReportButton } from '@/features/reports/ReportButton';
+import { TrackEditDialog } from '@/features/track/TrackEditDialog';
 
 export function TrackPage() {
     const { id } = useParams();
@@ -17,6 +19,7 @@ export function TrackPage() {
     const navigate = useNavigate();
     const play = usePlayTrack();
     const { user } = useAuth();
+    const [editOpen, setEditOpen] = useState(false);
 
     const trackQ = useQuery({
         queryKey: ['track', id],
@@ -107,8 +110,7 @@ export function TrackPage() {
                             isExplicit: t.isExplicit,
                         })
                     }
-                    className="rounded-md bg-accent px-4 py-2 font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
-                >
+                    className="rounded-md bg-accent px-4 py-2 font-medium text-accent-fg hover:opacity-90 disabled:opacity-50">
                     {ready ? '▶ Играть' : 'Обрабатывается…'}
                 </button>
 
@@ -116,21 +118,28 @@ export function TrackPage() {
                     onClick={() => like.mutate()}
                     disabled={like.isPending}
                     className={`rounded-md border px-4 py-2 transition-colors disabled:opacity-50 ${t.isLikedByMe
-                            ? 'border-accent/60 bg-accent/10 text-accent hover:bg-accent/20'
-                            : 'border-border hover:bg-bg-elevated'
+                        ? 'border-accent/60 bg-accent/10 text-accent hover:bg-accent/20'
+                        : 'border-border hover:bg-bg-elevated'
                         }`}>
                     {t.isLikedByMe ? '♥ В избранном' : '♥ В избранное'}
                 </button>
 
                 {isOwner ? (
-                    <button
-                        onClick={() => {
-                            if (confirm('Удалить трек безвозвратно?')) remove.mutate();
-                        }}
-                        disabled={remove.isPending}
-                        className="rounded-md border border-danger/40 px-4 py-2 text-danger hover:bg-danger/10 disabled:opacity-50">
-                        Удалить
-                    </button>
+                    <>
+                        <button
+                            onClick={() => setEditOpen(true)}
+                            className="rounded-md border border-border px-4 py-2 hover:bg-bg-elevated">
+                            Редактировать
+                        </button>
+                        <button
+                            onClick={() => {
+                                if (confirm('Удалить трек безвозвратно?')) remove.mutate();
+                            }}
+                            disabled={remove.isPending}
+                            className="rounded-md border border-danger/40 px-4 py-2 text-danger hover:bg-danger/10 disabled:opacity-50">
+                            Удалить
+                        </button>
+                    </>
                 ) : (
                     <ReportButton targetType="Track" targetId={t.id} />
                 )}
@@ -161,6 +170,14 @@ export function TrackPage() {
                         ))}
                     </ul>
                 </section>
+            )}
+
+            {isOwner && (
+                <TrackEditDialog
+                    open={editOpen}
+                    track={t}
+                    onClose={() => setEditOpen(false)}
+                />
             )}
         </article>
     );

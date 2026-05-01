@@ -57,4 +57,36 @@ public class ProfileController : ControllerBase
         await _context.SaveChangesAsync();
         return Ok(new { Message = "Профиль обновлён." });
     }
+
+    /// <summary>
+    /// Смена пароля. Требует текущий пароль для подтверждения
+    /// После смены все активные сессии остаются валидными
+    /// </summary>
+    [HttpPost("change-password")]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.CurrentPassword) ||
+            string.IsNullOrWhiteSpace(request.NewPassword))
+            return BadRequest("Поля не могут быть пустыми.");
+
+        if (request.NewPassword.Length < 8)
+            return BadRequest("Новый пароль должен быть не менее 8 символов.");
+
+        if (request.CurrentPassword == request.NewPassword)
+            return BadRequest("Новый пароль совпадает с текущим.");
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == UserId);
+        if (user is null) return NotFound();
+
+        if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, user.PasswordHash))
+            return BadRequest("Неверный текущий пароль.");
+
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        user.PasswordChangedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
+        return Ok(new { Message = "Пароль успешно изменён." });
+    }
 }
+
+public record ChangePasswordRequest(string CurrentPassword, string NewPassword);

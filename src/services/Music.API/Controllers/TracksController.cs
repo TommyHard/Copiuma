@@ -215,12 +215,12 @@ public class TracksController : ControllerBase
 
         var tracks = await _moderation.ApplyVisibilityFilter(_context.Tracks, UserId)
             .Where(t => t.SearchVector!.Matches(EF.Functions.WebSearchToTsQuery("russian", q)))
-            .Select(t => new { 
-                t.Id, 
-                t.Title, 
-                t.Artist, 
-                t.Duration, 
-                t.UploadedAt, 
+            .Select(t => new {
+                t.Id,
+                t.Title,
+                t.Artist,
+                t.Duration,
+                t.UploadedAt,
                 t.IsExplicit,
                 IsLikedByMe = _context.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == UserId)
             })
@@ -228,6 +228,34 @@ public class TracksController : ControllerBase
             .ToListAsync();
 
         return Ok(tracks);
+    }
+
+    [HttpPut("{id}")]
+    public async Task<IActionResult> UpdateTrack(Guid id, [FromBody] UpdateTrackRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Title))
+            return BadRequest("Название трека обязательно.");
+
+        var track = await _context.Tracks.FindAsync(id);
+        if (track is null || track.DeletedAt != null) return NotFound();
+
+        if (track.UploadedByUserId != UserId)
+            return Forbid();
+
+        track.Title = request.Title.Trim();
+        track.Genres = NormalizeGenres(request.Genres);
+        track.IsExplicit = request.IsExplicit;
+
+        await _context.SaveChangesAsync();
+        await BumpCacheVersionAsync();
+
+        return Ok(new
+        {
+            track.Id,
+            track.Title,
+            track.Genres,
+            track.IsExplicit
+        });
     }
 
     [HttpDelete("{id}")]

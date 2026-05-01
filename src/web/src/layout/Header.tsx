@@ -30,6 +30,7 @@ export function Header() {
                     <NavItem to="/playlists">Плейлисты</NavItem>
                     <NavItem to="/favorites">Избранное</NavItem>
                     <NavItem to="/history">История</NavItem>
+                    <NavItem to="/friends">Люди</NavItem>
                     <NavItem to="/rooms">DJ-комнаты</NavItem>
                     {user && ARTIST_PLUS.has(user.role) && <NavItem to="/upload">Загрузить</NavItem>}
                 </nav>
@@ -52,10 +53,15 @@ export function Header() {
                             )}
                         </Link>
                     )}
+                    <Link
+                        to="/settings"
+                        className="hidden rounded-md border border-border px-3 py-1.5 text-sm hover:bg-bg-elevated md:block"
+                        title="Настройки">
+                        ⚙
+                    </Link>
                     <button
                         onClick={onLogout}
-                        className="rounded-md border border-border px-3 py-1.5 hover:bg-bg-elevated"
-                    >
+                        className="rounded-md border border-border px-3 py-1.5 hover:bg-bg-elevated">
                         Выйти
                     </button>
                 </div>

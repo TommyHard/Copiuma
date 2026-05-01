@@ -4,6 +4,7 @@ import type { TrackListItem } from '@/shared/types';
 import { usePlayTrack } from '@/features/player/usePlayTrack';
 import { AddToPlaylistMenu } from '@/features/playlists/AddToPlaylistMenu';
 import { toggleLike } from '@/shared/api/tracks';
+import { dislikeTrack } from '@/shared/api/dislikes';
 import { cn } from '@/shared/lib/cn';
 
 export function TrackRow({ track, number }: { track: TrackListItem; number?: number }) {
@@ -15,6 +16,14 @@ export function TrackRow({ track, number }: { track: TrackListItem; number?: num
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ['catalog'] });
             qc.invalidateQueries({ queryKey: ['favorites'] });
+        },
+    });
+
+    const dislike = useMutation({
+        mutationFn: () => dislikeTrack(track.id),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['recommendations'] });
+            qc.invalidateQueries({ queryKey: ['catalog'] });
         },
     });
 
@@ -61,6 +70,19 @@ export function TrackRow({ track, number }: { track: TrackListItem; number?: num
             </button>
 
             <AddToPlaylistMenu trackId={track.id} />
+
+            <button
+                onClick={() => dislike.mutate()}
+                disabled={dislike.isPending || dislike.isSuccess}
+                title="Не интересно — убрать из рекомендаций"
+                className={cn(
+                    "text-sm transition-colors disabled:opacity-40",
+                    dislike.isSuccess
+                        ? "text-fg-muted line-through"
+                        : "text-fg-muted hover:text-danger"
+                )}>
+                🚫
+            </button>
         </li>
     );
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -7,6 +7,7 @@ import {
     leavePlaylist,
     removeMember,
     removeTrack,
+    reorderTracks,
     setVisibility,
 } from '@/shared/api/playlists';
 import { useAuth } from '@/features/auth/useAuth';
@@ -28,6 +29,10 @@ export function PlaylistPage() {
 
     const [inviteOpen, setInviteOpen] = useState(false);
 
+    const [localOrder, setLocalOrder] = useState<string[] | null>(null);
+    const dragId = useRef<string | null>(null);
+    const dragOverId = useRef<string | null>(null);
+
     const q = useQuery({
         queryKey: ['playlist', id],
         queryFn: () => getPlaylist(id!),
@@ -36,7 +41,18 @@ export function PlaylistPage() {
 
     const removeT = useMutation({
         mutationFn: (trackId: string) => removeTrack(id!, trackId),
-        onSuccess: () => qc.invalidateQueries({ queryKey: ['playlist', id] }),
+        onSuccess: () => {
+            setLocalOrder(null);
+            qc.invalidateQueries({ queryKey: ['playlist', id] });
+        },
+    });
+
+    const reorder = useMutation({
+        mutationFn: (ids: string[]) => reorderTracks(id!, ids),
+        onSuccess: () => {
+            setLocalOrder(null);
+            qc.invalidateQueries({ queryKey: ['playlist', id] });
+        },
     });
 
     const visibility = useMutation({
@@ -70,9 +86,41 @@ export function PlaylistPage() {
 
     const p = q.data;
     const isOwner = !!user && user.id === p.ownerId;
+    const canEdit = isOwner || (p.isCollaborative && p.members?.find(m => m.userId === user?.id)?.role === 'Editor');
 
     const members = p.members || [];
-    const tracks = p.tracks || [];
+    const serverTracks = [...(p.tracks || [])].sort((a, b) => a.position - b.position);
+
+    const tracks = localOrder
+        ? localOrder.map(tid => serverTracks.find(t => t.trackId === tid)!).filter(Boolean)
+        : serverTracks;
+
+    function handleDragStart(trackId: string) {
+        dragId.current = trackId;
+    }
+
+    function handleDragOver(e: React.DragEvent, trackId: string) {
+        e.preventDefault();
+        dragOverId.current = trackId;
+    }
+
+    function handleDrop(e: React.DragEvent) {
+        e.preventDefault();
+        const from = dragId.current;
+        const to = dragOverId.current;
+        dragId.current = null;
+        dragOverId.current = null;
+        if (!from || !to || from === to) return;
+
+        const current = localOrder ?? serverTracks.map(t => t.trackId);
+        const fromIdx = current.indexOf(from);
+        const toIdx = current.indexOf(to);
+        const next = [...current];
+        next.splice(fromIdx, 1);
+        next.splice(toIdx, 0, from);
+        setLocalOrder(next);
+        reorder.mutate(next);
+    }
 
     const myMember = members.find((m) => m.userId === user?.id);
 
@@ -175,18 +223,19 @@ export function PlaylistPage() {
                 )}
                 {tracks.length > 0 && (
                     <ul className="divide-y divide-border rounded-md border border-border">
-                        {tracks
-                            .slice()
-                            .sort((a, b) => a.position - b.position)
-                            .map((t) => (
-                                <PlaylistTrackRow
-                                    key={t.trackId}
-                                    t={t}
-                                    canRemove={isOwner || (p.isCollaborative && myMember?.role !== 'Member')}
-                                    onRemove={() => removeT.mutate(t.trackId)}
-                                    removing={removeT.isPending}
-                                />
-                            ))}
+                        {tracks.map((t) => (
+                            <PlaylistTrackRow
+                                key={t.trackId}
+                                t={t}
+                                canDrag={canEdit}
+                                canRemove={canEdit}
+                                onRemove={() => removeT.mutate(t.trackId)}
+                                removing={removeT.isPending}
+                                onDragStart={() => handleDragStart(t.trackId)}
+                                onDragOver={(e) => handleDragOver(e, t.trackId)}
+                                onDrop={handleDrop}
+                            />
+                        ))}
                     </ul>
                 )}
             </section>
@@ -232,14 +281,22 @@ export function PlaylistPage() {
 
 function PlaylistTrackRow({
     t,
+    canDrag,
     canRemove,
     onRemove,
     removing,
+    onDragStart,
+    onDragOver,
+    onDrop,
 }: {
     t: PlaylistTrack;
+    canDrag?: boolean;
     canRemove?: boolean;
     onRemove: () => void;
     removing: boolean;
+    onDragStart: () => void;
+    onDragOver: (e: React.DragEvent) => void;
+    onDrop: (e: React.DragEvent) => void;
 }) {
     const play = usePlayTrack();
     const qc = useQueryClient();
@@ -266,12 +323,22 @@ function PlaylistTrackRow({
     };
 
     return (
-        <li className="flex items-center gap-3 px-4 py-3 hover:bg-bg-elevated/50">
+        <li
+            draggable={canDrag}
+            onDragStart={onDragStart}
+            onDragOver={onDragOver}
+            onDrop={onDrop}
+            className={cn(
+                "flex items-center gap-3 px-4 py-3 hover:bg-bg-elevated/50",
+                canDrag && "cursor-grab active:cursor-grabbing"
+            )}>
+            {canDrag && (
+                <span className="shrink-0 text-fg-muted/40 select-none" title="Перетащить">⠿</span>
+            )}
             <button
                 onClick={() => play(trackForPlayer as any)}
                 className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg hover:opacity-90"
-                title="Играть"
-            >
+                title="Играть">
                 ▶
             </button>
 
@@ -293,8 +360,7 @@ function PlaylistTrackRow({
                     "text-lg transition-colors hover:scale-110 disabled:opacity-50",
                     t.isLikedByMe ? "text-accent" : "text-fg-muted hover:text-fg"
                 )}
-                title={t.isLikedByMe ? "Убрать из избранного" : "В избранное"}
-            >
+                title={t.isLikedByMe ? "Убрать из избранного" : "В избранное"}>
                 ♥
             </button>
 
@@ -305,8 +371,7 @@ function PlaylistTrackRow({
                     onClick={onRemove}
                     disabled={removing}
                     className="ml-2 text-xs text-fg-muted hover:text-danger disabled:opacity-50"
-                    title="Убрать из плейлиста"
-                >
+                    title="Убрать из плейлиста">
                     ✕
                 </button>
             )}

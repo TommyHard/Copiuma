@@ -21,3 +21,12 @@ export async function recentArtists(limit = 30): Promise<HistoryArtistEntry[]> {
 export async function clearHistory(): Promise<void> {
     await api.delete('/history');
 }
+
+/**
+ * Лента прослушиваний без дедупликации
+ * GET /history/tracks/raw
+ */
+export async function rawHistory(take = 100, sinceDays = 30): Promise<RawPlayEvent[]> {
+    const r = await api.get<RawPlayEvent[]>('/history/tracks/raw', { params: { take, sinceDays } });
+    return r.data;
+}

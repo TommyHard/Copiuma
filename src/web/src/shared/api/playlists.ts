@@ -7,19 +7,19 @@ import type {
 
 /**
  * Endpoints:
- *   POST   /playlists                                    — создать
- *   DELETE /playlists/{id}                               — удалить
- *   GET    /playlists                                    — мои + те, где я член
- *   GET    /playlists/{id}                               — детали + tracks + members
- *   GET    /playlists/public                             — публичные (discover)
- *   PATCH  /playlists/{id}/visibility                    — Private/Unlisted/Public
- *   POST   /playlists/{id}/tracks/{trackId}              — добавить трек
- *   DELETE /playlists/{id}/tracks/{trackId}              — удалить трек
- *   POST   /playlists/{id}/invite                        — пригласить участника
- *   GET    /playlists/{id}/invitations                   — список pending-приглашений (от owner)
- *   DELETE /playlists/{id}/invitations/{invitationId}    — отозвать приглашение
- *   DELETE /playlists/{id}/members/{userId}              — выгнать
- *   POST   /playlists/{id}/leave                         — самому выйти
+ *   POST   /playlists                                    вЂ” СЃРѕР·РґР°С‚СЊ
+ *   DELETE /playlists/{id}                               вЂ” СѓРґР°Р»РёС‚СЊ
+ *   GET    /playlists                                    вЂ” РјРѕРё + С‚Рµ, РіРґРµ СЏ С‡Р»РµРЅ
+ *   GET    /playlists/{id}                               вЂ” РґРµС‚Р°Р»Рё + tracks + members
+ *   GET    /playlists/public                             вЂ” РїСѓР±Р»РёС‡РЅС‹Рµ (discover)
+ *   PATCH  /playlists/{id}/visibility                    вЂ” Private/Unlisted/Public
+ *   POST   /playlists/{id}/tracks/{trackId}              вЂ” РґРѕР±Р°РІРёС‚СЊ С‚СЂРµРє
+ *   DELETE /playlists/{id}/tracks/{trackId}              вЂ” СѓРґР°Р»РёС‚СЊ С‚СЂРµРє
+ *   POST   /playlists/{id}/invite                        вЂ” РїСЂРёРіР»Р°СЃРёС‚СЊ СѓС‡Р°СЃС‚РЅРёРєР°
+ *   GET    /playlists/{id}/invitations                   вЂ” СЃРїРёСЃРѕРє pending-РїСЂРёРіР»Р°С€РµРЅРёР№ (РѕС‚ owner)
+ *   DELETE /playlists/{id}/invitations/{invitationId}    вЂ” РѕС‚РѕР·РІР°С‚СЊ РїСЂРёРіР»Р°С€РµРЅРёРµ
+ *   DELETE /playlists/{id}/members/{userId}              вЂ” РІС‹РіРЅР°С‚СЊ
+ *   POST   /playlists/{id}/leave                         вЂ” СЃР°РјРѕРјСѓ РІС‹Р№С‚Рё
  */
 
 export interface CreatePlaylistRequest {
@@ -91,4 +91,8 @@ export async function removeMember(playlistId: string, userId: string): Promise<
 
 export async function leavePlaylist(playlistId: string): Promise<void> {
     await api.post(`/playlists/${playlistId}/leave`);
+}
+
+export async function reorderTracks(playlistId: string, trackIds: string[]): Promise<void> {
+    await api.patch(`/playlists/${playlistId}/tracks/order`, { trackIds });
 }

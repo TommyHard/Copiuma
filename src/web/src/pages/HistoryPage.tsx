@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { clearHistory, recentArtists, recentTracks } from '@/shared/api/history';
+import { clearHistory, recentArtists, recentTracks, rawHistory } from '@/shared/api/history';
 import { usePlayTrack } from '@/features/player/usePlayTrack';
 import { cn } from '@/shared/lib/cn';
+import type { RawPlayEvent } from '@/shared/types';
 
-type Tab = 'tracks' | 'artists';
+type Tab = 'tracks' | 'artists' | 'raw';
 
 export function HistoryPage() {
     const [tab, setTab] = useState<Tab>('tracks');
@@ -24,11 +25,18 @@ export function HistoryPage() {
         enabled: tab === 'artists',
     });
 
+    const raw = useQuery({
+        queryKey: ['history-raw'],
+        queryFn: () => rawHistory(200, 90),
+        enabled: tab === 'raw',
+    });
+
     const clear = useMutation({
         mutationFn: clearHistory,
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ['history-tracks'] });
             qc.invalidateQueries({ queryKey: ['history-artists'] });
+            qc.invalidateQueries({ queryKey: ['history-raw'] });
         },
     });
 
@@ -53,6 +61,9 @@ export function HistoryPage() {
                 </TabBtn>
                 <TabBtn active={tab === 'artists'} onClick={() => setTab('artists')}>
                     Артисты
+                </TabBtn>
+                <TabBtn active={tab === 'raw'} onClick={() => setTab('raw')}>
+                    Raw
                 </TabBtn>
             </div>
 
@@ -81,15 +92,13 @@ export function HistoryPage() {
                                             })
                                         }
                                         className="flex size-9 items-center justify-center rounded-full bg-accent text-accent-fg hover:opacity-90"
-                                        title="Играть"
-                                    >
+                                        title="Играть">
                                         ▶
                                     </button>
                                     <div className="min-w-0 flex-1">
                                         <Link
                                             to={`/tracks/${t.trackId}`}
-                                            className="block truncate font-medium hover:underline"
-                                        >
+                                            className="block truncate font-medium hover:underline">
                                             {t.title}
                                         </Link>
                                         <div className="truncate text-xs text-fg-muted">{t.artist ?? '—'}</div>
@@ -101,6 +110,42 @@ export function HistoryPage() {
                                 </li>
                             ))}
                         </ul>
+                    )}
+                </>
+            )}
+
+            {tab === 'raw' && (
+                <>
+                    {raw.isLoading && <p className="text-fg-muted">Загружаем…</p>}
+                    {raw.data && raw.data.length === 0 && (
+                        <p className="text-fg-muted">Нет событий за последние 90 дней.</p>
+                    )}
+                    {raw.data && raw.data.length > 0 && (
+                        <>
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={() => exportJson(raw.data!)}
+                                    className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-bg-elevated"
+                                >
+                                    ↓ Экспорт JSON
+                                </button>
+                            </div>
+                            <ul className="divide-y divide-border rounded-md border border-border">
+                                {raw.data.map((e, i) => (
+                                    <li key={i} className="flex items-center gap-3 px-4 py-3 text-sm">
+                                        <div className="min-w-0 flex-1">
+                                            <div className="truncate font-medium">{e.title}</div>
+                                            <div className="truncate text-xs text-fg-muted">{e.artist ?? '—'}</div>
+                                        </div>
+                                        <div className="shrink-0 text-right text-xs text-fg-muted">
+                                            <div>{Math.round(e.playedMs / 1000)}с{e.completed ? ' ✓' : ''}</div>
+                                            <div>{relTime(e.startedAt)}</div>
+                                            {e.source && <div className="italic">{e.source}</div>}
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        </>
                     )}
                 </>
             )}
@@ -155,6 +200,16 @@ function TabBtn({
             {children}
         </button>
     );
+}
+
+function exportJson(data: RawPlayEvent[]) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `copiuma-history-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
 }
 
 function relTime(iso: string): string {

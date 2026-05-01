@@ -260,3 +260,45 @@ export interface HistoryArtistEntry {
     lastPlayedAt: string;
     playCount: number;
 }
+
+// Raw play events
+export interface RawPlayEvent {
+    trackId: string;
+    startedAt: string;
+    playedMs: number;
+    completed: boolean;
+    source: string | null;
+    title: string;
+    artist: string | null;
+    duration: string | null;
+}
+
+// User search
+
+export interface UserSearchResult {
+    id: string;
+    displayName: string;
+}
+
+// Friends / User follows
+
+export interface FollowedUser {
+    userId: string;
+    isMutual: boolean;
+    subscribedAt: string;
+}
+
+export interface FriendItem {
+    userId: string;
+    sinceAt: string;
+}
+
+// Profile / Settings
+
+export interface UserProfile {
+    id: string;
+    email: string;
+    displayName: string | null;
+    favoriteGenres: string[];
+    language: string;
+}

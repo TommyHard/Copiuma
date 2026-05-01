@@ -48,3 +48,13 @@ export async function listFavorites(): Promise<FavoriteItem[]> {
 export async function deleteTrack(trackId: string): Promise<void> {
     await api.delete(`/tracks/${trackId}`);
 }
+
+export interface UpdateTrackFields {
+    title: string;
+    genres?: string[];
+    isExplicit: boolean;
+}
+
+export async function updateTrack(trackId: string, fields: UpdateTrackFields): Promise<void> {
+    await api.put(`/tracks/${trackId}`, fields);
+}

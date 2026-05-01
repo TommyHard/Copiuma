@@ -18,3 +18,23 @@ export async function getFeed(limit = 30): Promise<FeedItem[]> {
     const r = await api.get<FeedItem[]>('/follows/feed', { params: { limit } });
     return r.data;
 }
+
+// User follows
+
+export async function followUser(userId: string): Promise<void> {
+    await api.post(`/follows/users/${userId}`);
+}
+
+export async function unfollowUser(userId: string): Promise<void> {
+    await api.delete(`/follows/users/${userId}`);
+}
+
+export async function getFollowedUsers(): Promise<FollowedUser[]> {
+    const r = await api.get<FollowedUser[]>('/follows/users');
+    return r.data;
+}
+
+export async function getFriends(): Promise<FriendItem[]> {
+    const r = await api.get<FriendItem[]>('/follows/friends');
+    return r.data;
+}

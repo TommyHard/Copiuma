@@ -19,6 +19,8 @@ import { PlaylistPage } from '@/pages/PlaylistPage';
 import { RoomsLandingPage } from '@/pages/RoomsLandingPage';
 import { RoomPage } from '@/pages/RoomPage';
 import { HistoryPage } from '@/pages/HistoryPage';
+import { FriendsPage } from '@/pages/FriendsPage';
+import { SettingsPage } from '@/pages/SettingsPage';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { RegisterPage } from '@/pages/auth/RegisterPage';
 import { VerifyEmailPage } from '@/pages/auth/VerifyEmailPage';
@@ -71,6 +73,8 @@ export const router = createBrowserRouter([
                     { path: 'rooms', element: <RoomsLandingPage /> },
                     { path: 'rooms/:id', element: <RoomPage /> },
                     { path: 'me', element: <MePage /> },
+                    { path: 'friends', element: <FriendsPage /> },
+                    { path: 'settings', element: <SettingsPage /> },
                     {
                         path: 'upload',
                         element: (

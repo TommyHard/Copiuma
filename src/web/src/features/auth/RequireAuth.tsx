@@ -3,7 +3,7 @@ import { useAuth } from './useAuth';
 import type { ReactNode } from 'react';
 
 /*
- * Guard: если не залогинен — редирект на /auth/login с возвратом сюда после успеха
+ * Guard: если не залогинен - редирект на /auth/login с возвратом сюда после успеха
  */
 export function RequireAuth({ children }: { children: ReactNode }) {
     const { status } = useAuth();
