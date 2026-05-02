@@ -91,8 +91,13 @@ export interface ArtistSummary {
     name: string;
     bio?: string | null;
     avatarUrl?: string | null;
+    bannerUrl?: string | null;
     followers?: number;
+    monthlyListeners?: number;
     ownerUserId?: string;
+    createdByUserId?: string;
+    albumCount?: number;
+    trackCount?: number;
 }
 
 export interface AlbumSummary {
@@ -299,6 +304,21 @@ export interface UserProfile {
     id: string;
     email: string;
     displayName: string | null;
+    bio: string | null;
+    avatarKey: string | null;
     favoriteGenres: string[];
     language: string;
+}
+
+export interface PublicUserProfile {
+    id: string;
+    displayName: string;
+    bio: string | null;
+    avatarUrl: string | null;
+    favoriteGenres: string[];
+    listeningHours: number;
+    uniqueTracksPlayed: number;
+    topArtists: { artistId: string; name: string }[];
+    followers: number;
+    following: number;
 }

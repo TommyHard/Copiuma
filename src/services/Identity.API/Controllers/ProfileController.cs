@@ -34,6 +34,8 @@ public class ProfileController : ControllerBase
             user.Id,
             user.Email,
             user.DisplayName,
+            user.Bio,
+            user.AvatarKey,
             user.Preferences?.FavoriteGenres ?? Array.Empty<string>(),
             user.Preferences?.Language ?? "ru"));
     }
@@ -50,12 +52,23 @@ public class ProfileController : ControllerBase
         if (!string.IsNullOrWhiteSpace(request.DisplayName))
             user.DisplayName = request.DisplayName.Trim();
 
+        if (request.Bio is not null)
+            user.Bio = request.Bio.Trim().Length == 0 ? null : request.Bio.Trim();
+
         user.Preferences ??= new Models.UserPreferences { UserId = user.Id };
         user.Preferences.FavoriteGenres = request.FavoriteGenres ?? Array.Empty<string>();
         user.Preferences.Language = string.IsNullOrWhiteSpace(request.Language) ? "ru" : request.Language;
 
         await _context.SaveChangesAsync();
-        return Ok(new { Message = "Профиль обновлён." });
+
+        return Ok(new UserProfileResponse(
+            user.Id,
+            user.Email,
+            user.DisplayName,
+            user.Bio,
+            user.AvatarKey,
+            user.Preferences.FavoriteGenres,
+            user.Preferences.Language));
     }
 
     /// <summary>

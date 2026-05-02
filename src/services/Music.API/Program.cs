@@ -1,5 +1,4 @@
 using HealthChecks.UI.Client;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
@@ -113,17 +112,15 @@ public class Program
                     options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
                 });
 
+            // Auth-hardening: policies
             builder.Services.AddAuthorization(options =>
             {
-                // DefaultPolicy — то, что использует [Authorize] без явного policy-имени
-                // Жёсткое требование: authenticated + email подтверждён
                 options.DefaultPolicy = new AuthorizationPolicyBuilder()
                     .AddAuthenticationSchemes(GatewayUserAuthenticationHandler.SchemeName)
                     .RequireAuthenticatedUser()
                     .RequireClaim("email_verified", "true")
                     .Build();
 
-                // ArtistOnly ТОЛЬКО на upload (POST /tracks/upload, future POST /albums и т.п.)
                 options.AddPolicy("ArtistOnly", p => p
                     .AddAuthenticationSchemes(GatewayUserAuthenticationHandler.SchemeName)
                     .RequireAuthenticatedUser()
@@ -143,6 +140,9 @@ public class Program
                           .AllowCredentials();
                 });
             });
+
+            var identityUrl = builder.Configuration["Services:IdentityUrl"] ?? "http://identity-api:8080";
+            builder.Services.AddHttpClient("Identity", c => c.BaseAddress = new Uri(identityUrl));
 
             builder.Services.AddScoped<FileStorageService>();
             builder.Services.AddScoped<NotificationService>();
@@ -318,6 +318,7 @@ public class Program
             await Log.CloseAndFlushAsync();
         }
     }
+
     private static async Task SeedGenresAsync(AppDbContext db)
     {
         if (await db.Genres.AnyAsync()) return;

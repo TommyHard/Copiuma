@@ -59,6 +59,61 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
+    /// Обновить AvatarKey
+    /// </summary>
+    [HttpPut("{id:guid}/avatar-key")]
+    [AllowAnonymous] // внутренний service-to-service
+    public async Task<IActionResult> SetAvatarKey(Guid id, [FromBody] SetAvatarKeyRequest request, CancellationToken ct)
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
+        if (user is null) return NotFound();
+
+        var oldKey = user.AvatarKey;
+        user.AvatarKey = request.AvatarKey;
+        await _context.SaveChangesAsync(ct);
+
+        return Ok(new { OldKey = oldKey });
+    }
+
+    /// <summary>
+    /// Удалить AvatarKey
+    /// </summary>
+    [HttpDelete("{id:guid}/avatar-key")]
+    [AllowAnonymous]
+    public async Task<IActionResult> DeleteAvatarKey(Guid id, CancellationToken ct)
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id, ct);
+        if (user is null) return NotFound();
+
+        var oldKey = user.AvatarKey;
+        user.AvatarKey = null;
+        await _context.SaveChangesAsync(ct);
+
+        return Ok(new { OldKey = oldKey });
+    }
+
+    /// <summary>
+    /// Публичный профиль пользователя — возвращает DisplayName, Bio, AvatarKey, FavoriteGenres
+    /// </summary>
+    [HttpGet("{id:guid}")]
+    public async Task<IActionResult> GetPublicProfile(Guid id, CancellationToken ct)
+    {
+        var user = await _context.Users
+            .Include(u => u.Preferences)
+            .FirstOrDefaultAsync(u => u.Id == id, ct);
+
+        if (user is null) return NotFound();
+
+        return Ok(new PublicUserProfile(
+            user.Id,
+            user.DisplayName ?? user.Email[..user.Email.IndexOf('@')],
+            user.Bio,
+            user.AvatarKey,
+            user.Preferences?.FavoriteGenres ?? Array.Empty<string>()
+        ));
+    }
+
+    /// <summary>
     /// Поиск пользователей по отображаемому имени
     /// или по email (точное совпадение)
     /// </summary>
@@ -106,3 +161,13 @@ public class UsersController : ControllerBase
 }
 
 public record UserSearchResult(Guid Id, string DisplayName);
+
+public record PublicUserProfile(
+    Guid Id,
+    string DisplayName,
+    string? Bio,
+    string? AvatarKey,
+    string[] FavoriteGenres
+);
+
+public record SetAvatarKeyRequest(string? AvatarKey);

@@ -1,5 +1,5 @@
 import { api } from './http';
-import type { FeedItem, FollowedArtist } from '@/shared/types';
+import type { FeedItem, FollowedArtist, FollowedUser, FriendItem } from '@/shared/types';
 
 export async function followArtist(artistId: string): Promise<void> {
     await api.post(`/follows/artists/${artistId}`);

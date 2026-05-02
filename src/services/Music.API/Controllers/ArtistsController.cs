@@ -245,8 +245,7 @@ public class ArtistsController : ControllerBase
             try { await _storage.DeleteImageAsync(oldKey); } catch { }
         }
 
-        var url = await _storage.GeneratePresignedImageGetUrlAsync(key);
-        return Ok(new { avatarUrl = url });
+        return Ok(await BuildResponse(id));
     }
 
     [HttpDelete("{id:guid}/avatar")]
@@ -264,6 +263,52 @@ public class ArtistsController : ControllerBase
         return NoContent();
     }
 
+    // Banner
+
+    [HttpPost("{id:guid}/banner")]
+    [RequestSizeLimit(15_000_000)] // 15 MB
+    public async Task<IActionResult> UploadBanner(Guid id, IFormFile file)
+    {
+        if (file is null || file.Length == 0) return BadRequest("Файл пуст.");
+        if (!FileStorageService.IsAllowedImageContentType(file.ContentType))
+            return BadRequest($"Недопустимый content-type: {file.ContentType}.");
+
+        var artist = await _db.Artists.FindAsync(id);
+        if (artist is null) return NotFound();
+        if (artist.CreatedByUserId != UserId) return Forbid();
+
+        await using var stream = file.OpenReadStream();
+        var key = await _storage.UploadImageAsync(
+            stream, file.FileName, file.ContentType, file.Length, $"artists/{id}/banner");
+
+        var oldKey = artist.BannerKey;
+        artist.BannerKey = key;
+        artist.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        if (oldKey is not null)
+        {
+            try { await _storage.DeleteImageAsync(oldKey); } catch { }
+        }
+
+        return Ok(await BuildResponse(id));
+    }
+
+    [HttpDelete("{id:guid}/banner")]
+    public async Task<IActionResult> DeleteBanner(Guid id)
+    {
+        var artist = await _db.Artists.FindAsync(id);
+        if (artist is null) return NotFound();
+        if (artist.CreatedByUserId != UserId) return Forbid();
+        if (artist.BannerKey is null) return NoContent();
+
+        try { await _storage.DeleteImageAsync(artist.BannerKey); } catch { }
+        artist.BannerKey = null;
+        artist.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+        return Ok(await BuildResponse(id));
+    }
+
     private async Task<ArtistResponse?> BuildResponse(Guid id)
     {
         var row = await _db.Artists
@@ -274,20 +319,36 @@ public class ArtistsController : ControllerBase
                 a.Name,
                 a.Bio,
                 a.AvatarKey,
+                a.BannerKey,
                 a.CreatedByUserId,
                 a.CreatedAt,
                 AlbumCount = _db.Albums.Count(al => al.ArtistId == a.Id),
-                TrackCount = _db.Tracks.Count(t => t.ArtistId == a.Id)
+                TrackCount = _db.Tracks.Count(t => t.ArtistId == a.Id),
+                Followers = _db.Follows.Count(f => f.TargetType == Models.FollowTargetType.Artist && f.TargetId == a.Id)
             })
             .FirstOrDefaultAsync();
         if (row is null) return null;
 
-        var url = row.AvatarKey is null
+        var avatarUrl = row.AvatarKey is null
             ? null
             : await _storage.GeneratePresignedImageGetUrlAsync(row.AvatarKey);
 
+        var bannerUrl = row.BannerKey is null
+            ? null
+            : await _storage.GeneratePresignedImageGetUrlAsync(row.BannerKey);
+
+        // Monthly listeners: уникальные пользователи, слушавшие треки этого артиста за 30 дней
+        var since30 = DateTime.UtcNow.AddDays(-30);
+        var monthlyListeners = await _db.PlayEvents
+            .Where(pe => pe.Track!.ArtistId == id && pe.StartedAt >= since30)
+            .Select(pe => pe.UserId)
+            .Distinct()
+            .CountAsync();
+
         return new ArtistResponse(
-            row.Id, row.Name, row.Bio, url, row.CreatedByUserId, row.CreatedAt,
-            row.AlbumCount, row.TrackCount);
+            row.Id, row.Name, row.Bio, avatarUrl, bannerUrl,
+            row.CreatedByUserId, row.CreatedAt,
+            row.AlbumCount, row.TrackCount,
+            row.Followers, monthlyListeners);
     }
 }

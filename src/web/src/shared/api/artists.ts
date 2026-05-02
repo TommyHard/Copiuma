@@ -6,6 +6,11 @@ export async function getArtist(id: string): Promise<ArtistSummary> {
     return r.data;
 }
 
+export async function createArtist(data: { name: string; bio?: string }): Promise<ArtistSummary> {
+    const r = await api.post<ArtistSummary>('/artists', data);
+    return r.data;
+}
+
 export async function getMyArtist(): Promise<ArtistSummary | null> {
     const r = await api.get<ArtistSummary>('/artists/mine', { validateStatus: (s) => s === 200 || s === 204 });
     return r.status === 204 ? null : r.data;
@@ -46,5 +51,24 @@ export async function uploadArtistAvatar(artistId: string, file: File): Promise<
 
 export async function deleteArtistAvatar(artistId: string): Promise<ArtistSummary> {
     const r = await api.delete<ArtistSummary>(`/artists/${artistId}/avatar`);
+    return r.data;
+}
+
+export async function uploadArtistBanner(artistId: string, file: File): Promise<ArtistSummary> {
+    const fd = new FormData();
+    fd.append('File', file);
+    const r = await api.post<ArtistSummary>(`/artists/${artistId}/banner`, fd, {
+        headers: { 'Content-Type': undefined },
+    });
+    return r.data;
+}
+
+export async function deleteArtistBanner(artistId: string): Promise<ArtistSummary> {
+    const r = await api.delete<ArtistSummary>(`/artists/${artistId}/banner`);
+    return r.data;
+}
+
+export async function updateArtist(artistId: string, data: { name?: string; bio?: string }): Promise<ArtistSummary> {
+    const r = await api.put<ArtistSummary>(`/artists/${artistId}`, data);
     return r.data;
 }

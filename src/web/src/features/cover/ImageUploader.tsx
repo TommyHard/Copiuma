@@ -6,7 +6,7 @@ const MAX_BYTES = 10 * 1024 * 1024;
 
 /**
  * Универсальный загрузчик картинки
- * Используется album cover, и для artist avatar
+ * Используется album cover и artist avatar
  */
 export function ImageUploader({
     currentUrl,
@@ -18,7 +18,7 @@ export function ImageUploader({
     currentUrl?: string | null;
     onUpload: (file: File) => Promise<unknown>;
     onDelete?: () => Promise<unknown>;
-    shape?: 'square' | 'circle';
+    shape?: 'square' | 'circle' | 'banner';
     label?: string;
 }) {
     const inputRef = useRef<HTMLInputElement>(null);
@@ -55,8 +55,12 @@ export function ImageUploader({
                 onClick={() => inputRef.current?.click()}
                 disabled={upload.isPending}
                 className={
-                    'block size-32 cursor-pointer overflow-hidden border border-dashed border-border bg-bg-elevated bg-cover bg-center transition-opacity hover:opacity-90 disabled:opacity-50 ' +
-                    (shape === 'circle' ? 'rounded-full' : 'rounded-md')
+                    'block cursor-pointer overflow-hidden border border-dashed border-border bg-bg-elevated bg-cover bg-center transition-opacity hover:opacity-90 disabled:opacity-50 ' +
+                    (shape === 'circle'
+                        ? 'size-32 rounded-full'
+                        : shape === 'banner'
+                            ? 'h-48 w-full rounded-b-lg md:h-64'
+                            : 'size-32 rounded-md')
                 }
                 style={{ backgroundImage: currentUrl ? `url(${currentUrl})` : undefined }}
                 title={`${label}: загрузить новый`}

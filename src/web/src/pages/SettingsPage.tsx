@@ -1,15 +1,10 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getProfile, updateProfile, changePassword } from '@/shared/api/profile';
+import { listGenres } from '@/shared/api/genres';
 import { cn } from '@/shared/lib/cn';
 
 type Tab = 'profile' | 'password';
-
-const KNOWN_GENRES = [
-    'rock', 'pop', 'hip-hop', 'electronic', 'jazz', 'classical',
-    'r&b', 'soul', 'metal', 'folk', 'indie', 'punk', 'ambient', 'lo-fi',
-    'blues', 'country', 'reggae', 'alternative', 'post-punk',
-];
 
 const LANGUAGES = [
     { value: 'ru', label: 'Русский' },
@@ -44,7 +39,13 @@ function ProfileSection() {
         queryFn: getProfile,
     });
 
+    const genresQ = useQuery({
+        queryKey: ['genres'],
+        queryFn: listGenres,
+    });
+
     const [displayName, setDisplayName] = useState('');
+    const [bio, setBio] = useState('');
     const [language, setLanguage] = useState('ru');
     const [genres, setGenres] = useState<string[]>([]);
     const [genreInput, setGenreInput] = useState('');
@@ -53,6 +54,7 @@ function ProfileSection() {
     useEffect(() => {
         if (profileQ.data && !synced) {
             setDisplayName(profileQ.data.displayName ?? '');
+            setBio(profileQ.data.bio ?? '');
             setLanguage(profileQ.data.language ?? 'ru');
             setGenres(profileQ.data.favoriteGenres ?? []);
             setSynced(true);
@@ -62,11 +64,12 @@ function ProfileSection() {
     const save = useMutation({
         mutationFn: () => updateProfile({
             displayName: displayName.trim() || undefined,
+            bio: bio.trim(),
             favoriteGenres: genres,
             language,
         }),
-        onSuccess: () => {
-            qc.invalidateQueries({ queryKey: ['profile'] });
+        onSuccess: (data) => {
+            qc.setQueryData(['profile'], data);
             qc.invalidateQueries({ queryKey: ['me'] });
         },
     });
@@ -100,6 +103,20 @@ function ProfileSection() {
                     placeholder="Как тебя зовут?"
                     className="w-full rounded-md border border-border bg-bg-elevated px-3 py-2 outline-none focus:border-accent"
                 />
+            </label>
+
+            {/* Bio */}
+            <label className="block">
+                <span className="mb-1 block text-sm text-fg-muted">О себе</span>
+                <textarea
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                    maxLength={500}
+                    rows={3}
+                    placeholder="Расскажите немного о себе…"
+                    className="w-full rounded-md border border-border bg-bg-elevated px-3 py-2 text-sm outline-none focus:border-accent"
+                />
+                <span className="text-xs text-fg-muted">{bio.length}/500</span>
             </label>
 
             {/* Language */}
@@ -157,7 +174,7 @@ function ProfileSection() {
                     </button>
                 </div>
                 <datalist id="settings-genre-list">
-                    {KNOWN_GENRES.map((g) => <option key={g} value={g} />)}
+                    {(genresQ.data ?? []).map((g) => <option key={g.slug} value={g.slug}>{g.displayName}</option>)}
                 </datalist>
             </div>
 

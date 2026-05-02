@@ -1,11 +1,15 @@
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     deleteArtistAvatar,
+    deleteArtistBanner,
     getArtist,
     listArtistAlbums,
     listArtistTracks,
+    updateArtist,
     uploadArtistAvatar,
+    uploadArtistBanner,
 } from '@/shared/api/artists';
 import { FollowArtistButton } from '@/features/follows/FollowArtistButton';
 import { TrackRow } from './track-row';
@@ -37,59 +41,160 @@ export function ArtistPage() {
         enabled: !!id,
     });
 
+    const [editingBio, setEditingBio] = useState(false);
+    const [bioText, setBioText] = useState('');
+
+    const saveBio = useMutation({
+        mutationFn: (bio: string) => updateArtist(id!, { bio }),
+        onSuccess: (data) => {
+            qc.setQueryData(['artist', id], data);
+            setEditingBio(false);
+        },
+    });
+
     if (artist.isLoading) return <p className="text-fg-muted">Загружаем…</p>;
     if (artist.isError || !artist.data) return <p className="text-danger">Артист не найден.</p>;
 
     const a = artist.data;
-    const isOwner = !!user && !!a.ownerUserId && user.id === a.ownerUserId;
+    const isOwner = !!user && !!(a.ownerUserId ?? a.createdByUserId) && user.id === (a.ownerUserId ?? a.createdByUserId);
+
+    function formatNumber(n: number): string {
+        if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+        if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+        return String(n);
+    }
 
     return (
         <article className="space-y-10">
-            <header className="flex flex-wrap items-center gap-6">
+            {/* BANNER */}
+            <div className="relative -mx-4 -mt-4 md:-mx-6 md:-mt-6">
                 {isOwner ? (
                     <ImageUploader
-                        currentUrl={a.avatarUrl}
-                        shape="circle"
-                        label="Аватар"
+                        currentUrl={a.bannerUrl}
+                        shape="banner"
+                        label="Баннер"
                         onUpload={async (f) => {
-                            const updated = await uploadArtistAvatar(a.id, f);
+                            const updated = await uploadArtistBanner(a.id, f);
                             qc.setQueryData(['artist', a.id], updated);
                         }}
                         onDelete={async () => {
-                            const updated = await deleteArtistAvatar(a.id);
+                            const updated = await deleteArtistBanner(a.id);
                             qc.setQueryData(['artist', a.id], updated);
                         }}
                     />
                 ) : (
                     <div
-                        className="size-32 shrink-0 rounded-full border border-border bg-bg-elevated bg-cover bg-center"
-                        style={{ backgroundImage: a.avatarUrl ? `url(${a.avatarUrl})` : undefined }}
+                        className="h-48 w-full rounded-b-lg bg-bg-elevated bg-cover bg-center md:h-64"
+                        style={{ backgroundImage: a.bannerUrl ? `url(${a.bannerUrl})` : undefined }}
                         aria-hidden
                     />
                 )}
 
-                <div className="min-w-0 flex-1 space-y-2">
-                    <h1 className="truncate text-3xl font-semibold">{a.name}</h1>
-                    {typeof a.followers === 'number' && (
-                        <p className="text-sm text-fg-muted">{a.followers} подписчиков</p>
+                {/* Avatar overlapping banner */}
+                <div className="absolute -bottom-12 left-6">
+                    {isOwner ? (
+                        <ImageUploader
+                            currentUrl={a.avatarUrl}
+                            shape="circle"
+                            label="Аватар"
+                            onUpload={async (f) => {
+                                const updated = await uploadArtistAvatar(a.id, f);
+                                qc.setQueryData(['artist', a.id], updated);
+                            }}
+                            onDelete={async () => {
+                                const updated = await deleteArtistAvatar(a.id);
+                                qc.setQueryData(['artist', a.id], updated);
+                            }}
+                        />
+                    ) : (
+                        <div
+                            className="size-24 rounded-full border-4 border-bg bg-bg-elevated bg-cover bg-center shadow-md md:size-28"
+                            style={{ backgroundImage: a.avatarUrl ? `url(${a.avatarUrl})` : undefined }}
+                            aria-hidden
+                        />
                     )}
-                    {a.bio && <p className="text-sm text-fg-muted">{a.bio}</p>}
-                    <div className="flex flex-wrap gap-2 pt-2">
-                        {!isOwner && <FollowArtistButton artistId={a.id} />}
-                        {tracks.data && tracks.data.length > 0 && (
-                            <button
-                                onClick={() => playQueue(tracks.data!, 0)}
-                                className="rounded-md border border-border px-4 py-2 text-sm hover:bg-bg-elevated"
-                            >
-                                ▶ Играть всё
-                            </button>
-                        )}
-                    </div>
+                </div>
+            </div>
+
+            {/* Spacer for avatar */}
+            <div className="h-8" />
+
+            {/* HEADER INFO */}
+            <header className="space-y-3 px-2">
+                <h1 className="text-3xl font-bold tracking-tight">{a.name}</h1>
+
+                <div className="flex flex-wrap items-center gap-4 text-sm text-fg-muted">
+                    {typeof a.monthlyListeners === 'number' && (
+                        <span>{formatNumber(a.monthlyListeners)} слушателей за месяц</span>
+                    )}
+                    {typeof a.followers === 'number' && (
+                        <span>{formatNumber(a.followers)} подписчиков</span>
+                    )}
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-1">
+                    {!isOwner && <FollowArtistButton artistId={a.id} />}
+                    {tracks.data && tracks.data.length > 0 && (
+                        <button
+                            onClick={() => playQueue(tracks.data!, 0)}
+                            className="rounded-md bg-accent px-4 py-2 text-sm text-accent-fg hover:opacity-90"
+                        >
+                            ▶ Играть всё
+                        </button>
+                    )}
                 </div>
             </header>
 
+            {/* ABOUT */}
+            <section className="space-y-3 px-2">
+                <div className="flex items-center gap-3">
+                    <h2 className="text-xl font-semibold">Об артисте</h2>
+                    {isOwner && !editingBio && (
+                        <button
+                            onClick={() => { setBioText(a.bio ?? ''); setEditingBio(true); }}
+                            className="text-xs text-accent hover:underline"
+                        >
+                            Редактировать
+                        </button>
+                    )}
+                </div>
+
+                {editingBio ? (
+                    <div className="space-y-2">
+                        <textarea
+                            value={bioText}
+                            onChange={(e) => setBioText(e.target.value)}
+                            maxLength={4000}
+                            rows={5}
+                            className="w-full max-w-xl rounded-md border border-border bg-bg-elevated px-3 py-2 text-sm outline-none focus:border-accent"
+                            placeholder="Расскажите о себе…"
+                        />
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => saveBio.mutate(bioText)}
+                                disabled={saveBio.isPending}
+                                className="rounded-md bg-accent px-3 py-1.5 text-xs text-accent-fg hover:opacity-90 disabled:opacity-50"
+                            >
+                                {saveBio.isPending ? 'Сохраняем…' : 'Сохранить'}
+                            </button>
+                            <button
+                                onClick={() => setEditingBio(false)}
+                                className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-bg-elevated"
+                            >
+                                Отмена
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <p className="max-w-2xl whitespace-pre-wrap text-sm text-fg-muted">
+                        {a.bio || 'Информация об артисте ещё не добавлена.'}
+                    </p>
+                )}
+            </section>
+
+            {/* ALBUMS */}
             {albums.data && albums.data.length > 0 && (
-                <section className="space-y-3">
+                <section className="space-y-3 px-2">
                     <h2 className="text-xl font-semibold">Альбомы</h2>
                     <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
                         {albums.data.map((al) => (
@@ -116,8 +221,9 @@ export function ArtistPage() {
                 </section>
             )}
 
-            <section className="space-y-3">
-                <h2 className="text-xl font-semibold">Треки</h2>
+            {/* ALL TRACKS */}
+            <section className="space-y-3 px-2">
+                <h2 className="text-xl font-semibold">Все треки</h2>
                 {tracks.isLoading && <p className="text-fg-muted">Загружаем…</p>}
                 {tracks.data && tracks.data.length === 0 && (
                     <p className="text-fg-muted">У этого артиста пока нет треков.</p>

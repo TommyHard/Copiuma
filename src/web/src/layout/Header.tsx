@@ -39,7 +39,7 @@ export function Header() {
                     <ThemeToggle />
                     {user && <NotificationsBell />}
                     {user && (
-                        <Link to="/me" className="hidden text-fg-muted hover:text-fg md:block">
+                        <Link to={`/users/${user.id}`} className="hidden text-fg-muted hover:text-fg md:block">
                             {user.displayName ?? user.email}
                             {user.role !== 'User' && (
                                 <span className="ml-2 rounded bg-accent/20 px-2 py-0.5 text-xs text-accent">
@@ -51,6 +51,14 @@ export function Header() {
                                     email не подтверждён
                                 </span>
                             )}
+                        </Link>
+                    )}
+                    {user && (
+                        <Link
+                            to="/artist/settings"
+                            className="hidden rounded-md border border-border px-2 py-1 text-xs text-fg-muted hover:bg-bg-elevated md:block"
+                            title="Профиль артиста">
+                            🎤
                         </Link>
                     )}
                     <Link

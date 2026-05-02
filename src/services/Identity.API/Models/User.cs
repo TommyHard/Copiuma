@@ -27,6 +27,16 @@ public class User
     /// </summary>
     public DateTime? PasswordChangedAt { get; set; }
 
+    /// <summary>
+    /// Краткое описание пользователя (публичное)
+    /// </summary>
+    public string? Bio { get; set; }
+
+    /// <summary>
+    /// Ключ аватара в object storage (MinIO images bucket)
+    /// </summary>
+    public string? AvatarKey { get; set; }
+
     public UserPreferences? Preferences { get; set; }
     public List<RefreshToken> RefreshTokens { get; set; } = new();
     public List<EmailVerificationToken> EmailVerificationTokens { get; set; } = new();

@@ -28,6 +28,8 @@ import { ResendVerificationPage } from '@/pages/auth/ResendVerificationPage';
 import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage';
 import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage';
 import { DeviceGrantPage } from '@/pages/auth/DeviceGrantPage';
+import { UserProfilePage } from '@/pages/UserProfilePage';
+import { ArtistSettingsPage } from '@/pages/ArtistSettingsPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
 export const router = createBrowserRouter([
@@ -73,8 +75,10 @@ export const router = createBrowserRouter([
                     { path: 'rooms', element: <RoomsLandingPage /> },
                     { path: 'rooms/:id', element: <RoomPage /> },
                     { path: 'me', element: <MePage /> },
+                    { path: 'users/:id', element: <UserProfilePage /> },
                     { path: 'friends', element: <FriendsPage /> },
                     { path: 'settings', element: <SettingsPage /> },
+                    { path: 'artist/settings', element: <ArtistSettingsPage /> },
                     {
                         path: 'upload',
                         element: (

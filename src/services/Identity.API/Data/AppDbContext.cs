@@ -21,6 +21,8 @@ public class AppDbContext : DbContext
         {
             b.HasIndex(u => u.Email).IsUnique();
             b.Property(u => u.Role).HasConversion<int>();
+            b.Property(u => u.Bio).HasMaxLength(500);
+            b.Property(u => u.AvatarKey).HasMaxLength(500);
 
             b.HasOne(u => u.Preferences)
              .WithOne(p => p.User)

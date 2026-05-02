@@ -1,4 +1,5 @@
-﻿using Minio;
+﻿using Microsoft.Extensions.Configuration;
+using Minio;
 using Minio.ApiEndpoints;
 using Minio.DataModel.Args;
 
@@ -7,6 +8,8 @@ namespace Music.API.Services;
 public class FileStorageService
 {
     private readonly IMinioClient _minioClient;
+    private readonly string? _publicEndpoint;
+    private readonly string? _internalEndpoint;
     public const string BucketName = "tracks";
     public const string ImagesBucket = "images";
 
@@ -23,9 +26,21 @@ public class FileStorageService
             "image/jpeg", "image/png", "image/webp", "image/gif"
         };
 
-    public FileStorageService(IMinioClient minioClient)
+    public FileStorageService(IMinioClient minioClient, IConfiguration configuration)
     {
         _minioClient = minioClient;
+        _internalEndpoint = configuration["Minio:Endpoint"];
+        _publicEndpoint = configuration["Minio:PublicEndpoint"];
+    }
+
+    /// <summary>
+    /// Заменяет внутренний endpoint (minio:9000) на публичный (localhost:18000) в presigned URL
+    /// </summary>
+    private string RewriteToPublic(string url)
+    {
+        if (string.IsNullOrEmpty(_publicEndpoint) || string.IsNullOrEmpty(_internalEndpoint))
+            return url;
+        return url.Replace(_internalEndpoint, _publicEndpoint);
     }
 
     public async Task EnsureBucketAsync(string? bucket = null, CancellationToken ct = default)
@@ -77,12 +92,13 @@ public class FileStorageService
             .WithObject(key), ct);
     }
 
-    public Task<string> GeneratePresignedImageGetUrlAsync(string key, int expirySeconds = 3600)
+    public async Task<string> GeneratePresignedImageGetUrlAsync(string key, int expirySeconds = 3600)
     {
-        return _minioClient.PresignedGetObjectAsync(new PresignedGetObjectArgs()
+        var url = await _minioClient.PresignedGetObjectAsync(new PresignedGetObjectArgs()
             .WithBucket(ImagesBucket)
             .WithObject(key)
             .WithExpiry(expirySeconds));
+        return RewriteToPublic(url);
     }
 
     public async Task<string> UploadFileAsync(
@@ -144,12 +160,13 @@ public class FileStorageService
     /// <summary>
     /// Подписанный URL для прямой отдачи клиенту, в обход Music.API
     /// </summary>
-    public Task<string> GeneratePresignedGetUrlAsync(string fileName, int expirySeconds = 900)
+    public async Task<string> GeneratePresignedGetUrlAsync(string fileName, int expirySeconds = 900)
     {
-        return _minioClient.PresignedGetObjectAsync(new PresignedGetObjectArgs()
+        var url = await _minioClient.PresignedGetObjectAsync(new PresignedGetObjectArgs()
             .WithBucket(BucketName)
             .WithObject(fileName)
             .WithExpiry(expirySeconds));
+        return RewriteToPublic(url);
     }
 
     /// <summary>

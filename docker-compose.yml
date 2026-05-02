@@ -68,6 +68,7 @@ services:
     environment:
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=copiuma_music;Username=admin;Password=password123
       - Minio__Endpoint=minio:9000
+      - Minio__PublicEndpoint=localhost:18000
       - Minio__AccessKey=minioadmin
       - Minio__SecretKey=minioadmin
       - RabbitMQ__HostName=rabbitmq

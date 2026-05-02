@@ -10,10 +10,13 @@ public record ArtistResponse(
     string Name,
     string? Bio,
     string? AvatarUrl,
+    string? BannerUrl,
     Guid CreatedByUserId,
     DateTime CreatedAt,
     int AlbumCount,
-    int TrackCount);
+    int TrackCount,
+    int Followers = 0,
+    int MonthlyListeners = 0);
 
 public record ArtistListItem(
     Guid Id,
