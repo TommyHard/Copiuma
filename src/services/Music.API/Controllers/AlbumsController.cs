@@ -127,14 +127,49 @@ public class AlbumsController : ControllerBase
     [HttpGet("{id:guid}/tracks")]
     public async Task<IActionResult> Tracks(Guid id)
     {
-        if (!await _db.Albums.AnyAsync(a => a.Id == id)) return NotFound();
+        var album = await _db.Albums
+            .Where(a => a.Id == id)
+            .Select(a => new { a.Id, a.CoverKey, a.ArtistId, ArtistName = a.Artist!.Name })
+            .FirstOrDefaultAsync();
+        if (album is null) return NotFound();
 
-        var items = await _db.Tracks
+        var rows = await _db.Tracks
             .Where(t => t.AlbumId == id)
             .OrderBy(t => t.TrackNumber ?? int.MaxValue)
             .ThenBy(t => t.UploadedAt)
-            .Select(t => new AlbumTrackItem(t.Id, t.Title, t.TrackNumber, t.Duration))
+            .Select(t => new
+            {
+                t.Id,
+                t.Title,
+                t.TrackNumber,
+                t.Duration,
+                t.CoverKey,
+                t.Artist,
+                t.ArtistId,
+                t.IsExplicit
+            })
             .ToListAsync();
+
+        var albumCoverUrl = album.CoverKey is null
+            ? null
+            : await _storage.GeneratePresignedImageGetUrlAsync(album.CoverKey);
+
+        var items = new List<AlbumTrackItem>(rows.Count);
+        foreach (var r in rows)
+        {
+            var trackCoverUrl = r.CoverKey is null
+                ? albumCoverUrl
+                : await _storage.GeneratePresignedImageGetUrlAsync(r.CoverKey);
+            items.Add(new AlbumTrackItem(
+                r.Id,
+                r.Title,
+                r.TrackNumber,
+                r.Duration,
+                trackCoverUrl,
+                r.Artist ?? album.ArtistName,
+                r.ArtistId ?? album.ArtistId,
+                r.IsExplicit));
+        }
 
         return Ok(items);
     }
@@ -186,7 +221,7 @@ public class AlbumsController : ControllerBase
         return NoContent();
     }
 
-    // ---- Cover ----
+    // Cover
 
     [HttpPost("{id:guid}/cover")]
     [RequestSizeLimit(10_000_000)]
@@ -233,7 +268,7 @@ public class AlbumsController : ControllerBase
         return NoContent();
     }
 
-    // ---- Attach/detach tracks ----
+    // Attach/detach tracks
 
     /// <summary>
     /// Привязывает существующий трек к альбому. Трек должен принадлежать тому же

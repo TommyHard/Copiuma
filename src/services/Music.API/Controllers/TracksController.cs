@@ -116,14 +116,28 @@ public class TracksController : ControllerBase
 
         var normalizedGenres = NormalizeGenres(request.Genres);
 
+        var trackId = Guid.NewGuid();
+
+        // Собственная обложка трека
+        string? coverKey = null;
+        if (request.Cover is { Length: > 0 } cover)
+        {
+            if (!FileStorageService.IsAllowedImageContentType(cover.ContentType))
+                return BadRequest($"Недопустимый content-type обложки: {cover.ContentType}.");
+            await using var coverStream = cover.OpenReadStream();
+            coverKey = await _storage.UploadImageAsync(
+                coverStream, cover.FileName, cover.ContentType, cover.Length, $"tracks/{trackId}");
+        }
+
         var track = new Track
         {
-            Id = Guid.NewGuid(),
+            Id = trackId,
             Title = request.Title.Trim(),
             Artist = artistName,
             ArtistId = request.ArtistId,
             AlbumId = request.AlbumId,
             TrackNumber = request.AlbumId.HasValue ? request.TrackNumber : null,
+            CoverKey = coverKey,
             Genres = normalizedGenres,
             FileName = savedFileName,
             ContentType = request.File.ContentType,
@@ -283,7 +297,6 @@ public class TracksController : ControllerBase
         track.Genres = normalizedGenres;
         track.IsExplicit = request.IsExplicit;
 
-        // Обновляем связи TrackGenre
         var existingLinks = await _context.TrackGenres
             .Where(tg => tg.TrackId == id)
             .ToListAsync();
@@ -373,6 +386,8 @@ public class TracksController : ControllerBase
                 t.IsExplicit,
                 t.Genres,
                 t.ProcessingStatus,
+                t.CoverKey,
+                AlbumCoverKey = t.Album != null ? t.Album.CoverKey : null,
                 IsLikedByMe = _context.LikedTracks.Any(l => l.TrackId == id && l.UserId == UserId),
                 UploadedByUserId = t.UploadedByUserId,
                 FeaturedArtists = _context.TrackFeaturedArtists
@@ -383,7 +398,87 @@ public class TracksController : ControllerBase
             })
             .FirstOrDefaultAsync();
 
-        return track is null ? NotFound() : Ok(track);
+        if (track is null) return NotFound();
+
+        var effectiveCoverKey = track.CoverKey ?? track.AlbumCoverKey;
+        var coverUrl = effectiveCoverKey is null
+            ? null
+            : await _storage.GeneratePresignedImageGetUrlAsync(effectiveCoverKey);
+        var ownCoverUrl = track.CoverKey is null
+            ? null
+            : await _storage.GeneratePresignedImageGetUrlAsync(track.CoverKey);
+
+        return Ok(new
+        {
+            track.Id,
+            track.Title,
+            track.Artist,
+            track.Duration,
+            track.ArtistId,
+            track.AlbumId,
+            track.TrackNumber,
+            track.IsExplicit,
+            track.Genres,
+            track.ProcessingStatus,
+            CoverUrl = coverUrl,
+            OwnCoverUrl = ownCoverUrl,
+            HasOwnCover = track.CoverKey != null,
+            track.IsLikedByMe,
+            track.UploadedByUserId,
+            track.FeaturedArtists
+        });
+    }
+
+    /// <summary>
+    /// Загрузка/замена собственной обложки трека
+    /// </summary>
+    [HttpPost("{id:guid}/cover")]
+    [RequestSizeLimit(10_000_000)]
+    public async Task<IActionResult> UploadCover(Guid id, IFormFile file)
+    {
+        if (file is null || file.Length == 0) return BadRequest("Файл пуст.");
+        if (!FileStorageService.IsAllowedImageContentType(file.ContentType))
+            return BadRequest($"Недопустимый content-type: {file.ContentType}.");
+
+        var track = await _context.Tracks.FindAsync(id);
+        if (track is null || track.DeletedAt != null) return NotFound();
+        if (track.UploadedByUserId != UserId) return Forbid();
+
+        await using var stream = file.OpenReadStream();
+        var key = await _storage.UploadImageAsync(
+            stream, file.FileName, file.ContentType, file.Length, $"tracks/{id}");
+
+        var oldKey = track.CoverKey;
+        track.CoverKey = key;
+        await _context.SaveChangesAsync();
+
+        if (oldKey is not null)
+        {
+            try { await _storage.DeleteImageAsync(oldKey); } catch { }
+        }
+
+        await BumpCacheVersionAsync();
+
+        var url = await _storage.GeneratePresignedImageGetUrlAsync(key);
+        return Ok(new { coverUrl = url });
+    }
+
+    /// <summary>
+    /// Удаляет собственную обложку трека. После этого трек снова наследует обложку альбома
+    /// </summary>
+    [HttpDelete("{id:guid}/cover")]
+    public async Task<IActionResult> DeleteCover(Guid id)
+    {
+        var track = await _context.Tracks.FindAsync(id);
+        if (track is null || track.DeletedAt != null) return NotFound();
+        if (track.UploadedByUserId != UserId) return Forbid();
+        if (track.CoverKey is null) return NoContent();
+
+        try { await _storage.DeleteImageAsync(track.CoverKey); } catch { }
+        track.CoverKey = null;
+        await _context.SaveChangesAsync();
+        await BumpCacheVersionAsync();
+        return NoContent();
     }
 
     [HttpGet("{id}/play")]

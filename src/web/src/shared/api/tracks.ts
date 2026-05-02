@@ -9,6 +9,7 @@ export interface UploadFields {
     trackNumber?: number;
     genres?: string[];
     featuredArtistIds?: string[];
+    cover?: File;
 }
 
 export async function uploadTrack(
@@ -26,6 +27,7 @@ export async function uploadTrack(
     if (fields.trackNumber !== undefined) fd.append('TrackNumber', String(fields.trackNumber));
     fields.genres?.forEach((g) => fd.append('Genres', g));
     fields.featuredArtistIds?.forEach((id) => fd.append('FeaturedArtistIds', id));
+    if (fields.cover) fd.append('Cover', fields.cover);
 
     const r = await api.post<UploadResult>('/tracks/upload', fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -35,6 +37,19 @@ export async function uploadTrack(
         },
     });
     return r.data;
+}
+
+export async function uploadTrackCover(trackId: string, file: File): Promise<{ coverUrl: string }> {
+    const fd = new FormData();
+    fd.append('file', file);
+    const r = await api.post<{ coverUrl: string }>(`/tracks/${trackId}/cover`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return r.data;
+}
+
+export async function deleteTrackCover(trackId: string): Promise<void> {
+    await api.delete(`/tracks/${trackId}/cover`);
 }
 
 export async function toggleLike(trackId: string): Promise<{ isLiked: boolean }> {

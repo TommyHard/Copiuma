@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getTrack, getTrackStatus } from '@/shared/api/catalog';
-import { deleteTrack, toggleLike } from '@/shared/api/tracks';
+import { deleteTrack, deleteTrackCover, toggleLike, uploadTrackCover } from '@/shared/api/tracks';
 import { dislikeTrack } from '@/shared/api/dislikes';
 import { similarTracks } from '@/shared/api/recommendations';
 import { usePlayTrack } from '@/features/player/usePlayTrack';
@@ -13,6 +13,7 @@ import { StarRating } from '@/features/ratings/StarRating';
 import { Reviews } from '@/features/reviews/Reviews';
 import { ReportButton } from '@/features/reports/ReportButton';
 import { TrackEditDialog } from '@/features/track/TrackEditDialog';
+import { ImageUploader } from '@/features/cover/ImageUploader';
 
 export function TrackPage() {
     const { id } = useParams();
@@ -75,29 +76,59 @@ export function TrackPage() {
 
     return (
         <article className="space-y-10">
-            <header className="space-y-2">
-                <h1 className="text-3xl font-semibold">{t.title}</h1>
-                <div className="flex items-baseline gap-3">
-                    {t.artistId ? (
-                        <Link to={`/artists/${t.artistId}`} className="text-fg-muted hover:text-fg">
-                            {t.artist ?? '—'}
-                        </Link>
-                    ) : (
-                        <p className="text-fg-muted">{t.artist ?? '—'}</p>
-                    )}
-                    {t.albumId && (
-                        <>
-                            <span className="text-fg-muted">·</span>
-                            <Link to={`/albums/${t.albumId}`} className="text-fg-muted hover:text-fg">
-                                альбом{t.trackNumber ? ` #${t.trackNumber}` : ''}
+            <header className="flex flex-wrap items-start gap-6">
+                {isOwner ? (
+                    <div className="space-y-1">
+                        <ImageUploader
+                            currentUrl={t.coverUrl ?? null}
+                            label="Обложка"
+                            onUpload={async (f) => {
+                                await uploadTrackCover(t.id, f);
+                                qc.invalidateQueries({ queryKey: ['track', id] });
+                            }}
+                            onDelete={t.hasOwnCover ? async () => {
+                                await deleteTrackCover(t.id);
+                                qc.invalidateQueries({ queryKey: ['track', id] });
+                            } : undefined}
+                        />
+                        {t.hasOwnCover ? (
+                            <p className="text-[10px] text-fg-muted">собственная обложка</p>
+                        ) : t.coverUrl ? (
+                            <p className="text-[10px] text-fg-muted">наследуется от альбома</p>
+                        ) : null}
+                    </div>
+                ) : (
+                    <div
+                        className="size-32 shrink-0 rounded-md border border-border bg-bg-elevated bg-cover bg-center"
+                        style={{ backgroundImage: t.coverUrl ? `url(${t.coverUrl})` : undefined }}
+                        aria-hidden
+                    />
+                )}
+
+                <div className="min-w-0 flex-1 space-y-2">
+                    <h1 className="text-3xl font-semibold">{t.title}</h1>
+                    <div className="flex flex-wrap items-baseline gap-3">
+                        {t.artistId ? (
+                            <Link to={`/artists/${t.artistId}`} className="text-fg-muted hover:text-fg">
+                                {t.artist ?? '—'}
                             </Link>
-                        </>
-                    )}
-                    {t.isExplicit && (
-                        <span className="rounded bg-fg/15 px-1.5 py-0.5 text-[10px] uppercase text-fg-muted">
-                            explicit
-                        </span>
-                    )}
+                        ) : (
+                            <p className="text-fg-muted">{t.artist ?? '—'}</p>
+                        )}
+                        {t.albumId && (
+                            <>
+                                <span className="text-fg-muted">·</span>
+                                <Link to={`/albums/${t.albumId}`} className="text-fg-muted hover:text-fg">
+                                    альбом{t.trackNumber ? ` #${t.trackNumber}` : ''}
+                                </Link>
+                            </>
+                        )}
+                        {t.isExplicit && (
+                            <span className="rounded bg-fg/15 px-1.5 py-0.5 text-[10px] uppercase text-fg-muted">
+                                explicit
+                            </span>
+                        )}
+                    </div>
                 </div>
             </header>
 
@@ -157,8 +188,8 @@ export function TrackPage() {
                             disabled={dislike.isPending || dislike.isSuccess}
                             title="Не интересно — убрать из рекомендаций"
                             className={`rounded-md border px-4 py-2 text-sm transition-colors disabled:opacity-50 ${dislike.isSuccess
-                                    ? 'border-border text-fg-muted line-through'
-                                    : 'border-border hover:border-danger/40 hover:text-danger'
+                                ? 'border-border text-fg-muted line-through'
+                                : 'border-border hover:border-danger/40 hover:text-danger'
                                 }`}>
                             🚫 Не интересно
                         </button>

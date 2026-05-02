@@ -16,15 +16,27 @@ export async function getMyArtist(): Promise<ArtistSummary | null> {
     return r.status === 204 ? null : r.data;
 }
 
-export async function listArtists(page = 1, pageSize = 30): Promise<ArtistSummary[]> {
-    const r = await api.get<ArtistSummary[]>('/artists', { params: { page, pageSize } });
-    return r.data;
+// GET /artists отдаёт { total, items: ArtistListItem[] }
+function unwrapArtistList(data: any): ArtistSummary[] {
+    const items = Array.isArray(data) ? data : (data?.items ?? data?.Items ?? []);
+    return items.map((a: any): ArtistSummary => ({
+        id: a.id ?? a.Id,
+        name: a.name ?? a.Name ?? '',
+        avatarUrl: a.avatarUrl ?? a.AvatarUrl ?? null,
+        albumCount: a.albumCount ?? a.AlbumCount,
+        trackCount: a.trackCount ?? a.TrackCount,
+    }));
+}
+
+export async function listArtists(skip = 0, take = 30): Promise<ArtistSummary[]> {
+    const r = await api.get<any>('/artists', { params: { skip, take } });
+    return unwrapArtistList(r.data);
 }
 
 export async function searchArtists(q: string): Promise<ArtistSummary[]> {
     if (q.trim().length < 2) return [];
-    const r = await api.get<ArtistSummary[]>('/artists', { params: { q, take: 10 } });
-    return r.data;
+    const r = await api.get<any>('/artists', { params: { q, take: 10 } });
+    return unwrapArtistList(r.data);
 }
 
 export async function listArtistAlbums(artistId: string): Promise<AlbumSummary[]> {

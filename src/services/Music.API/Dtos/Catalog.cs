@@ -56,6 +56,10 @@ public record AlbumTrackItem(
     Guid Id,
     string Title,
     int? TrackNumber,
-    TimeSpan? Duration);
+    TimeSpan? Duration,
+    string? CoverUrl = null,
+    string? Artist = null,
+    Guid? ArtistId = null,
+    bool IsExplicit = false);
 
 public record AttachAlbumTrackRequest(int? TrackNumber);

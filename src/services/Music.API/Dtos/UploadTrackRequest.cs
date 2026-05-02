@@ -17,4 +17,10 @@ public class UploadTrackRequest
     /// ID доп. исполнителей
     /// </summary>
     public List<Guid>? FeaturedArtistIds { get; set; }
+
+    /// <summary>
+    /// Опциональная собственная обложка трека
+    /// Если null и трек привязан к альбому — будет наследоваться cover альбома
+    /// </summary>
+    public IFormFile? Cover { get; set; }
 }

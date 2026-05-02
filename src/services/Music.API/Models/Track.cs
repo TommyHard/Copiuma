@@ -42,6 +42,12 @@ public class Track
     /// </summary>
     public int? TrackNumber { get; set; }
 
+    /// <summary>
+    /// Собственная обложка трека
+    /// null = трек наследует обложку альбома (если есть AlbumId), иначе обложки нет
+    /// </summary>
+    public string? CoverKey { get; set; }
+
     public List<string> Genres { get; set; } = new();
 
     public List<TrackGenre> TrackGenres { get; set; } = new();

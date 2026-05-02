@@ -42,6 +42,7 @@ export interface TrackListItem {
     isExplicit: boolean;
     isLikedByMe?: boolean;
     featuredArtists?: FeaturedArtist[];
+    coverUrl?: string | null;
 }
 
 export interface TrackDetail {
@@ -57,6 +58,9 @@ export interface TrackDetail {
     uploadedByUserId?: string;
     isLikedByMe?: boolean;
     featuredArtists?: FeaturedArtist[];
+    coverUrl?: string | null;
+    ownCoverUrl?: string | null;
+    hasOwnCover?: boolean;
 }
 
 export interface TrackProcessingStatusResponse {
@@ -117,6 +121,8 @@ export interface AlbumSummary {
     coverUrl?: string | null;
     trackCount?: number;
     ownerUserId?: string;
+    createdAt?: string | null;
+    genres?: string[];
 }
 
 // Notifications
