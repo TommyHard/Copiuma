@@ -10,8 +10,12 @@ export async function unfollowArtist(artistId: string): Promise<void> {
 }
 
 export async function listFollowedArtists(): Promise<FollowedArtist[]> {
-    const r = await api.get<FollowedArtist[]>('/follows/artists');
-    return r.data;
+    const r = await api.get<any[]>('/follows/artists');
+    return r.data.map(a => ({
+        artistId: a.artistId ?? a.ArtistId ?? a.id ?? a.Id,
+        name: a.name ?? a.Name,
+        followedAt: a.followedAt ?? a.FollowedAt ?? new Date().toISOString()
+    }));
 }
 
 export async function getFeed(limit = 30): Promise<FeedItem[]> {
@@ -37,8 +41,12 @@ export async function unfollowUser(userId: string): Promise<void> {
 }
 
 export async function getFollowedUsers(): Promise<FollowedUser[]> {
-    const r = await api.get<FollowedUser[]>('/follows/users');
-    return r.data;
+    const r = await api.get<any[]>('/follows/users');
+    return r.data.map(u => ({
+        userId: u.userId ?? u.UserId ?? u.id ?? u.Id,
+        isMutual: u.isMutual ?? u.IsMutual ?? false,
+        subscribedAt: u.subscribedAt ?? u.SubscribedAt ?? new Date().toISOString()
+    }));
 }
 
 export async function getFriends(): Promise<FriendItem[]> {

@@ -43,7 +43,7 @@ public class FileStorageService
         return url.Replace(_internalEndpoint, _publicEndpoint);
     }
 
-    public async Task EnsureBucketAsync(string? bucket = null, CancellationToken ct = default)
+    public async Task EnsureBucketAsync(string? bucket = null, bool makePublic = false, CancellationToken ct = default)
     {
         var name = bucket ?? BucketName;
         var exists = await _minioClient.BucketExistsAsync(
@@ -53,6 +53,26 @@ public class FileStorageService
         {
             await _minioClient.MakeBucketAsync(
                 new MakeBucketArgs().WithBucket(name), ct);
+        }
+
+        if (makePublic)
+        {
+            string policyJson = $@"{{
+            ""Version"": ""2012-10-17"",
+            ""Statement"": [
+                {{
+                    ""Effect"": ""Allow"",
+                    ""Principal"": {{ ""AWS"": [""*""] }},
+                    ""Action"": [ ""s3:GetObject"" ],
+                    ""Resource"": [ ""arn:aws:s3:::{name}/*"" ]
+                }}
+            ]
+        }}";
+
+            await _minioClient.SetPolicyAsync(
+                new SetPolicyArgs()
+                    .WithBucket(name)
+                    .WithPolicy(policyJson), ct);
         }
     }
 
@@ -92,13 +112,12 @@ public class FileStorageService
             .WithObject(key), ct);
     }
 
-    public async Task<string> GeneratePresignedImageGetUrlAsync(string key, int expirySeconds = 3600)
+    public Task<string> GeneratePresignedImageGetUrlAsync(string key, int expirySeconds = 3600)
     {
-        var url = await _minioClient.PresignedGetObjectAsync(new PresignedGetObjectArgs()
-            .WithBucket(ImagesBucket)
-            .WithObject(key)
-            .WithExpiry(expirySeconds));
-        return RewriteToPublic(url);
+        var endpoint = !string.IsNullOrEmpty(_publicEndpoint) ? _publicEndpoint : _internalEndpoint;
+        var url = $"http://{endpoint}/{ImagesBucket}/{key}";
+
+        return Task.FromResult(url);
     }
 
     public async Task<string> UploadFileAsync(
@@ -260,11 +279,15 @@ public class BucketInitializer : IHostedService
         {
             using var scope = _sp.CreateScope();
             var storage = scope.ServiceProvider.GetRequiredService<FileStorageService>();
-            await storage.EnsureBucketAsync(FileStorageService.BucketName, ct);
-            await storage.EnsureBucketAsync(FileStorageService.ImagesBucket, ct);
-            await storage.EnsureBucketAsync(FileStorageService.HlsBucket, ct);
+
+            await storage.EnsureBucketAsync(FileStorageService.BucketName, false, ct);
+            await storage.EnsureBucketAsync(FileStorageService.HlsBucket, false, ct);
+
+            // PUBLIC
+            await storage.EnsureBucketAsync(FileStorageService.ImagesBucket, true, ct);
+
             _log.LogInformation(
-                "Buckets готовы: {Tracks}, {Images}, {Hls}.",
+                "Buckets готовы: {Tracks}, {Images} (Public), {Hls}.",
                 FileStorageService.BucketName,
                 FileStorageService.ImagesBucket,
                 FileStorageService.HlsBucket);

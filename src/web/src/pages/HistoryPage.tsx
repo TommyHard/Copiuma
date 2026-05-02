@@ -101,7 +101,15 @@ export function HistoryPage() {
                                             className="block truncate font-medium hover:underline">
                                             {t.title}
                                         </Link>
-                                        <div className="truncate text-xs text-fg-muted">{t.artist ?? '—'}</div>
+                                        <div className="truncate text-xs text-fg-muted">
+                                            {t.artistId ? (
+                                                <Link to={`/artists/${t.artistId}`} className="hover:text-fg hover:underline">
+                                                    {t.artist ?? 'Неизвестный исполнитель'}
+                                                </Link>
+                                            ) : (
+                                                t.artist ?? 'Неизвестный исполнитель'
+                                            )}
+                                        </div>
                                     </div>
                                     <div className="text-right text-xs text-fg-muted">
                                         <div>×{t.playCount}</div>

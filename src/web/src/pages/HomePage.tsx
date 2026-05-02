@@ -15,6 +15,7 @@ export function HomePage() {
     const artists = useQuery({ queryKey: ['trending-artists'], queryFn: () => trendingArtists(8) });
 
     const popularEmpty = !popular.isLoading && (!popular.data || popular.data.length === 0);
+
     const catalog = useQuery({
         queryKey: ['catalog', 1],
         queryFn: () => listTracks(1, 15),
@@ -25,16 +26,16 @@ export function HomePage() {
         <div className="space-y-12">
             <header>
                 <h1 className="text-3xl font-semibold tracking-tight">
-                    Привет, {user?.displayName ?? user?.email ?? 'друг'}.
+                    С возвращением, {user?.displayName ?? user?.email ?? 'Гость'}
                 </h1>
             </header>
 
             {feed.data && feed.data.length > 0 && (
-                <Section title="Новое от твоих артистов">
+                <Section title="Лента">
                     <ul className="divide-y divide-border rounded-md border border-border">
                         {feed.data.map((f, i) => (
                             <TrackRow
-                                key={f.trackId}
+                                key={`feed-${f.trackId}-${i}`}
                                 number={i + 1}
                                 track={{
                                     id: f.trackId,
@@ -53,43 +54,46 @@ export function HomePage() {
                 </Section>
             )}
 
-            <Section title={popularEmpty ? 'Новые треки' : 'Популярное'} actionTo="/catalog" actionLabel="Весь каталог →">
-                {popular.isLoading && <p className="text-fg-muted">Загружаем…</p>}
+            <Section title={popularEmpty ? 'Рекомендации' : 'Популярное'} actionTo="/catalog" actionLabel="Смотреть все">
+                {popular.isLoading && <p className="text-fg-muted">Загрузка...</p>}
+
                 {popular.data && popular.data.length > 0 && (
                     <ul className="divide-y divide-border rounded-md border border-border">
                         {popular.data.map((t, i) => (
-                            <TrackRow key={t.id} track={t} number={i + 1} />
+                            <TrackRow key={`pop-${t.id}-${i}`} track={t} number={i + 1} />
                         ))}
                     </ul>
                 )}
+
                 {popularEmpty && catalog.data && catalog.data.length > 0 && (
                     <ul className="divide-y divide-border rounded-md border border-border">
                         {catalog.data.map((t, i) => (
-                            <TrackRow key={t.id} track={t} number={i + 1} />
+                            <TrackRow key={`cat-${t.id}-${i}`} track={t} number={i + 1} />
                         ))}
                     </ul>
                 )}
-                {popularEmpty && catalog.isLoading && <p className="text-fg-muted">Загружаем…</p>}
+
+                {popularEmpty && catalog.isLoading && <p className="text-fg-muted">Загрузка...</p>}
                 {popularEmpty && !catalog.isLoading && (!catalog.data || catalog.data.length === 0) && (
-                    <p className="text-fg-muted">Пока нет треков. Загляни в каталог.</p>
+                    <p className="text-fg-muted">Каталог пуст.</p>
                 )}
             </Section>
 
             {forYou.data && forYou.data.length > 0 && (
-                <Section title="Для тебя">
+                <Section title="Специально для вас">
                     <ul className="divide-y divide-border rounded-md border border-border">
                         {forYou.data.map((t, i) => (
-                            <TrackRow key={t.id} track={t} number={i + 1} />
+                            <TrackRow key={`foryou-${t.id}-${i}`} track={t} number={i + 1} />
                         ))}
                     </ul>
                 </Section>
             )}
 
             {artists.data && artists.data.length > 0 && (
-                <Section title="Артисты на подъёме">
+                <Section title="В тренде">
                     <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-                        {artists.data.map((a) => (
-                            <li key={a.id}>
+                        {artists.data.map((a, i) => (
+                            <li key={`artist-${a.id}-${i}`}> {/* Уникальный ключ */}
                                 <Link
                                     to={`/artists/${a.id}`}
                                     className="block space-y-2 rounded-md border border-border bg-bg-elevated p-3 hover:bg-bg-elevated/70"
@@ -107,17 +111,16 @@ export function HomePage() {
                 </Section>
             )}
 
-            {/* fallback: если все секции пустые */}
             {!feed.data?.length &&
                 !popular.data?.length &&
                 !forYou.data?.length &&
                 !artists.data?.length && (
                     <div className="rounded-md border border-border bg-bg-elevated p-6 text-fg-muted">
-                        Пока пусто. Загляни в{' '}
+                        Пока что здесь пусто. Слушайте музыку, чтобы мы могли рекомендовать вам что-то новое!{' '}
                         <Link to="/catalog" className="text-accent hover:underline">
-                            каталог
+                            Перейти в каталог
                         </Link>{' '}
-                        или подпишись на пару артистов, чтобы наполнить ленту.
+                        или воспользуйтесь поиском.
                     </div>
                 )}
         </div>

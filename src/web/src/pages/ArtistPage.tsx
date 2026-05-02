@@ -52,8 +52,8 @@ export function ArtistPage() {
         },
     });
 
-    if (artist.isLoading) return <p className="text-fg-muted">Загружаем…</p>;
-    if (artist.isError || !artist.data) return <p className="text-danger">Артист не найден.</p>;
+    if (artist.isLoading) return <p className="text-fg-muted">Загрузка...</p>;
+    if (artist.isError || !artist.data) return <p className="text-danger">Ошибка загрузки артиста.</p>;
 
     const a = artist.data;
     const isOwner = !!user && !!(a.ownerUserId ?? a.createdByUserId) && user.id === (a.ownerUserId ?? a.createdByUserId);
@@ -66,130 +66,130 @@ export function ArtistPage() {
 
     return (
         <article className="space-y-10">
-            {/* BANNER */}
-            <div className="relative -mx-4 -mt-4 md:-mx-6 md:-mt-6">
-                {isOwner ? (
-                    <ImageUploader
-                        currentUrl={a.bannerUrl}
-                        shape="banner"
-                        label="Баннер"
-                        onUpload={async (f) => {
-                            const updated = await uploadArtistBanner(a.id, f);
-                            qc.setQueryData(['artist', a.id], updated);
-                        }}
-                        onDelete={async () => {
-                            const updated = await deleteArtistBanner(a.id);
-                            qc.setQueryData(['artist', a.id], updated);
-                        }}
-                    />
-                ) : (
-                    <div
-                        className="h-48 w-full rounded-b-lg bg-bg-elevated bg-cover bg-center md:h-64"
-                        style={{ backgroundImage: a.bannerUrl ? `url(${a.bannerUrl})` : undefined }}
-                        aria-hidden
-                    />
-                )}
-
-                {/* Avatar overlapping banner */}
-                <div className="absolute -bottom-12 left-6">
+            {/* HEADER INFO */}
+            <header className="flex flex-wrap items-end gap-6 px-2 pt-4">
+                <div className="relative shrink-0">
                     {isOwner ? (
                         <ImageUploader
                             currentUrl={a.avatarUrl}
                             shape="circle"
                             label="Аватар"
                             onUpload={async (f) => {
-                                const updated = await uploadArtistAvatar(a.id, f);
-                                qc.setQueryData(['artist', a.id], updated);
+                                await uploadArtistAvatar(a.id, f);
+                                qc.invalidateQueries({ queryKey: ['artist', a.id] });
                             }}
                             onDelete={async () => {
-                                const updated = await deleteArtistAvatar(a.id);
-                                qc.setQueryData(['artist', a.id], updated);
+                                await deleteArtistAvatar(a.id);
+                                qc.invalidateQueries({ queryKey: ['artist', a.id] });
                             }}
                         />
                     ) : (
                         <div
-                            className="size-24 rounded-full border-4 border-bg bg-bg-elevated bg-cover bg-center shadow-md md:size-28"
-                            style={{ backgroundImage: a.avatarUrl ? `url(${a.avatarUrl})` : undefined }}
+                            className="size-24 rounded-full border-4 border-bg bg-bg-elevated bg-cover bg-center shadow-md md:size-32"
+                            style={{ backgroundImage: a.avatarUrl ? `url('${a.avatarUrl}')` : undefined }}
                             aria-hidden
                         />
                     )}
                 </div>
-            </div>
 
-            {/* Spacer for avatar */}
-            <div className="h-8" />
-
-            {/* HEADER INFO */}
-            <header className="space-y-3 px-2">
-                <h1 className="text-3xl font-bold tracking-tight">{a.name}</h1>
-
-                <div className="flex flex-wrap items-center gap-4 text-sm text-fg-muted">
-                    {typeof a.monthlyListeners === 'number' && (
-                        <span>{formatNumber(a.monthlyListeners)} слушателей за месяц</span>
-                    )}
-                    {typeof a.followers === 'number' && (
-                        <span>{formatNumber(a.followers)} подписчиков</span>
-                    )}
-                </div>
-
-                <div className="flex flex-wrap gap-2 pt-1">
-                    {!isOwner && <FollowArtistButton artistId={a.id} />}
-                    {tracks.data && tracks.data.length > 0 && (
-                        <button
-                            onClick={() => playQueue(tracks.data!, 0)}
-                            className="rounded-md bg-accent px-4 py-2 text-sm text-accent-fg hover:opacity-90"
-                        >
-                            ▶ Играть всё
-                        </button>
-                    )}
+                <div className="space-y-3 pb-2">
+                    <h1 className="text-3xl font-bold tracking-tight">{a.name}</h1>
+                    <div className="flex flex-wrap items-center gap-4 text-sm text-fg-muted">
+                        {typeof a.monthlyListeners === 'number' && (
+                            <span>{formatNumber(a.monthlyListeners)} слушателей в месяц</span>
+                        )}
+                        {typeof a.followers === 'number' && (
+                            <span>{formatNumber(a.followers)} подписчиков</span>
+                        )}
+                    </div>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                        {!isOwner && <FollowArtistButton artistId={a.id} />}
+                        {tracks.data && tracks.data.length > 0 && (
+                            <button
+                                onClick={() => playQueue(tracks.data!, 0)}
+                                className="rounded-md bg-accent px-4 py-2 text-sm text-accent-fg hover:opacity-90"
+                            >
+                                Слушать все
+                            </button>
+                        )}
+                    </div>
                 </div>
             </header>
 
             {/* ABOUT */}
-            <section className="space-y-3 px-2">
-                <div className="flex items-center gap-3">
-                    <h2 className="text-xl font-semibold">Об артисте</h2>
-                    {isOwner && !editingBio && (
-                        <button
-                            onClick={() => { setBioText(a.bio ?? ''); setEditingBio(true); }}
-                            className="text-xs text-accent hover:underline"
-                        >
-                            Редактировать
-                        </button>
-                    )}
-                </div>
-
-                {editingBio ? (
-                    <div className="space-y-2">
-                        <textarea
-                            value={bioText}
-                            onChange={(e) => setBioText(e.target.value)}
-                            maxLength={4000}
-                            rows={5}
-                            className="w-full max-w-xl rounded-md border border-border bg-bg-elevated px-3 py-2 text-sm outline-none focus:border-accent"
-                            placeholder="Расскажите о себе…"
-                        />
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => saveBio.mutate(bioText)}
-                                disabled={saveBio.isPending}
-                                className="rounded-md bg-accent px-3 py-1.5 text-xs text-accent-fg hover:opacity-90 disabled:opacity-50"
-                            >
-                                {saveBio.isPending ? 'Сохраняем…' : 'Сохранить'}
-                            </button>
-                            <button
-                                onClick={() => setEditingBio(false)}
-                                className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-bg-elevated"
-                            >
-                                Отмена
-                            </button>
-                        </div>
+            <section className="relative mt-8 overflow-hidden rounded-lg border border-border">
+                <div className="relative grid">
+                    <div className="col-start-1 row-start-1 h-full w-full">
+                        {isOwner ? (
+                            <ImageUploader
+                                currentUrl={a.bannerUrl}
+                                shape="banner"
+                                label="Фон секции 'Об артисте'"
+                                onUpload={async (f) => {
+                                    await uploadArtistBanner(a.id, f);
+                                    qc.invalidateQueries({ queryKey: ['artist', a.id] });
+                                }}
+                                onDelete={async () => {
+                                    await deleteArtistBanner(a.id);
+                                    qc.invalidateQueries({ queryKey: ['artist', a.id] });
+                                }}
+                            />
+                        ) : (
+                            <div
+                                className="h-full w-full bg-bg-elevated bg-cover bg-center"
+                                style={{ backgroundImage: a.bannerUrl ? `url('${a.bannerUrl}')` : undefined }}
+                                aria-hidden
+                            />
+                        )}
+                        <div className="absolute inset-0 bg-black/60 pointer-events-none" />
                     </div>
-                ) : (
-                    <p className="max-w-2xl whitespace-pre-wrap text-sm text-fg-muted">
-                        {a.bio || 'Информация об артисте ещё не добавлена.'}
-                    </p>
-                )}
+
+                    <div className="col-start-1 row-start-1 relative z-10 p-6 flex flex-col justify-center pointer-events-none">
+                        <div className="flex items-center gap-3">
+                            <h2 className="text-xl font-semibold text-white">Об артисте</h2>
+                            {isOwner && !editingBio && (
+                                <button
+                                    onClick={() => { setBioText(a.bio ?? ''); setEditingBio(true); }}
+                                    className="text-xs text-accent hover:underline relative z-20 pointer-events-auto"
+                                >
+                                    Редактировать
+                                </button>
+                            )}
+                        </div>
+
+                        {editingBio ? (
+                            <div className="space-y-2 mt-3 relative z-20 pointer-events-auto">
+                                <textarea
+                                    value={bioText}
+                                    onChange={(e) => setBioText(e.target.value)}
+                                    maxLength={4000}
+                                    rows={5}
+                                    className="w-full max-w-xl rounded-md border border-border bg-bg-elevated px-3 py-2 text-sm outline-none focus:border-accent"
+                                    placeholder="Расскажите о себе..."
+                                />
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => saveBio.mutate(bioText)}
+                                        disabled={saveBio.isPending}
+                                        className="rounded-md bg-accent px-3 py-1.5 text-xs text-accent-fg hover:opacity-90 disabled:opacity-50"
+                                    >
+                                        {saveBio.isPending ? 'Сохранение...' : 'Сохранить'}
+                                    </button>
+                                    <button
+                                        onClick={() => setEditingBio(false)}
+                                        className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-bg-elevated text-white"
+                                    >
+                                        Отмена
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <p className="max-w-2xl whitespace-pre-wrap text-sm text-gray-200 mt-3 relative z-20 pointer-events-auto">
+                                {a.bio || 'Здесь пока ничего нет.'}
+                            </p>
+                        )}
+                    </div>
+                </div>
             </section>
 
             {/* ALBUMS */}
@@ -223,15 +223,19 @@ export function ArtistPage() {
 
             {/* ALL TRACKS */}
             <section className="space-y-3 px-2">
-                <h2 className="text-xl font-semibold">Все треки</h2>
-                {tracks.isLoading && <p className="text-fg-muted">Загружаем…</p>}
+                <h2 className="text-xl font-semibold">Треки</h2>
+                {tracks.isLoading && <p className="text-fg-muted">Загрузка...</p>}
                 {tracks.data && tracks.data.length === 0 && (
-                    <p className="text-fg-muted">У этого артиста пока нет треков.</p>
+                    <p className="text-fg-muted">Нет треков.</p>
                 )}
                 {tracks.data && tracks.data.length > 0 && (
                     <ul className="divide-y divide-border rounded-md border border-border">
                         {tracks.data.map((t, i) => (
-                            <TrackRow key={t.id} track={t} number={i + 1} />
+                            <TrackRow
+                                key={t.id}
+                                track={{ ...t, artist: t.artist ?? a.name, artistId: t.artistId ?? a.id }}
+                                number={i + 1}
+                            />
                         ))}
                     </ul>
                 )}

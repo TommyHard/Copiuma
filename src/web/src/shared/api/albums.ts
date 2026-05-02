@@ -22,9 +22,9 @@ export async function listAlbums(page = 1, pageSize = 30): Promise<AlbumSummary[
  */
 export async function uploadAlbumCover(albumId: string, file: File): Promise<AlbumSummary> {
     const fd = new FormData();
-    fd.append('File', file);
+    fd.append('file', file);
     const r = await api.post<AlbumSummary>(`/albums/${albumId}/cover`, fd, {
-        headers: { 'Content-Type': undefined },
+        headers: { 'Content-Type': 'multipart/form-data' },
     });
     return r.data;
 }

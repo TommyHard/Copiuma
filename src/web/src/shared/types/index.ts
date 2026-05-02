@@ -75,6 +75,7 @@ export interface FavoriteItem {
     id: string;
     title: string;
     artist: string | null;
+    artistId?: string | null;
     likedAt: string;
 }
 
@@ -134,7 +135,7 @@ export interface NotificationItem {
 // Follows
 
 export interface FollowedArtist {
-    id: string;
+    artistId: string;
     name: string;
     followedAt: string;
 }

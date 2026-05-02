@@ -28,7 +28,7 @@ export async function uploadTrack(
     fields.featuredArtistIds?.forEach((id) => fd.append('FeaturedArtistIds', id));
 
     const r = await api.post<UploadResult>('/tracks/upload', fd, {
-        headers: { 'Content-Type': undefined },
+        headers: { 'Content-Type': 'multipart/form-data' },
         signal,
         onUploadProgress: (e) => {
             if (e.total && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
@@ -43,8 +43,14 @@ export async function toggleLike(trackId: string): Promise<{ isLiked: boolean }>
 }
 
 export async function listFavorites(): Promise<FavoriteItem[]> {
-    const r = await api.get<FavoriteItem[]>('/tracks/favorites');
-    return r.data;
+    const r = await api.get<any[]>('/tracks/favorites');
+    return r.data.map(f => ({
+        id: f.id ?? f.Id,
+        title: f.title ?? f.Title,
+        artist: f.artist ?? f.Artist,
+        artistId: f.artistId ?? f.ArtistId ?? null,
+        likedAt: f.likedAt ?? f.LikedAt ?? new Date().toISOString()
+    }));
 }
 
 export async function deleteTrack(trackId: string): Promise<void> {

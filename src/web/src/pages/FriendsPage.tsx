@@ -141,20 +141,20 @@ function ArtistFollowsList({
     return (
         <ul className="divide-y divide-border rounded-md border border-border">
             {data.map((a) => (
-                <li key={a.id} className="flex items-center gap-4 px-4 py-3 text-sm">
+                <li key={a.artistId} className="flex items-center gap-4 px-4 py-3 text-sm">
                     <div className="flex-1">
                         <Link
-                            to={`/artists/${a.id}`}
+                            to={`/artists/${a.artistId}`}
                             className="font-medium hover:underline"
                         >
                             {a.name}
                         </Link>
                         <div className="text-xs text-fg-muted">
-                            с {new Date(a.followedAt).toLocaleDateString('ru')}
+                            Подписка от {new Date(a.followedAt).toLocaleDateString('ru')}
                         </div>
                     </div>
                     <button
-                        onClick={() => unfollow.mutate(a.id)}
+                        onClick={() => unfollow.mutate(a.artistId)}
                         disabled={unfollow.isPending}
                         className="rounded-md border border-border px-3 py-1 text-xs hover:bg-bg-elevated disabled:opacity-50"
                     >

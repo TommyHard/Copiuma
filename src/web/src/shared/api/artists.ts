@@ -40,11 +40,12 @@ export async function listArtistTracks(artistId: string): Promise<TrackListItem[
 /**
  * аватар артиста. Backend "POST /artists/{id}/avatar", multipart
  */
+
 export async function uploadArtistAvatar(artistId: string, file: File): Promise<ArtistSummary> {
     const fd = new FormData();
-    fd.append('File', file);
+    fd.append('file', file);
     const r = await api.post<ArtistSummary>(`/artists/${artistId}/avatar`, fd, {
-        headers: { 'Content-Type': undefined },
+        headers: { 'Content-Type': 'multipart/form-data' },
     });
     return r.data;
 }
@@ -56,9 +57,9 @@ export async function deleteArtistAvatar(artistId: string): Promise<ArtistSummar
 
 export async function uploadArtistBanner(artistId: string, file: File): Promise<ArtistSummary> {
     const fd = new FormData();
-    fd.append('File', file);
+    fd.append('file', file);
     const r = await api.post<ArtistSummary>(`/artists/${artistId}/banner`, fd, {
-        headers: { 'Content-Type': undefined },
+        headers: { 'Content-Type': 'multipart/form-data' },
     });
     return r.data;
 }

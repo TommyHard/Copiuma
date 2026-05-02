@@ -65,9 +65,9 @@ export async function getPublicUserProfile(userId: string): Promise<PublicUserPr
 
 export async function uploadUserAvatar(file: File): Promise<{ avatarUrl: string }> {
     const fd = new FormData();
-    fd.append('File', file);
+    fd.append('file', file);
     const r = await api.post<{ avatarUrl: string }>('/user-profile/avatar', fd, {
-        headers: { 'Content-Type': undefined },
+        headers: { 'Content-Type': 'multipart/form-data' },
     });
     return r.data;
 }

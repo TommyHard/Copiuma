@@ -58,7 +58,15 @@ export function FavoritesPage() {
                             <Link to={`/tracks/${f.id}`} className="block truncate font-medium hover:underline">
                                 {f.title}
                             </Link>
-                            <div className="truncate text-xs text-fg-muted">{f.artist ?? '—'}</div>
+                            <div className="truncate text-xs text-fg-muted">
+                                {f.artistId ? (
+                                    <Link to={`/artists/${f.artistId}`} className="hover:text-fg hover:underline">
+                                        {f.artist ?? 'Неизвестный исполнитель'}
+                                    </Link>
+                                ) : (
+                                    f.artist ?? 'Неизвестный исполнитель'
+                                )}
+                            </div>
                         </div>
                         <span className="text-xs text-fg-muted">
                             {new Date(f.likedAt).toLocaleDateString('ru')}
