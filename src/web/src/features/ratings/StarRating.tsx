@@ -43,7 +43,7 @@ export function StarRating({ trackId }: { trackId: string }) {
                     </button>
                 ))}
                 <span className="ml-2 text-sm text-fg-muted">
-                    {data ? `${data.average.toFixed(1)} / 5 · ${data.count} оценок` : '...'}
+                    {data ? `${data.average.toFixed(1)} / 5 • ${data.count} оценок` : '...'}
                 </span>
             </div>
 

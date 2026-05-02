@@ -127,12 +127,12 @@ export function MePage() {
                                         )}
                                     </div>
                                     <div className="text-xs text-fg-muted">
-                                        {s.ipAddress ?? '—'} · {s.userAgent ?? '—'}
+                                        {s.ipAddress ?? '—'} • {s.userAgent ?? '—'}
                                     </div>
                                     <div className="text-xs text-fg-muted">
                                         Создана {new Date(s.createdAt).toLocaleString('ru')}
                                         {s.lastUsedAt && (
-                                            <> · последний вход {new Date(s.lastUsedAt).toLocaleString('ru')}</>
+                                            <> • последний вход {new Date(s.lastUsedAt).toLocaleString('ru')}</>
                                         )}
                                     </div>
                                 </div>

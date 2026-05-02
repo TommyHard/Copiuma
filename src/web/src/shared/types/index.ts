@@ -52,12 +52,14 @@ export interface TrackDetail {
     duration: string | null;
     artistId: string | null;
     albumId: string | null;
+    albumTitle?: string | null;
     trackNumber: number | null;
     isExplicit: boolean;
     processingStatus: TrackProcessingStatus;
     uploadedByUserId?: string;
     isLikedByMe?: boolean;
     featuredArtists?: FeaturedArtist[];
+    genres?: string[];
     coverUrl?: string | null;
     ownCoverUrl?: string | null;
     hasOwnCover?: boolean;
@@ -117,7 +119,7 @@ export interface AlbumSummary {
     title: string;
     artistId: string;
     artistName?: string | null;
-    releasedAt?: string | null;
+    releasedAt?: string | null;       // YYYY-MM-DD (releaseDate)
     coverUrl?: string | null;
     trackCount?: number;
     ownerUserId?: string;
@@ -176,6 +178,7 @@ export interface PlaylistSummary {
     trackCount: number;
     coverUrl?: string | null;
     updatedAt: string;
+    previewCovers?: string[];
 }
 
 export interface PlaylistMember {

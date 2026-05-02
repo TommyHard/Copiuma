@@ -25,7 +25,10 @@ public class RecommendationsController : ControllerBase
     /// </summary>
     [HttpGet("popular")]
     public async Task<IActionResult> Popular([FromQuery] int take = 50, CancellationToken ct = default)
-        => Ok(await _rec.GetPopularAsync(take, UserId, ct));
+    {
+        var items = await _rec.GetPopularAsync(take, UserId, ct);
+        return Ok(await _rec.AttachFeaturedArtistsAsync(items, ct));
+    }
 
     /// <summary>
     /// Ко-слушанные треки
@@ -33,7 +36,10 @@ public class RecommendationsController : ControllerBase
     /// </summary>
     [HttpGet("similar/{trackId:guid}")]
     public async Task<IActionResult> Similar(Guid trackId, [FromQuery] int take = 20, CancellationToken ct = default)
-        => Ok(await _rec.GetSimilarAsync(trackId, take, UserId, ct));
+    {
+        var items = await _rec.GetSimilarAsync(trackId, take, UserId, ct);
+        return Ok(await _rec.AttachFeaturedArtistsAsync(items, ct));
+    }
 
     /// <summary>
     /// Персональные рекомендации: по артистам, которых юзер слушает/лайкает
@@ -41,10 +47,13 @@ public class RecommendationsController : ControllerBase
     /// </summary>
     [HttpGet("for-you")]
     public async Task<IActionResult> ForYou([FromQuery] int take = 20, CancellationToken ct = default)
-        => Ok(await _rec.GetForYouAsync(UserId, take, ct));
+    {
+        var items = await _rec.GetForYouAsync(UserId, take, ct);
+        return Ok(await _rec.AttachFeaturedArtistsAsync(items, ct));
+    }
 
     /// <summary>
-    /// Популярные артисты за последние 7 дней.
+    /// Популярные артисты за последние 7 дней
     /// Дизлайкнутые артисты скрываются
     /// </summary>
     [HttpGet("artists/trending")]

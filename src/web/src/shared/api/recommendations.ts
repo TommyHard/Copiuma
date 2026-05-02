@@ -2,6 +2,12 @@ import { api } from './http';
 import type { ArtistSummary, TrackListItem } from '@/shared/types';
 
 function normalizeRec(t: any): TrackListItem {
+    const featRaw = t.featuredArtists ?? t.FeaturedArtists ?? [];
+    const feat = Array.isArray(featRaw)
+        ? featRaw
+            .map((f: any) => ({ id: f?.id ?? f?.Id, name: f?.name ?? f?.Name ?? '' }))
+            .filter((f: { id?: string }) => !!f.id)
+        : [];
     return {
         id: t.id ?? t.trackId ?? t.Id ?? t.TrackId,
         title: t.title ?? t.Title ?? '',
@@ -13,6 +19,7 @@ function normalizeRec(t: any): TrackListItem {
         uploadedAt: t.uploadedAt ?? t.UploadedAt ?? '',
         isExplicit: t.isExplicit ?? t.IsExplicit ?? false,
         isLikedByMe: t.isLikedByMe ?? t.IsLikedByMe ?? false,
+        featuredArtists: feat,
     };
 }
 

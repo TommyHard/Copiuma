@@ -60,6 +60,10 @@ export async function setVisibility(id: string, visibility: PlaylistVisibility):
     await api.patch(`/playlists/${id}/visibility`, { visibility });
 }
 
+export async function renamePlaylist(id: string, title: string): Promise<void> {
+    await api.put(`/playlists/${id}`, { title });
+}
+
 export async function addTrack(playlistId: string, trackId: string): Promise<void> {
     await api.post(`/playlists/${playlistId}/tracks/${trackId}`);
 }

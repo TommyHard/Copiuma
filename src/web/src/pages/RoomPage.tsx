@@ -101,7 +101,7 @@ function RoomPageInner({
                         <div className="text-lg font-medium">{current.title}</div>
                         <div className="text-sm text-fg-muted">{current.artist ?? '—'}</div>
                         <div className="mt-2 text-xs text-fg-muted">
-                            {current.isPlaying ? '▶ воспроизводится' : '⏸ на паузе'} · {Math.round(current.position)} сек
+                            {current.isPlaying ? '▶ воспроизводится' : '⏸ на паузе'} • {Math.round(current.position)} сек
                         </div>
                     </div>
                 ) : (

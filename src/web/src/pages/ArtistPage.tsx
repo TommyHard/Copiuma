@@ -1,6 +1,11 @@
 import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getArtist, listArtistAlbums, listArtistTracks } from '@/shared/api/artists';
+import {
+    getArtist,
+    listArtistAlbums,
+    listArtistFeaturedOn,
+    listArtistTracks,
+} from '@/shared/api/artists';
 import { FollowArtistButton } from '@/features/follows/FollowArtistButton';
 import { TrackRow } from './track-row';
 import { usePlayer } from '@/features/player/store';
@@ -26,6 +31,12 @@ export function ArtistPage() {
     const tracks = useQuery({
         queryKey: ['artist-tracks', id],
         queryFn: () => listArtistTracks(id!),
+        enabled: !!id,
+    });
+
+    const featuredOn = useQuery({
+        queryKey: ['artist-featured-on', id],
+        queryFn: () => listArtistFeaturedOn(id!),
         enabled: !!id,
     });
 
@@ -152,6 +163,20 @@ export function ArtistPage() {
                     </ul>
                 )}
             </section>
+
+            {/* FEATURED ON */}
+            {featuredOn.data && featuredOn.data.length > 0 && (
+                <section className="space-y-3 px-2">
+                    <div className="flex items-baseline gap-3">
+                        <h2 className="text-xl font-semibold">Участие как feat.</h2>
+                    </div>
+                    <ul className="divide-y divide-border rounded-md border border-border">
+                        {featuredOn.data.map((t, i) => (
+                            <TrackRow key={`feat-${t.id}`} track={t} number={i + 1} />
+                        ))}
+                    </ul>
+                </section>
+            )}
         </article>
     );
 }

@@ -16,11 +16,75 @@ public class PlaylistsController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly NotificationService _notify;
+    private readonly FileStorageService _storage;
 
-    public PlaylistsController(AppDbContext context, NotificationService notify)
+    public PlaylistsController(AppDbContext context, NotificationService notify, FileStorageService storage)
     {
         _context = context;
         _notify = notify;
+        _storage = storage;
+    }
+
+    /// <summary>
+    /// Для одного плейлиста: до 4 уникальных URL обложек треков
+    /// (своя обложка трека -> fallback на обложку альбома)
+    /// </summary>
+    private async Task<List<string>> BuildPreviewCoversAsync(Guid playlistId, CancellationToken ct = default)
+    {
+        var raw = await _context.PlaylistTracks
+            .Where(pt => pt.PlaylistId == playlistId)
+            .OrderBy(pt => pt.Position).ThenBy(pt => pt.AddedAt)
+            .Select(pt => new
+            {
+                TrackCoverKey = pt.Track!.CoverKey,
+                AlbumCoverKey = pt.Track.Album != null ? pt.Track.Album.CoverKey : null,
+            })
+            .ToListAsync(ct);
+
+        var keys = raw
+            .Select(x => x.TrackCoverKey ?? x.AlbumCoverKey)
+            .Where(k => !string.IsNullOrEmpty(k))
+            .Distinct()
+            .Take(4)
+            .ToList();
+
+        var urls = new List<string>(keys.Count);
+        foreach (var k in keys)
+            urls.Add(await _storage.GeneratePresignedImageGetUrlAsync(k!));
+        return urls;
+    }
+
+    private async Task<Dictionary<Guid, List<string>>> BuildPreviewCoversBatchAsync(
+        IReadOnlyList<Guid> playlistIds, CancellationToken ct = default)
+    {
+        if (playlistIds.Count == 0) return new();
+
+        var raw = await _context.PlaylistTracks
+            .Where(pt => playlistIds.Contains(pt.PlaylistId))
+            .OrderBy(pt => pt.PlaylistId).ThenBy(pt => pt.Position).ThenBy(pt => pt.AddedAt)
+            .Select(pt => new
+            {
+                pt.PlaylistId,
+                TrackCoverKey = pt.Track!.CoverKey,
+                AlbumCoverKey = pt.Track.Album != null ? pt.Track.Album.CoverKey : null,
+            })
+            .ToListAsync(ct);
+
+        var result = new Dictionary<Guid, List<string>>();
+        foreach (var g in raw.GroupBy(x => x.PlaylistId))
+        {
+            var keys = g
+                .Select(x => x.TrackCoverKey ?? x.AlbumCoverKey)
+                .Where(k => !string.IsNullOrEmpty(k))
+                .Distinct()
+                .Take(4)
+                .ToList();
+            var urls = new List<string>(keys.Count);
+            foreach (var k in keys)
+                urls.Add(await _storage.GeneratePresignedImageGetUrlAsync(k!));
+            result[g.Key] = urls;
+        }
+        return result;
     }
 
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -289,7 +353,7 @@ public class PlaylistsController : ControllerBase
     // Queries
 
     [HttpGet]
-    public async Task<IActionResult> GetMyPlaylists()
+    public async Task<IActionResult> GetMyPlaylists(CancellationToken ct = default)
     {
         var list = await _context.PlaylistMembers
             .Where(pm => pm.UserId == UserId)
@@ -297,7 +361,10 @@ public class PlaylistsController : ControllerBase
                 .ThenInclude(p => p!.PlaylistTracks)
             .Include(pm => pm.Playlist!.PlaylistMembers)
             .OrderByDescending(pm => pm.JoinedAt)
-            .ToListAsync();
+            .ToListAsync(ct);
+
+        var ids = list.Select(pm => pm.Playlist!.Id).ToList();
+        var covers = await BuildPreviewCoversBatchAsync(ids, ct);
 
         var result = list.Select(pm => {
             var owner = pm.Playlist!.PlaylistMembers.FirstOrDefault(m => m.Role == PlaylistRole.Owner);
@@ -309,11 +376,32 @@ public class PlaylistsController : ControllerBase
                 Visibility = pm.Playlist.Visibility.ToString(),
                 OwnerName = owner?.DisplayName ?? "Автор",
                 TrackCount = pm.Playlist.PlaylistTracks.Count,
-                YourRole = pm.Role.ToString()
+                YourRole = pm.Role.ToString(),
+                PreviewCovers = covers.TryGetValue(pm.Playlist.Id, out var c) ? c : new List<string>(),
             };
         });
 
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Переименование плейлиста. Только Owner
+    /// </summary>
+    [HttpPut("{playlistId}")]
+    public async Task<IActionResult> RenamePlaylist(Guid playlistId, [FromBody] RenamePlaylistRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Title))
+            return BadRequest("Название плейлиста обязательно.");
+        var title = request.Title.Trim();
+        if (title.Length > 200) return BadRequest("Название: максимум 200 символов.");
+
+        var playlist = await _context.Playlists.FindAsync(playlistId);
+        if (playlist is null) return NotFound();
+        if (!await IsCallerInRole(playlistId, PlaylistRole.Owner)) return Forbid();
+
+        playlist.Title = title;
+        await _context.SaveChangesAsync();
+        return Ok(new { Id = playlist.Id, Title = playlist.Title });
     }
 
     [HttpGet("{id}")]
@@ -333,6 +421,8 @@ public class PlaylistsController : ControllerBase
 
         var owner = playlist.PlaylistMembers.FirstOrDefault(pm => pm.Role == PlaylistRole.Owner);
 
+        var previewCovers = await BuildPreviewCoversAsync(id);
+
         return Ok(new
         {
             Id = playlist.Id,
@@ -344,6 +434,7 @@ public class PlaylistsController : ControllerBase
             TrackCount = playlist.PlaylistTracks.Count,
             CreatedAt = playlist.CreatedAt,
             UpdatedAt = playlist.CreatedAt,
+            PreviewCovers = previewCovers,
 
             Tracks = playlist.PlaylistTracks
                 .OrderBy(pt => pt.Position).ThenBy(pt => pt.AddedAt)
@@ -430,7 +521,20 @@ public class PlaylistsController : ControllerBase
             })
             .ToListAsync(ct);
 
-        return Ok(list);
+        var ids = list.Select(p => p.Id).ToList();
+        var covers = await BuildPreviewCoversBatchAsync(ids, ct);
+
+        var result = list.Select(p => new
+        {
+            p.Id,
+            p.Title,
+            p.CreatedAt,
+            p.TrackCount,
+            p.OwnerName,
+            PreviewCovers = covers.TryGetValue(p.Id, out var c) ? c : new List<string>(),
+        });
+
+        return Ok(result);
     }
 
     private Task<bool> PlaylistExists(Guid id) => _context.Playlists.AnyAsync(p => p.Id == id);
@@ -444,8 +548,13 @@ public class SetVisibilityRequest
 {
     /// <summary>
     /// "Private"
-    /// или 
+    /// или
     /// "Public"
     /// </summary>
     public required string Visibility { get; set; }
+}
+
+public class RenamePlaylistRequest
+{
+    public required string Title { get; set; }
 }

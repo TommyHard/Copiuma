@@ -317,6 +317,40 @@ public class RecommendationsService
         return items;
     }
 
+    /// <summary>
+    /// Добавляет к каждому треку список feat. исполнителей
+    /// </summary>
+    public async Task<IReadOnlyList<object>> AttachFeaturedArtistsAsync(
+        IReadOnlyList<TrackRecommendationItem> items, CancellationToken ct = default)
+    {
+        if (items.Count == 0) return Array.Empty<object>();
+
+        var ids = items.Select(i => i.TrackId).ToList();
+        var rows = await _db.TrackFeaturedArtists
+            .Where(fa => ids.Contains(fa.TrackId))
+            .OrderBy(fa => fa.TrackId).ThenBy(fa => fa.Position)
+            .Select(fa => new { fa.TrackId, fa.Artist!.Id, fa.Artist.Name })
+            .ToListAsync(ct);
+
+        var byTrack = rows
+            .GroupBy(r => r.TrackId)
+            .ToDictionary(g => g.Key, g => g.Select(x => new { x.Id, x.Name }).ToList());
+
+        return items.Select(i => (object)new
+        {
+            i.TrackId,
+            i.Title,
+            i.Artist,
+            i.ArtistId,
+            i.AlbumId,
+            i.Score,
+            i.Duration,
+            i.IsExplicit,
+            i.IsLikedByMe,
+            FeaturedArtists = byTrack.TryGetValue(i.TrackId, out var f) ? f : new(),
+        }).ToList();
+    }
+
     public async Task BumpVersionAsync(CancellationToken ct = default)
     {
         var current = await _cache.GetStringAsync(VersionKey, ct);

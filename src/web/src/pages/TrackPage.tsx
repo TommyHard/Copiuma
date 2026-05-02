@@ -5,6 +5,7 @@ import { getTrack, getTrackStatus } from '@/shared/api/catalog';
 import { deleteTrack, deleteTrackCover, toggleLike, uploadTrackCover } from '@/shared/api/tracks';
 import { dislikeTrack } from '@/shared/api/dislikes';
 import { similarTracks } from '@/shared/api/recommendations';
+import { listGenres } from '@/shared/api/genres';
 import { usePlayTrack } from '@/features/player/usePlayTrack';
 import { Waveform } from '@/features/track/Waveform';
 import { TrackRow } from './track-row';
@@ -42,6 +43,12 @@ export function TrackPage() {
         enabled: !!id && statusQ.data?.status === 'Ready',
     });
 
+    const genresQ = useQuery({
+        queryKey: ['genres'],
+        queryFn: listGenres,
+        staleTime: 10 * 60 * 1000,
+    });
+
     const like = useMutation({
         mutationFn: () => toggleLike(id!),
         onSuccess: () => {
@@ -73,6 +80,9 @@ export function TrackPage() {
     const t = trackQ.data;
     const ready = statusQ.data?.status === 'Ready';
     const isOwner = !!user && !!t.uploadedByUserId && user.id === t.uploadedByUserId;
+
+    const genreLabel = (slug: string) =>
+        genresQ.data?.find((g) => g.slug === slug)?.displayName ?? slug;
 
     return (
         <article className="space-y-10">
@@ -107,19 +117,41 @@ export function TrackPage() {
 
                 <div className="min-w-0 flex-1 space-y-2">
                     <h1 className="text-3xl font-semibold">{t.title}</h1>
-                    <div className="flex flex-wrap items-baseline gap-3">
+                    <div className="flex flex-wrap items-baseline gap-x-1 gap-y-1 text-sm">
                         {t.artistId ? (
                             <Link to={`/artists/${t.artistId}`} className="text-fg-muted hover:text-fg">
                                 {t.artist ?? '—'}
                             </Link>
                         ) : (
-                            <p className="text-fg-muted">{t.artist ?? '—'}</p>
+                            <span className="text-fg-muted">{t.artist ?? '—'}</span>
                         )}
+
+                        {t.featuredArtists && t.featuredArtists.length > 0 && (
+                            <span className="text-fg-muted">
+                                feat.{' '}
+                                {t.featuredArtists.map((fa, idx) => (
+                                    <span key={fa.id}>
+                                        {idx > 0 && ', '}
+                                        <Link
+                                            to={`/artists/${fa.id}`}
+                                            className="hover:text-fg hover:underline"
+                                        >
+                                            {fa.name}
+                                        </Link>
+                                    </span>
+                                ))}
+                            </span>
+                        )}
+
                         {t.albumId && (
                             <>
-                                <span className="text-fg-muted">·</span>
-                                <Link to={`/albums/${t.albumId}`} className="text-fg-muted hover:text-fg">
-                                    альбом{t.trackNumber ? ` #${t.trackNumber}` : ''}
+                                <span className="text-fg-muted">•</span>
+                                <Link
+                                    to={`/albums/${t.albumId}`}
+                                    className="text-fg-muted hover:text-fg"
+                                    title={t.albumTitle ?? undefined}>
+                                    {t.albumTitle ?? 'альбом'}
+                                    {t.trackNumber ? ` • #${t.trackNumber}` : ''}
                                 </Link>
                             </>
                         )}
@@ -129,6 +161,19 @@ export function TrackPage() {
                             </span>
                         )}
                     </div>
+
+                    {t.genres && t.genres.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                            {t.genres.map((slug) => (
+                                <span
+                                    key={slug}
+                                    className="rounded-full border border-border px-4 py-0.5 text-[11px] text-fg-muted"
+                                >
+                                    {genreLabel(slug)}
+                                </span>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </header>
 

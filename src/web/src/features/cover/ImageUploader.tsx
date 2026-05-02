@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 
-const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_BYTES = 10 * 1024 * 1024;
 
 /**

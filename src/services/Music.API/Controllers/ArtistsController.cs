@@ -158,9 +158,61 @@ public class ArtistsController : ControllerBase
         if (!await _db.Artists.AnyAsync(a => a.Id == id)) return NotFound();
 
         var tracks = await _db.Tracks
-            .Where(t => t.ArtistId == id)
+            .Where(t => t.ArtistId == id && t.DeletedAt == null)
             .OrderByDescending(t => t.UploadedAt)
-            .Select(t => new { t.Id, t.Title, t.Duration, t.AlbumId, t.TrackNumber, t.UploadedAt })
+            .Select(t => new
+            {
+                t.Id,
+                t.Title,
+                t.Artist,
+                t.ArtistId,
+                t.Duration,
+                t.AlbumId,
+                t.TrackNumber,
+                t.UploadedAt,
+                t.IsExplicit,
+                FeaturedArtists = _db.TrackFeaturedArtists
+                    .Where(fa => fa.TrackId == t.Id)
+                    .OrderBy(fa => fa.Position)
+                    .Select(fa => new { fa.Artist!.Id, fa.Artist.Name })
+                    .ToList()
+            })
+            .ToListAsync();
+
+        return Ok(tracks);
+    }
+
+    /// <summary>
+    /// Треки, где артист отмечен как feat. (он не основной исполнитель,
+    /// но числится в TrackFeaturedArtists)
+    /// </summary>
+    [HttpGet("{id:guid}/featured-on")]
+    public async Task<IActionResult> FeaturedOn(Guid id)
+    {
+        if (!await _db.Artists.AnyAsync(a => a.Id == id)) return NotFound();
+
+        var tracks = await _db.Tracks
+            .Where(t => t.DeletedAt == null
+                        && t.ArtistId != id
+                        && _db.TrackFeaturedArtists.Any(fa => fa.TrackId == t.Id && fa.ArtistId == id))
+            .OrderByDescending(t => t.UploadedAt)
+            .Select(t => new
+            {
+                t.Id,
+                t.Title,
+                t.Artist,
+                t.ArtistId,
+                t.Duration,
+                t.AlbumId,
+                t.TrackNumber,
+                t.UploadedAt,
+                t.IsExplicit,
+                FeaturedArtists = _db.TrackFeaturedArtists
+                    .Where(fa => fa.TrackId == t.Id)
+                    .OrderBy(fa => fa.Position)
+                    .Select(fa => new { fa.Artist!.Id, fa.Artist.Name })
+                    .ToList()
+            })
             .ToListAsync();
 
         return Ok(tracks);

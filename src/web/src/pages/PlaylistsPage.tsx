@@ -8,6 +8,7 @@ import {
     listIncomingInvitations,
 } from '@/shared/api/invitations';
 import { CreatePlaylistDialog } from '@/features/playlists/CreatePlaylistDialog';
+import { PlaylistCover } from '@/features/playlists/PlaylistCover';
 import { cn } from '@/shared/lib/cn';
 
 type Tab = 'mine' | 'public';
@@ -119,10 +120,11 @@ function PlaylistGrid({
                         to={`/playlists/${p.id}`}
                         className="block space-y-2 rounded-md border border-border bg-bg-elevated p-3 hover:bg-bg-elevated/70"
                     >
-                        <div
-                            className="aspect-square w-full rounded bg-bg bg-cover bg-center"
-                            style={{ backgroundImage: p.coverUrl ? `url(${p.coverUrl})` : undefined }}
-                            aria-hidden
+                        <PlaylistCover
+                            coverUrl={p.coverUrl}
+                            previewCovers={p.previewCovers}
+                            className="aspect-square w-full"
+                            rounded="md"
                         />
                         <div className="flex flex-col min-w-0">
                             <span className="truncate font-medium">{p.title}</span>
@@ -130,7 +132,7 @@ function PlaylistGrid({
                                 <span className="text-accent/80 font-medium">
                                     {p.ownerName || 'Автор'}
                                 </span>
-                                <span>·</span>
+                                <span>•</span>
                                 <span>{p.trackCount ?? 0} треков</span>
                             </div>
                         </div>
@@ -168,7 +170,7 @@ function PendingInvitations() {
                         <div className="min-w-0 flex-1">
                             <div className="truncate font-medium">{inv.playlistTitle}</div>
                             <div className="text-xs text-fg-muted">
-                                от {inv.inviterName ?? inv.inviterId.slice(0, 8)} · роль {inv.proposedRole}
+                                от {inv.inviterName ?? inv.inviterId.slice(0, 8)} • роль {inv.proposedRole}
                             </div>
                         </div>
                         <button

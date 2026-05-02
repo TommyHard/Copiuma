@@ -2,8 +2,8 @@ import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { updateTrack } from '@/shared/api/tracks';
 import { listGenres } from '@/shared/api/genres';
-import { searchUsers } from '@/shared/api/users';
-import type { TrackDetail, UserSearchResult } from '@/shared/types';
+import { searchArtists } from '@/shared/api/artists';
+import type { ArtistSummary, TrackDetail } from '@/shared/types';
 import { cn } from '@/shared/lib/cn';
 
 interface Props {
@@ -24,7 +24,7 @@ export function TrackEditDialog({ open, track, onClose }: Props) {
     const [isExplicit, setIsExplicit] = useState(track.isExplicit);
     const [featuredArtists, setFeaturedArtists] = useState<{ id: string; name: string }[]>([]);
     const [featQuery, setFeatQuery] = useState('');
-    const [featResults, setFeatResults] = useState<UserSearchResult[]>([]);
+    const [featResults, setFeatResults] = useState<ArtistSummary[]>([]);
     const [featSearching, setFeatSearching] = useState(false);
     const featDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [initialized, setInitialized] = useState(false);
@@ -45,7 +45,7 @@ export function TrackEditDialog({ open, track, onClose }: Props) {
         if (featQuery.trim().length < 2) { setFeatResults([]); return; }
         featDebounceRef.current = setTimeout(async () => {
             setFeatSearching(true);
-            try { setFeatResults(await searchUsers(featQuery)); }
+            try { setFeatResults(await searchArtists(featQuery)); }
             catch { setFeatResults([]); }
             finally { setFeatSearching(false); }
         }, 300);
@@ -149,20 +149,33 @@ export function TrackEditDialog({ open, track, onClose }: Props) {
                             type="text"
                             value={featQuery}
                             onChange={(e) => setFeatQuery(e.target.value)}
-                            placeholder="Поиск пользователя…"
+                            placeholder="Поиск артиста в каталоге…"
                             className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
                         />
                         {featSearching && <p className="mt-1 text-xs text-fg-muted">Поиск…</p>}
+                        {featQuery.trim().length >= 2 && !featSearching
+                            && featResults.filter((a) => a.id !== track.artistId
+                                && !featuredArtists.some((x) => x.id === a.id)).length === 0 && (
+                                <p className="mt-1 text-xs text-fg-muted">
+                                    Не нашли. Featured-исполнитель должен иметь свой профиль артиста.
+                                </p>
+                            )}
                         {featResults.length > 0 && (
                             <ul className="absolute z-10 mt-1 w-full rounded-md border border-border bg-bg-elevated shadow-lg">
                                 {featResults
-                                    .filter((u) => !featuredArtists.some((a) => a.id === u.id))
-                                    .map((u) => (
-                                        <li key={u.id} className="flex items-center justify-between gap-3 px-3 py-2 hover:bg-bg">
-                                            <span className="text-sm">{u.displayName}</span>
+                                    .filter((a) => a.id !== track.artistId)
+                                    .filter((a) => !featuredArtists.some((x) => x.id === a.id))
+                                    .map((a) => (
+                                        <li key={a.id} className="flex items-center justify-between gap-3 px-3 py-2 hover:bg-bg">
+                                            <div className="flex min-w-0 items-center gap-2">
+                                                {a.avatarUrl && (
+                                                    <img src={a.avatarUrl} alt="" className="size-5 shrink-0 rounded-full object-cover" />
+                                                )}
+                                                <span className="truncate text-sm">{a.name}</span>
+                                            </div>
                                             <button
                                                 type="button"
-                                                onClick={() => { setFeaturedArtists((p) => [...p, { id: u.id, name: u.displayName }]); setFeatQuery(''); setFeatResults([]); }}
+                                                onClick={() => { setFeaturedArtists((p) => [...p, { id: a.id, name: a.name }]); setFeatQuery(''); setFeatResults([]); }}
                                                 className="rounded-md bg-accent px-2 py-1 text-xs text-accent-fg hover:opacity-90"
                                             >
                                                 Добавить

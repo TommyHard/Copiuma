@@ -97,7 +97,7 @@ export function AlbumPage() {
                         )}
                         {a.createdAt && (
                             <>
-                                {a.releasedAt && <span aria-hidden>·</span>}
+                                {a.releasedAt && <span aria-hidden>•</span>}
                                 <span title="Когда альбом загружен в каталог">
                                     Загружен {formatDateTimeRu(a.createdAt)}
                                 </span>
@@ -105,7 +105,7 @@ export function AlbumPage() {
                         )}
                         {tracks.data && (
                             <>
-                                <span aria-hidden>·</span>
+                                <span aria-hidden>•</span>
                                 <span>{tracks.data.length} {pluralTracks(tracks.data.length)}</span>
                             </>
                         )}

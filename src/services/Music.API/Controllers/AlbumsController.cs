@@ -146,7 +146,12 @@ public class AlbumsController : ControllerBase
                 t.CoverKey,
                 t.Artist,
                 t.ArtistId,
-                t.IsExplicit
+                t.IsExplicit,
+                FeaturedArtists = _db.TrackFeaturedArtists
+                    .Where(fa => fa.TrackId == t.Id)
+                    .OrderBy(fa => fa.Position)
+                    .Select(fa => new AlbumFeaturedArtist(fa.Artist!.Id, fa.Artist.Name))
+                    .ToList()
             })
             .ToListAsync();
 
@@ -168,7 +173,8 @@ public class AlbumsController : ControllerBase
                 trackCoverUrl,
                 r.Artist ?? album.ArtistName,
                 r.ArtistId ?? album.ArtistId,
-                r.IsExplicit));
+                r.IsExplicit,
+                r.FeaturedArtists));
         }
 
         return Ok(items);

@@ -23,7 +23,7 @@ public class FileStorageService
     private static readonly HashSet<string> AllowedImageContentTypes =
         new(StringComparer.OrdinalIgnoreCase)
         {
-            "image/jpeg", "image/png", "image/webp", "image/gif"
+            "image/jpeg", "image/png", "image/webp"
         };
 
     public FileStorageService(IMinioClient minioClient, IConfiguration configuration)

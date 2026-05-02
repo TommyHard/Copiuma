@@ -6,6 +6,16 @@ import type {
     WaveformResponse,
 } from '@/shared/types';
 
+function normalizeFeaturedArtists(raw: any): { id: string; name: string }[] {
+    const arr = Array.isArray(raw) ? raw : [];
+    return arr
+        .map((f: any) => ({
+            id: f?.id ?? f?.Id,
+            name: f?.name ?? f?.Name ?? '',
+        }))
+        .filter((f) => !!f.id);
+}
+
 function normalizeTrack(t: any): TrackListItem {
     return {
         ...t,
@@ -19,7 +29,7 @@ function normalizeTrack(t: any): TrackListItem {
         uploadedAt: t.uploadedAt ?? t.UploadedAt ?? '',
         isExplicit: t.isExplicit ?? t.IsExplicit ?? false,
         isLikedByMe: t.isLikedByMe ?? t.IsLikedByMe ?? false,
-        featuredArtists: t.featuredArtists ?? t.FeaturedArtists ?? [],
+        featuredArtists: normalizeFeaturedArtists(t.featuredArtists ?? t.FeaturedArtists),
     };
 }
 
@@ -34,8 +44,26 @@ export async function searchTracks(q: string): Promise<TrackListItem[]> {
 }
 
 export async function getTrack(id: string): Promise<TrackDetail> {
-    const r = await api.get<TrackDetail>(`/tracks/${id}`);
-    return r.data;
+    const r = await api.get<any>(`/tracks/${id}`);
+    const t = r.data;
+    const genresRaw = t.genres ?? t.Genres ?? [];
+    return {
+        ...t,
+        id: t.id ?? t.Id,
+        title: t.title ?? t.Title ?? '',
+        artist: t.artist ?? t.Artist ?? null,
+        duration: t.duration ?? t.Duration ?? null,
+        artistId: t.artistId ?? t.ArtistId ?? null,
+        albumId: t.albumId ?? t.AlbumId ?? null,
+        albumTitle: t.albumTitle ?? t.AlbumTitle ?? null,
+        trackNumber: t.trackNumber ?? t.TrackNumber ?? null,
+        isExplicit: t.isExplicit ?? t.IsExplicit ?? false,
+        coverUrl: t.coverUrl ?? t.CoverUrl ?? null,
+        ownCoverUrl: t.ownCoverUrl ?? t.OwnCoverUrl ?? null,
+        hasOwnCover: t.hasOwnCover ?? t.HasOwnCover ?? false,
+        featuredArtists: normalizeFeaturedArtists(t.featuredArtists ?? t.FeaturedArtists),
+        genres: Array.isArray(genresRaw) ? genresRaw.map(String) : [],
+    } as TrackDetail;
 }
 
 export async function getTrackStatus(id: string): Promise<TrackProcessingStatusResponse> {

@@ -52,6 +52,8 @@ public record AlbumListItem(
     IReadOnlyList<string> Genres,
     int TrackCount);
 
+public record AlbumFeaturedArtist(Guid Id, string Name);
+
 public record AlbumTrackItem(
     Guid Id,
     string Title,
@@ -60,6 +62,7 @@ public record AlbumTrackItem(
     string? CoverUrl = null,
     string? Artist = null,
     Guid? ArtistId = null,
-    bool IsExplicit = false);
+    bool IsExplicit = false,
+    IReadOnlyList<AlbumFeaturedArtist>? FeaturedArtists = null);
 
 public record AttachAlbumTrackRequest(int? TrackNumber);

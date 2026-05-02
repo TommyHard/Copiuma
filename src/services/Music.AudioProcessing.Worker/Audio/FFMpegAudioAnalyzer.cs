@@ -272,7 +272,6 @@ public class FFMpegAudioAnalyzer : IAudioAnalyzer
         "audio/wav" or "audio/x-wav" or "audio/wave" => ".wav",
         "audio/ogg" or "audio/vorbis" => ".ogg",
         "audio/aac" => ".aac",
-        "audio/mp4" or "audio/m4a" or "audio/x-m4a" => ".m4a",
         "audio/opus" => ".opus",
         "audio/webm" => ".webm",
         _ => ".bin"

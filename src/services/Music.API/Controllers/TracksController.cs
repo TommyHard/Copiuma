@@ -33,6 +33,14 @@ public class TracksController : ControllerBase
         "audio/flac", "audio/ogg", "audio/webm", "audio/aac", "audio/mp4"
     };
 
+    /// <summary>
+    /// camelCase для ручной сериализации ответов кэша
+    /// </summary>
+    private static readonly JsonSerializerOptions CamelCaseJson = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
     public TracksController(
         FileStorageService storage,
         AppDbContext context,
@@ -229,11 +237,16 @@ public class TracksController : ControllerBase
                 t.AlbumId,
                 t.TrackNumber,
                 t.IsExplicit,
-                IsLikedByMe = _context.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == UserId)
+                IsLikedByMe = _context.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == UserId),
+                FeaturedArtists = _context.TrackFeaturedArtists
+                    .Where(fa => fa.TrackId == t.Id)
+                    .OrderBy(fa => fa.Position)
+                    .Select(fa => new { fa.Artist!.Id, fa.Artist.Name })
+                    .ToList()
             })
             .ToListAsync();
 
-        var payload = JsonSerializer.Serialize(tracks);
+        var payload = JsonSerializer.Serialize(tracks, CamelCaseJson);
         await _cache.SetStringAsync(cacheKey, payload, new DistributedCacheEntryOptions
         {
             AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)
@@ -270,8 +283,16 @@ public class TracksController : ControllerBase
                 t.Artist,
                 t.Duration,
                 t.UploadedAt,
+                t.ArtistId,
+                t.AlbumId,
+                t.TrackNumber,
                 t.IsExplicit,
-                IsLikedByMe = _context.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == UserId)
+                IsLikedByMe = _context.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == UserId),
+                FeaturedArtists = _context.TrackFeaturedArtists
+                    .Where(fa => fa.TrackId == t.Id)
+                    .OrderBy(fa => fa.Position)
+                    .Select(fa => new { fa.Artist!.Id, fa.Artist.Name })
+                    .ToList()
             })
             .Take(20)
             .ToListAsync();
@@ -382,6 +403,7 @@ public class TracksController : ControllerBase
                 t.Duration,
                 t.ArtistId,
                 t.AlbumId,
+                AlbumTitle = t.Album != null ? t.Album.Title : null,
                 t.TrackNumber,
                 t.IsExplicit,
                 t.Genres,
@@ -400,6 +422,7 @@ public class TracksController : ControllerBase
 
         if (track is null) return NotFound();
 
+        // Своя обложка трека -> fallback на обложку альбома
         var effectiveCoverKey = track.CoverKey ?? track.AlbumCoverKey;
         var coverUrl = effectiveCoverKey is null
             ? null
@@ -416,6 +439,7 @@ public class TracksController : ControllerBase
             track.Duration,
             track.ArtistId,
             track.AlbumId,
+            track.AlbumTitle,
             track.TrackNumber,
             track.IsExplicit,
             track.Genres,
@@ -431,6 +455,7 @@ public class TracksController : ControllerBase
 
     /// <summary>
     /// Загрузка/замена собственной обложки трека
+    /// Если у трека уже была обложка — старая чистится
     /// </summary>
     [HttpPost("{id:guid}/cover")]
     [RequestSizeLimit(10_000_000)]

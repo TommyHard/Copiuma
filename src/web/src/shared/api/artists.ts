@@ -16,7 +16,7 @@ export async function getMyArtist(): Promise<ArtistSummary | null> {
     return r.status === 204 ? null : r.data;
 }
 
-// GET /artists отдаёт { total, items: ArtistListItem[] }
+// GET /artists { total, items: ArtistListItem[] }
 function unwrapArtistList(data: any): ArtistSummary[] {
     const items = Array.isArray(data) ? data : (data?.items ?? data?.Items ?? []);
     return items.map((a: any): ArtistSummary => ({
@@ -44,9 +44,38 @@ export async function listArtistAlbums(artistId: string): Promise<AlbumSummary[]
     return r.data;
 }
 
+function normalizeArtistTrack(t: any): TrackListItem {
+    const featRaw = t.featuredArtists ?? t.FeaturedArtists ?? [];
+    return {
+        id: t.id ?? t.Id,
+        title: t.title ?? t.Title ?? '',
+        artist: t.artist ?? t.Artist ?? null,
+        duration: t.duration ?? t.Duration ?? null,
+        artistId: t.artistId ?? t.ArtistId ?? null,
+        albumId: t.albumId ?? t.AlbumId ?? null,
+        trackNumber: t.trackNumber ?? t.TrackNumber ?? null,
+        uploadedAt: t.uploadedAt ?? t.UploadedAt ?? '',
+        isExplicit: t.isExplicit ?? t.IsExplicit ?? false,
+        isLikedByMe: t.isLikedByMe ?? t.IsLikedByMe ?? false,
+        featuredArtists: Array.isArray(featRaw)
+            ? featRaw
+                .map((f: any) => ({ id: f?.id ?? f?.Id, name: f?.name ?? f?.Name ?? '' }))
+                .filter((f: { id?: string }) => !!f.id)
+            : [],
+    };
+}
+
 export async function listArtistTracks(artistId: string): Promise<TrackListItem[]> {
-    const r = await api.get<TrackListItem[]>(`/artists/${artistId}/tracks`);
-    return r.data;
+    const r = await api.get<any[]>(`/artists/${artistId}/tracks`);
+    return Array.isArray(r.data) ? r.data.map(normalizeArtistTrack) : [];
+}
+
+/**
+ * Треки, где артист отмечен как feat. (не основной исполнитель)
+ */
+export async function listArtistFeaturedOn(artistId: string): Promise<TrackListItem[]> {
+    const r = await api.get<any[]>(`/artists/${artistId}/featured-on`);
+    return Array.isArray(r.data) ? r.data.map(normalizeArtistTrack) : [];
 }
 
 /**

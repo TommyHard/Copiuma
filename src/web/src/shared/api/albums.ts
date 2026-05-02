@@ -38,18 +38,26 @@ export async function deleteAlbum(id: string): Promise<void> {
 
 export async function listAlbumTracks(id: string): Promise<TrackListItem[]> {
     const r = await api.get<any[]>(`/albums/${id}/tracks`);
-    return r.data.map((t) => ({
-        id: t.id ?? t.Id,
-        title: t.title ?? t.Title ?? '',
-        artist: t.artist ?? t.Artist ?? null,
-        duration: t.duration ?? t.Duration ?? null,
-        uploadedAt: t.uploadedAt ?? t.UploadedAt ?? '',
-        artistId: t.artistId ?? t.ArtistId ?? null,
-        albumId: t.albumId ?? t.AlbumId ?? id,
-        trackNumber: t.trackNumber ?? t.TrackNumber ?? null,
-        isExplicit: t.isExplicit ?? t.IsExplicit ?? false,
-        coverUrl: t.coverUrl ?? t.CoverUrl ?? null,
-    }));
+    return r.data.map((t) => {
+        const featRaw = t.featuredArtists ?? t.FeaturedArtists ?? [];
+        return {
+            id: t.id ?? t.Id,
+            title: t.title ?? t.Title ?? '',
+            artist: t.artist ?? t.Artist ?? null,
+            duration: t.duration ?? t.Duration ?? null,
+            uploadedAt: t.uploadedAt ?? t.UploadedAt ?? '',
+            artistId: t.artistId ?? t.ArtistId ?? null,
+            albumId: t.albumId ?? t.AlbumId ?? id,
+            trackNumber: t.trackNumber ?? t.TrackNumber ?? null,
+            isExplicit: t.isExplicit ?? t.IsExplicit ?? false,
+            coverUrl: t.coverUrl ?? t.CoverUrl ?? null,
+            featuredArtists: Array.isArray(featRaw)
+                ? featRaw
+                    .map((f: any) => ({ id: f?.id ?? f?.Id, name: f?.name ?? f?.Name ?? '' }))
+                    .filter((f: { id?: string }) => !!f.id)
+                : [],
+        };
+    });
 }
 
 export interface CreateAlbumPayload {

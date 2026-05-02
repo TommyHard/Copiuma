@@ -22,7 +22,7 @@ const ALLOWED_AUDIO = [
 ];
 const MAX_AUDIO_BYTES = 200 * 1024 * 1024;
 
-const ALLOWED_IMAGE = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const ALLOWED_IMAGE = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 type Mode = 'track' | 'album';
@@ -32,12 +32,13 @@ interface AlbumTrackEntry {
     file: File | null;
     title: string;
     cover: File | null;
+    featuredArtists: { id: string; name: string }[];
     fileError?: string;
     coverError?: string;
 }
 
 function newTrackEntry(): AlbumTrackEntry {
-    return { id: crypto.randomUUID(), file: null, title: '', cover: null };
+    return { id: crypto.randomUUID(), file: null, title: '', cover: null, featuredArtists: [] };
 }
 
 export function UploadPage() {
@@ -87,8 +88,8 @@ export function UploadPage() {
             <header className="space-y-2">
                 <h1 className="text-2xl font-semibold">Загрузка музыки</h1>
                 <p className="text-sm text-fg-muted">
-                    Один трек или целый альбом. Аудио — MP3/WAV/FLAC/OGG/AAC/M4A до 200&nbsp;МБ.
-                    Обложки — JPEG/PNG/WEBP/GIF до 10&nbsp;МБ.
+                    Один трек или целый альбом. Аудио - MP3/WAV/FLAC/OGG/AAC до 200&nbsp;МБ.
+                    Обложки — JPEG/PNG/WEBP до 10&nbsp;МБ.
                 </p>
             </header>
 
@@ -159,7 +160,7 @@ function LockedArtistCard({ me }: { me: ArtistSummary }) {
                         {me.name}
                     </Link>
                     <p className="text-xs text-fg-muted">
-                        Загрузка идёт под вашим профилем артиста — поменять нельзя.{' '}
+                        Загрузка идёт под вашим профилем артиста. Добавить других артистов можно ниже.{' '}
                         <Link to="/artist/settings" className="text-accent hover:underline">
                             Настроить профиль
                         </Link>
@@ -495,6 +496,9 @@ function AlbumForm({
                     albumId,
                     trackNumber: i + 1,
                     cover: t.cover ?? undefined,
+                    featuredArtistIds: t.featuredArtists.length > 0
+                        ? t.featuredArtists.map((a) => a.id)
+                        : undefined,
                 }, (pct) => {
                     setProgressList((prev) => prev.map((p) => p.id === t.id ? { ...p, percent: pct } : p));
                 });
@@ -656,6 +660,14 @@ function AlbumForm({
                                         </div>
                                         {t.coverError && <p className="text-xs text-danger">{t.coverError}</p>}
 
+                                        <FeaturedArtistsField
+                                            ownArtistId={artistId}
+                                            featuredArtists={t.featuredArtists}
+                                            setFeaturedArtists={(v) => updateTrack(t.id, { featuredArtists: v })}
+                                            disabled={submitting}
+                                            compact
+                                        />
+
                                         {progress && progress.state !== 'pending' && (
                                             <div className="space-y-1">
                                                 {progress.state === 'uploading' && (
@@ -715,11 +727,13 @@ function FeaturedArtistsField({
     featuredArtists,
     setFeaturedArtists,
     disabled,
+    compact = false,
 }: {
     ownArtistId: string;
     featuredArtists: { id: string; name: string }[];
     setFeaturedArtists: (v: { id: string; name: string }[]) => void;
     disabled?: boolean;
+    compact?: boolean;
 }) {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<ArtistSummary[]>([]);
@@ -746,19 +760,24 @@ function FeaturedArtistsField({
     }, [query]);
 
     const visible = results
-        .filter((a) => a.id !== ownArtistId)
-        .filter((a) => !featuredArtists.some((x) => x.id === a.id));
+        .filter((a) => a.id !== ownArtistId)                          // не себя
+        .filter((a) => !featuredArtists.some((x) => x.id === a.id));  // не уже добавленных
 
     return (
-        <div>
-            <span className="mb-1 block text-sm text-fg-muted">Доп. исполнители (feat.)</span>
+        <div className={compact ? 'space-y-1' : ''}>
+            <span className={cn('block text-fg-muted', compact ? 'mb-1 text-xs' : 'mb-1 text-sm')}>
+                Доп. исполнители (feat.)
+            </span>
 
             {featuredArtists.length > 0 && (
-                <div className="mb-2 flex flex-wrap gap-2">
+                <div className={cn('flex flex-wrap gap-1.5', compact ? 'mb-1' : 'mb-2')}>
                     {featuredArtists.map((a) => (
                         <span
                             key={a.id}
-                            className="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent/10 px-3 py-1 text-xs text-accent"
+                            className={cn(
+                                'inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent/10 text-accent',
+                                compact ? 'px-2 py-0.5 text-[10px]' : 'px-3 py-1 text-xs',
+                            )}
                         >
                             {a.name}
                             <button
@@ -775,14 +794,14 @@ function FeaturedArtistsField({
                 </div>
             )}
 
-            <div className="relative max-w-md">
+            <div className={cn('relative', compact ? '' : 'max-w-md')}>
                 <input
                     type="text"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Поиск артистов в каталоге…"
+                    placeholder={compact ? 'Поиск feat.-артиста…' : 'Поиск артистов в каталоге…'}
                     disabled={disabled}
-                    className={inputClass}
+                    className={cn(inputClass, compact && 'py-1 text-xs')}
                 />
                 {searching && <p className="mt-1 text-xs text-fg-muted">Поиск…</p>}
                 {query.trim().length >= 2 && !searching && visible.length === 0 && (
@@ -882,7 +901,7 @@ function FilePicker({
                 <div className="space-y-2 text-sm">
                     <p className="font-medium">{file.name}</p>
                     <p className="text-fg-muted">
-                        {file.type || 'unknown'} · {(file.size / 1024 / 1024).toFixed(1)} МБ
+                        {file.type || 'unknown'} • {(file.size / 1024 / 1024).toFixed(1)} МБ
                     </p>
                     <button
                         type="button"
