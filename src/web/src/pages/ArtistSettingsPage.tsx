@@ -39,6 +39,8 @@ export function ArtistSettingsPage() {
         }
     }, [a, initialized]);
 
+    const [createError, setCreateError] = useState<string | null>(null);
+
     const save = useMutation({
         mutationFn: () => updateArtist(a!.id, { name: name.trim(), bio: bio.trim() }),
         onSuccess: () => {
@@ -50,19 +52,33 @@ export function ArtistSettingsPage() {
 
     const create = useMutation({
         mutationFn: async (data: { name: string; bio?: string }) => {
+            setCreateError(null);
+
+            // 1. СНАЧАЛА создаем профиль артиста (проверка уникальности имени в Music API)
+            const newArtist = await createArtist(data);
+
+            // 2. ЗАТЕМ меняем роль в Identity, если шаг 1 прошел успешно
             await becomeArtist(data.name);
-            return await createArtist(data);
+
+            return newArtist;
         },
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ['my-artist'] });
             setInitialized(false);
             setNeedsRelogin(true);
         },
+        onError: (err: any) => {
+            // Обрабатываем 409 ошибку от сервера
+            if (err?.response?.status === 409) {
+                setCreateError("Это имя уже занято другим артистом. Пожалуйста, выберите другое.");
+            } else {
+                setCreateError(err?.response?.data?.message || "Произошла ошибка при создании профиля.");
+            }
+        }
     });
 
     if (artist.isLoading) return <p className="text-fg-muted">Загрузка...</p>;
 
-    // Если профиль только что создан, показываем экран-заглушку
     if (needsRelogin) {
         return (
             <article className="mx-auto max-w-md space-y-6 text-center mt-10">
@@ -109,7 +125,9 @@ export function ArtistSettingsPage() {
                         className="w-full rounded-md border border-border bg-bg-elevated px-3 py-2 text-sm outline-none focus:border-accent"
                     />
                 </label>
-                {create.isError && <p className="text-xs text-danger">Не удалось создать профиль.</p>}
+
+                {createError && <p className="text-xs text-danger">{createError}</p>}
+
                 <button
                     onClick={() => create.mutate({ name: name.trim(), bio: bio.trim() || undefined })}
                     disabled={!name.trim() || create.isPending}

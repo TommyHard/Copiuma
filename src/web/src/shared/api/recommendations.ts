@@ -32,6 +32,12 @@ export async function forYouTracks(limit = 20): Promise<TrackListItem[]> {
 }
 
 export async function trendingArtists(limit = 12): Promise<ArtistSummary[]> {
-    const r = await api.get<ArtistSummary[]>('/recommendations/artists/trending', { params: { limit } });
-    return r.data;
+    const r = await api.get<any[]>('/recommendations/artists/trending', { params: { limit } });
+
+    return r.data.map((a) => ({
+        ...a,
+        id: a.id ?? a.artistId ?? a.Id ?? a.ArtistId,
+        name: a.name ?? a.Name,
+        avatarUrl: a.avatarUrl ?? a.AvatarUrl ?? null,
+    }));
 }

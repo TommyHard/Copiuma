@@ -16,4 +16,5 @@ public record TrackRecommendationItem(
 public record ArtistRecommendationItem(
     Guid ArtistId,
     string Name,
-    int PlayCount);
+    int PlayCount,
+    string? AvatarUrl = null);

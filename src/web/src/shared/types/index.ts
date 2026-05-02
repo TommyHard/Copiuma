@@ -41,6 +41,7 @@ export interface TrackListItem {
     trackNumber: number | null;
     isExplicit: boolean;
     isLikedByMe?: boolean;
+    featuredArtists?: FeaturedArtist[];
 }
 
 export interface TrackDetail {
@@ -55,6 +56,7 @@ export interface TrackDetail {
     processingStatus: TrackProcessingStatus;
     uploadedByUserId?: string;
     isLikedByMe?: boolean;
+    featuredArtists?: FeaturedArtist[];
 }
 
 export interface TrackProcessingStatusResponse {
@@ -99,6 +101,11 @@ export interface ArtistSummary {
     createdByUserId?: string;
     albumCount?: number;
     trackCount?: number;
+}
+
+export interface FeaturedArtist {
+    id: string;
+    name: string;
 }
 
 export interface AlbumSummary {

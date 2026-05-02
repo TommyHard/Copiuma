@@ -68,17 +68,39 @@ export function TrackRow({ track, number }: { track: TrackListItem; number?: num
                         </span>
                     )}
                 </Link>
-                {track.artistId ? (
-                    <Link
-                        to={`/artists/${track.artistId}`}
-                        className="block truncate text-xs text-fg-muted hover:text-fg hover:underline"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        {track.artist ?? '—'}
-                    </Link>
-                ) : (
-                    <div className="truncate text-xs text-fg-muted">{track.artist ?? '—'}</div>
-                )}
+
+                <div className="truncate text-xs text-fg-muted">
+                    {track.artistId ? (
+                        <Link
+                            to={`/artists/${track.artistId}`}
+                            className="hover:text-fg hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {track.artist ?? 'Неизвестный исполнитель'}
+                        </Link>
+                    ) : (
+                        <span>{track.artist ?? 'Неизвестный исполнитель'}</span>
+                    )}
+
+                    {/* Совместные исполнители */}
+                    {track.featuredArtists && track.featuredArtists.length > 0 && (
+                        <span>
+                            {' '}feat.{' '}
+                            {track.featuredArtists.map((fa, idx) => (
+                                <span key={fa.id}>
+                                    {idx > 0 && ', '}
+                                    <Link
+                                        to={`/artists/${fa.id}`}
+                                        className="hover:text-fg hover:underline"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        {fa.name}
+                                    </Link>
+                                </span>
+                            ))}
+                        </span>
+                    )}
+                </div>
             </div>
 
             <span className="text-xs tabular-nums text-fg-muted">{formatDuration(track.duration)}</span>

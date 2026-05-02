@@ -99,10 +99,12 @@ export function HomePage() {
                                     className="block space-y-2 rounded-md border border-border bg-bg-elevated p-3 hover:bg-bg-elevated/70"
                                 >
                                     <div
-                                        className="aspect-square w-full rounded-full bg-bg bg-cover bg-center"
-                                        style={{ backgroundImage: a.avatarUrl ? `url(${a.avatarUrl})` : undefined }}
-                                        aria-hidden
-                                    />
+                                        className="aspect-square w-full rounded-full bg-bg bg-cover bg-center flex items-center justify-center text-3xl font-bold text-fg-muted"
+                                        style={{ backgroundImage: a.avatarUrl ? `url('${a.avatarUrl}')` : undefined }}
+                                        aria-hidden={!!a.avatarUrl}
+                                    >
+                                        {!a.avatarUrl && a.name ? a.name.charAt(0).toUpperCase() : null}
+                                    </div>
                                     <div className="truncate text-center text-sm font-medium">{a.name}</div>
                                 </Link>
                             </li>

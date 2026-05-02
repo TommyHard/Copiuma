@@ -25,11 +25,13 @@ public class RecommendationsService
 
     private readonly AppDbContext _db;
     private readonly IDistributedCache _cache;
+    private readonly FileStorageService _storage;
 
-    public RecommendationsService(AppDbContext db, IDistributedCache cache)
+    public RecommendationsService(AppDbContext db, IDistributedCache cache, FileStorageService storage)
     {
         _db = db;
         _cache = cache;
+        _storage = storage;
     }
 
     // Popular
@@ -60,13 +62,13 @@ public class RecommendationsService
             .Join(_db.Tracks,
                 p => p.TrackId, t => t.Id,
                 (p, t) => new TrackRecommendationItem(
-                    t.Id, 
-                    t.Title, 
-                    t.Artist, 
-                    t.ArtistId, 
-                    t.AlbumId, 
-                    p.Plays, 
-                    t.Duration, 
+                    t.Id,
+                    t.Title,
+                    t.Artist,
+                    t.ArtistId,
+                    t.AlbumId,
+                    p.Plays,
+                    t.Duration,
                     t.IsExplicit,
                     false))
             .ToListAsync(ct);
@@ -113,14 +115,14 @@ public class RecommendationsService
             .Join(_db.Tracks,
                 p => p.TrackId, t => t.Id,
                 (p, t) => new TrackRecommendationItem(
-                    t.Id, 
-                    t.Title, 
-                    t.Artist, 
-                    t.ArtistId, 
-                    t.AlbumId, 
-                    p.CoUsers, 
-                    t.Duration, 
-                    t.IsExplicit, 
+                    t.Id,
+                    t.Title,
+                    t.Artist,
+                    t.ArtistId,
+                    t.AlbumId,
+                    p.CoUsers,
+                    t.Duration,
+                    t.IsExplicit,
                     false))
             .ToListAsync(ct);
 
@@ -240,14 +242,14 @@ public class RecommendationsService
             .OrderByDescending(x => x.Plays)
             .Take(take * 3)
             .Select(x => new TrackRecommendationItem(
-                x.t.Id, 
-                x.t.Title, 
-                x.t.Artist, 
-                x.t.ArtistId, 
-                x.t.AlbumId, 
-                x.Plays, 
-                x.t.Duration, 
-                x.t.IsExplicit, 
+                x.t.Id,
+                x.t.Title,
+                x.t.Artist,
+                x.t.ArtistId,
+                x.t.AlbumId,
+                x.Plays,
+                x.t.Duration,
+                x.t.IsExplicit,
                 false))
             .ToListAsync(ct);
 
@@ -299,11 +301,20 @@ public class RecommendationsService
             .Take(take)
             .Join(_db.Artists,
                 p => p.ArtistId, a => a.Id,
-                (p, a) => new ArtistRecommendationItem(a.Id, a.Name, p.Plays))
+                (p, a) => new { a.Id, a.Name, p.Plays, a.AvatarKey })
             .ToListAsync(ct);
 
-        await WriteCacheAsync(key, rows, TimeSpan.FromMinutes(15), ct);
-        return rows;
+        var items = new List<ArtistRecommendationItem>(rows.Count);
+        foreach (var r in rows)
+        {
+            var avatarUrl = r.AvatarKey is null
+                ? null
+                : await _storage.GeneratePresignedImageGetUrlAsync(r.AvatarKey);
+            items.Add(new ArtistRecommendationItem(r.Id, r.Name, r.Plays, avatarUrl));
+        }
+
+        await WriteCacheAsync(key, items, TimeSpan.FromMinutes(15), ct);
+        return items;
     }
 
     public async Task BumpVersionAsync(CancellationToken ct = default)

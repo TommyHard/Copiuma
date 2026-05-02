@@ -19,6 +19,7 @@ function normalizeTrack(t: any): TrackListItem {
         uploadedAt: t.uploadedAt ?? t.UploadedAt ?? '',
         isExplicit: t.isExplicit ?? t.IsExplicit ?? false,
         isLikedByMe: t.isLikedByMe ?? t.IsLikedByMe ?? false,
+        featuredArtists: t.featuredArtists ?? t.FeaturedArtists ?? [],
     };
 }
 
