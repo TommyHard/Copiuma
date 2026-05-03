@@ -27,7 +27,7 @@ export function VerifyEmailPage() {
     }, [token]);
 
     return (
-        <div className="space-y-4 text-center">
+        <div className="space-y-4 text-center mt-16">
             <h1 className="text-2xl font-semibold">Подтверждение email</h1>
 
             {status === 'pending' && <p className="text-fg-muted">Подтверждаем…</p>}

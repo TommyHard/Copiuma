@@ -10,6 +10,7 @@ import { CatalogPage } from '@/pages/CatalogPage';
 import { TrackPage } from '@/pages/TrackPage';
 import { SearchPage } from '@/pages/SearchPage';
 import { FavoritesPage } from '@/pages/FavoritesPage';
+import { OfflinePage } from '@/pages/OfflinePage';
 import { UploadPage } from '@/pages/UploadPage';
 import { ArtistPage } from '@/pages/ArtistPage';
 import { AlbumPage } from '@/pages/AlbumPage';
@@ -68,6 +69,7 @@ export const router = createBrowserRouter([
                     { path: 'albums/:id', element: <AlbumPage /> },
                     { path: 'search', element: <SearchPage /> },
                     { path: 'favorites', element: <FavoritesPage /> },
+                    { path: 'offline', element: <OfflinePage /> },
                     { path: 'history', element: <HistoryPage /> },
                     { path: 'notifications', element: <NotificationsPage /> },
                     { path: 'playlists', element: <PlaylistsPage /> },

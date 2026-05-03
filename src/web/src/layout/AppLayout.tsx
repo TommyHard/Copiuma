@@ -3,12 +3,14 @@ import { Header } from './Header';
 import { Player } from '@/features/player/Player';
 import { ToastContainer } from '@/features/notifications/ToastContainer';
 import { useNotificationHub } from '@/features/notifications/useNotificationHub';
+import { OfflineBanner } from '@/features/offline/OfflineBanner';
 
 export function AppLayout() {
     useNotificationHub();
 
     return (
         <div className="flex min-h-screen flex-col bg-bg">
+            <OfflineBanner />
             <Header />
             <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
                 <Outlet />

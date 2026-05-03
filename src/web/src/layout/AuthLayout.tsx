@@ -11,7 +11,7 @@ const Logo = memo(() => (
 export function AuthLayout() {
     return (
         <div className="grid min-h-screen place-items-center bg-bg p-6">
-            <main className="w-full max-w-md min-h-[600px] flex flex-col rounded-lg border border-border bg-bg-elevated px-10 py-12 shadow-lg">
+            <main className="w-full max-w-md min-h-[550px] flex flex-col rounded-lg border border-border bg-bg-elevated px-12 py-12 shadow-lg">
                 <div className="mb-8 flex items-center justify-center gap-3">
                     <Logo />
                     <span className="text-2xl font-normal tracking-tight">Copiuma</span>

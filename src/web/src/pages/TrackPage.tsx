@@ -15,6 +15,7 @@ import { Reviews } from '@/features/reviews/Reviews';
 import { ReportButton } from '@/features/reports/ReportButton';
 import { TrackEditDialog } from '@/features/track/TrackEditDialog';
 import { ImageUploader } from '@/features/cover/ImageUploader';
+import { useToggleOfflineForTrack } from './OfflinePage';
 
 export function TrackPage() {
     const { id } = useParams();
@@ -73,6 +74,8 @@ export function TrackPage() {
             qc.invalidateQueries({ queryKey: ['for-you'] });
         },
     });
+
+    const offline = useToggleOfflineForTrack(id ?? '');
 
     if (trackQ.isLoading) return <p className="text-fg-muted">Загружаем…</p>;
     if (trackQ.isError || !trackQ.data) return <p className="text-danger">Трек не найден.</p>;
@@ -208,6 +211,20 @@ export function TrackPage() {
                         : 'border-border hover:bg-bg-elevated'
                         }`}>
                     {t.isLikedByMe ? '♥ В избранном' : '♥ В избранное'}
+                </button>
+
+                <button
+                    onClick={() => offline.cached ? offline.remove() : offline.add()}
+                    disabled={offline.busy || !ready}
+                    title={offline.cached ? 'Убрать из офлайн' : 'Скачать для офлайн-проигрывания'}
+                    className={`rounded-md border px-4 py-2 transition-colors disabled:opacity-50 ${offline.cached
+                            ? 'border-accent/60 bg-accent/10 text-accent hover:bg-accent/20'
+                            : 'border-border hover:bg-bg-elevated'
+                        }`}
+                >
+                    {offline.busy
+                        ? `⬇ ${offline.progress?.completed ?? 0}/${offline.progress?.total ?? 0}`
+                        : offline.cached ? '✓ Офлайн' : '⬇ Офлайн'}
                 </button>
 
                 {isOwner ? (

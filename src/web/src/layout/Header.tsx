@@ -29,6 +29,7 @@ export function Header() {
                     <NavItem to="/search">Поиск</NavItem>
                     <NavItem to="/playlists">Плейлисты</NavItem>
                     <NavItem to="/favorites">Избранное</NavItem>
+                    <NavItem to="/offline">Офлайн</NavItem>
                     <NavItem to="/history">История</NavItem>
                     <NavItem to="/friends">Подписки</NavItem>
                     <NavItem to="/rooms">DJ-комнаты</NavItem>
