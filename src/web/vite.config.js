@@ -2,7 +2,6 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import svgr from 'vite-plugin-svgr';
 import path from 'node:path';
-
 // https://vitejs.dev/config/
 export default defineConfig({
     plugins: [
@@ -26,7 +25,7 @@ export default defineConfig({
             '/identity': {
                 target: process.env.VITE_IDENTITY_URL || 'http://127.0.0.1:5001',
                 changeOrigin: true,
-                rewrite: (p) => p.replace(/^\/identity/, ''),
+                rewrite: function (p) { return p.replace(/^\/identity/, ''); },
             },
         },
     },

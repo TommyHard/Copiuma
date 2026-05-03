@@ -17,7 +17,7 @@ export default {
                 success: 'rgb(var(--success) / <alpha-value>)',
             },
             fontFamily: {
-                sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+                sans: ['TommyHard', 'Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
             },
         },
     },

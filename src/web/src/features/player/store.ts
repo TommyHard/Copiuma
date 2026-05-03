@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import type { TrackListItem } from '@/shared/types';
 
 export interface PlayerTrack extends TrackListItem {
@@ -14,7 +15,7 @@ export interface PlayerState {
     isPlaying: boolean;
     position: number;          // секунды
     duration: number;          // секунды
-    volume: number; 
+    volume: number;
     muted: boolean;
 
     seekRequest: { value: number; nonce: number } | null;
@@ -31,70 +32,107 @@ export interface PlayerState {
     toggleMute(): void;
 }
 
-export const usePlayer = create<PlayerState>((set, get) => ({
-    queue: [],
-    index: -1,
-    isPlaying: false,
-    position: 0,
-    duration: 0,
-    volume: 1,
-    muted: false,
-    seekRequest: null,
+const STORAGE_KEY = 'cw:player';
 
-    playTrack(track) {
-        set({ queue: [track], index: 0, isPlaying: true, position: 0, duration: 0 });
-    },
+/**
+ * Состояние плеера сохраняется в localStorage и восстанавливается при перезагрузке
+ * Сохраняем: queue, index, position, volume, muted
+ */
+export const usePlayer = create<PlayerState>()(
+    persist(
+        (set, get) => ({
+            queue: [],
+            index: -1,
+            isPlaying: false,
+            position: 0,
+            duration: 0,
+            volume: 1,
+            muted: false,
+            seekRequest: null,
 
-    playQueue(tracks, startIndex = 0) {
-        if (tracks.length === 0) return;
-        const safe = Math.max(0, Math.min(startIndex, tracks.length - 1));
-        set({ queue: tracks, index: safe, isPlaying: true, position: 0, duration: 0 });
-    },
+            playTrack(track) {
+                set({ queue: [track], index: 0, isPlaying: true, position: 0, duration: 0 });
+            },
 
-    togglePlay() {
-        if (get().queue.length === 0) return;
-        set((s) => ({ isPlaying: !s.isPlaying }));
-    },
+            playQueue(tracks, startIndex = 0) {
+                if (tracks.length === 0) return;
+                const safe = Math.max(0, Math.min(startIndex, tracks.length - 1));
+                set({ queue: tracks, index: safe, isPlaying: true, position: 0, duration: 0 });
+            },
 
-    next() {
-        const { queue, index } = get();
-        if (index < queue.length - 1) {
-            set({ index: index + 1, position: 0, duration: 0, isPlaying: true });
-        } else {
-            set({ isPlaying: false, position: 0 });
-        }
-    },
+            togglePlay() {
+                if (get().queue.length === 0) return;
+                set((s) => ({ isPlaying: !s.isPlaying }));
+            },
 
-    prev() {
-        const { index, position } = get();
-        if (position > 3) {
-            set({ seekRequest: { value: 0, nonce: Date.now() } });
-            return;
-        }
-        if (index > 0) {
-            set({ index: index - 1, position: 0, duration: 0, isPlaying: true });
-        } else {
-            set({ seekRequest: { value: 0, nonce: Date.now() } });
-        }
-    },
+            next() {
+                const { queue, index } = get();
+                if (index < queue.length - 1) {
+                    set({ index: index + 1, position: 0, duration: 0, isPlaying: true });
+                } else {
+                    set({ isPlaying: false, position: 0 });
+                }
+            },
 
-    setPosition(value) {
-        set({ position: value });
-    },
-    setDuration(value) {
-        set({ duration: value });
-    },
-    seek(value) {
-        set({ seekRequest: { value, nonce: Date.now() } });
-    },
-    setVolume(value) {
-        const v = Math.max(0, Math.min(1, value));
-        set({ volume: v, muted: v === 0 });
-    },
-    toggleMute() {
-        set((s) => ({ muted: !s.muted }));
-    },
-}));
+            prev() {
+                const { index, position } = get();
+                if (position > 3) {
+                    set({ seekRequest: { value: 0, nonce: Date.now() } });
+                    return;
+                }
+                if (index > 0) {
+                    set({ index: index - 1, position: 0, duration: 0, isPlaying: true });
+                } else {
+                    set({ seekRequest: { value: 0, nonce: Date.now() } });
+                }
+            },
+
+            setPosition(value) {
+                set({ position: value });
+            },
+            setDuration(value) {
+                set({ duration: value });
+            },
+            seek(value) {
+                set({ seekRequest: { value, nonce: Date.now() } });
+            },
+            setVolume(value) {
+                const v = Math.max(0, Math.min(1, value));
+                set({ volume: v, muted: v === 0 });
+            },
+            toggleMute() {
+                set((s) => ({ muted: !s.muted }));
+            },
+        }),
+        {
+            name: STORAGE_KEY,
+            version: 1,
+            storage: createJSONStorage(() => localStorage),
+            partialize: (state) => ({
+                queue: state.queue,
+                index: state.index,
+                position: state.position,
+                volume: state.volume,
+                muted: state.muted,
+            }),
+            onRehydrateStorage: () => (state) => {
+                if (!state) return;
+                state.isPlaying = false;
+                state.duration = 0;
+
+                const hasValidTrack =
+                    state.queue.length > 0 &&
+                    state.index >= 0 &&
+                    state.index < state.queue.length;
+
+                state.seekRequest =
+                    hasValidTrack && state.position > 0
+                        ? { value: state.position, nonce: Date.now() }
+                        : null;
+            },
+        },
+    ),
+);
 
 export const currentTrackSelector = (s: PlayerState): PlayerTrack | null =>
     s.index >= 0 && s.index < s.queue.length ? s.queue[s.index] : null;

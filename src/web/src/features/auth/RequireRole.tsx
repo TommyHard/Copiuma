@@ -2,7 +2,12 @@ import type { ReactNode } from 'react';
 import type { UserRole } from '@/shared/types';
 import { useAuth } from './useAuth';
 
-const ORDER: Record<UserRole, number> = { User: 0, Artist: 1, Moderator: 2, Admin: 3 };
+const ORDER: Record<UserRole, number> = {
+    User: 0, 0: 0,
+    Artist: 1, 1: 1,
+    Moderator: 2, 2: 2,
+    Admin: 3, 3: 3
+};
 
 /**
  * Guard по роли: проверяет «не ниже чем указанная»

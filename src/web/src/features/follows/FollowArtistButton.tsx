@@ -12,7 +12,7 @@ export function FollowArtistButton({ artistId }: { artistId: string }) {
         queryFn: listFollowedArtists,
     });
 
-    const isFollowing = followed.data?.some((a) => a.id === artistId) ?? false;
+    const isFollowing = followed.data?.some((a) => a.artistId === artistId) ?? false;
 
     const follow = useMutation({
         mutationFn: () => followArtist(artistId),

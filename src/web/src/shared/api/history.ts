@@ -1,5 +1,6 @@
 import { api } from './http';
-import type { HistoryArtistEntry, HistoryTrackEntry } from '@/shared/types';
+import type { HistoryArtistEntry, HistoryTrackEntry, RawPlayEvent } from '@/shared/types';
+
 
 /**
  * /history

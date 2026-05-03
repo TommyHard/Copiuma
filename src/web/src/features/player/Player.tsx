@@ -119,7 +119,28 @@ export function Player() {
     // Seek
     useEffect(() => {
         if (!seekRequest || !audioRef.current) return;
-        audioRef.current.currentTime = seekRequest.value;
+        const audio = audioRef.current;
+        const value = seekRequest.value;
+
+        const apply = () => {
+            try {
+                audio.currentTime = value;
+            } catch {
+                // брувзер вернул InvalidStateError — игнорируем
+            }
+        };
+
+        if (audio.readyState >= 1) {
+            apply();
+            return;
+        }
+
+        const onMeta = () => {
+            apply();
+            audio.removeEventListener('loadedmetadata', onMeta);
+        };
+        audio.addEventListener('loadedmetadata', onMeta);
+        return () => audio.removeEventListener('loadedmetadata', onMeta);
     }, [seekRequest]);
 
     if (!track) {

@@ -52,5 +52,5 @@ export function useTheme(): { theme: Theme; setTheme: (t: Theme) => void } {
         return () => mq.removeEventListener('change', onChange);
     }, [theme]);
 
-    return { theme, setTheme };
+    return { theme: theme as Theme, setTheme };
 }
