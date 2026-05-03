@@ -1,17 +1,21 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useRoom } from '@/features/rooms/useRoom';
 import { useRoomStore } from '@/features/rooms/roomStore';
+import { clearLastRoom, rememberRoom } from '@/features/rooms/lastRoom';
 import { useAuth } from '@/features/auth/useAuth';
+import { getTrack } from '@/shared/api/catalog';
 
 /**
  * Страница DJ-комнаты. URL: /rooms/{id}?dj=1
  *
  * UX:
- *  - Покажи список участников и текущий трек.
+ *  - Покажи список участников и текущий трек
  *  - Если ты DJ — обычный плеер в шапке/внизу управляет всем (room-hook слушает
  *    изменения player и шлёт SendPlay/Pause/Seek). Доп. показываем,
- *    что ты DJ.
+ *    что ты DJ
+ * 
  *  - Если ты listener — плеер всё ещё работает, но любые твои клики на нём будут
  *    инвалидированы следующим heartbeat DJ
  */
@@ -27,7 +31,15 @@ export function RoomPage() {
     }
 
     return (
-        <RoomPageInner roomId={id} requestDj={requestDj} userName={user?.displayName ?? user?.email ?? 'me'} onLeave={() => navigate('/rooms')} />
+        <RoomPageInner
+            roomId={id}
+            requestDj={requestDj}
+            userName={user?.displayName ?? user?.email ?? 'me'}
+            onLeave={() => {
+                clearLastRoom();
+                navigate('/rooms');
+            }}
+        />
     );
 }
 
@@ -43,6 +55,11 @@ function RoomPageInner({
     onLeave: () => void;
 }) {
     useRoom(roomId, requestDj);
+
+    // Запоминаем комнату — чтобы можно было вернуться после случайного ухода
+    useEffect(() => {
+        rememberRoom(roomId, requestDj);
+    }, [roomId, requestDj]);
 
     const isDj = useRoomStore((s) => s.isDj);
     const participants = useRoomStore((s) => s.participants);
@@ -96,14 +113,13 @@ function RoomPageInner({
             <section className="space-y-3">
                 <h2 className="text-xl font-semibold">Сейчас играет</h2>
                 {current ? (
-                    <div className="rounded-md border border-border bg-bg-elevated p-4">
-                        <div className="text-sm text-fg-muted">trackId: {current.trackId}</div>
-                        <div className="text-lg font-medium">{current.title}</div>
-                        <div className="text-sm text-fg-muted">{current.artist ?? '—'}</div>
-                        <div className="mt-2 text-xs text-fg-muted">
-                            {current.isPlaying ? '▶ воспроизводится' : '⏸ на паузе'} • {Math.round(current.position)} сек
-                        </div>
-                    </div>
+                    <NowPlayingCard
+                        trackId={current.trackId}
+                        fallbackTitle={current.title}
+                        fallbackArtist={current.artist}
+                        isPlaying={current.isPlaying}
+                        position={current.position}
+                    />
                 ) : (
                     <p className="text-fg-muted">
                         DJ ещё ничего не запустил. {isDj && 'Нажми ▶ на любом треке в каталоге — он стартует у всех.'}
@@ -130,10 +146,101 @@ function RoomPageInner({
 
             {!isDj && (
                 <p className="text-xs text-fg-muted">
-                    В режиме listener'а ваши изменения позиции/паузы локально применяются, но через секунду
-                    перезаписываются heartbeat'ом DJ'я.
+                    В режиме listener ваши изменения позиции/паузы локально применяются, но через секунду
+                    перезаписываются heartbeat DJ'я
                 </p>
             )}
         </article>
     );
+}
+
+function NowPlayingCard({
+    trackId,
+    fallbackTitle,
+    fallbackArtist,
+    isPlaying,
+    position,
+}: {
+    trackId: string;
+    fallbackTitle: string;
+    fallbackArtist: string | null;
+    isPlaying: boolean;
+    position: number;
+}) {
+    // Подтягиваем полные данные трека (cover, artistId, feat. артисты)
+    const trackQ = useQuery({
+        queryKey: ['track', trackId],
+        queryFn: () => getTrack(trackId),
+        enabled: !!trackId,
+        staleTime: 60_000,
+    });
+
+    const t = trackQ.data;
+    const title = t?.title ?? fallbackTitle;
+    const artist = t?.artist ?? fallbackArtist;
+    const artistId = t?.artistId ?? null;
+    const coverUrl = t?.coverUrl ?? null;
+    const featured = t?.featuredArtists ?? [];
+
+    return (
+        <div className="flex items-start gap-4 rounded-md border border-border bg-bg-elevated p-4">
+            <div
+                className="size-24 shrink-0 rounded-md border border-border bg-bg bg-cover bg-center"
+                style={{ backgroundImage: coverUrl ? `url(${coverUrl})` : undefined }}
+                aria-hidden
+            />
+
+            <div className="min-w-0 flex-1 space-y-1">
+                <Link
+                    to={`/tracks/${trackId}`}
+                    className="block truncate text-lg font-medium hover:underline"
+                    title={title}
+                >
+                    {title}
+                </Link>
+
+                <div className="flex flex-wrap items-baseline gap-x-2 text-sm text-fg-muted">
+                    {artistId ? (
+                        <Link
+                            to={`/artists/${artistId}`}
+                            className="hover:text-fg hover:underline"
+                        >
+                            {artist ?? '—'}
+                        </Link>
+                    ) : (
+                        <span>{artist ?? '—'}</span>
+                    )}
+
+                    {featured.length > 0 && (
+                        <span>
+                            feat.{' '}
+                            {featured.map((fa, idx) => (
+                                <span key={fa.id}>
+                                    {idx > 0 && ', '}
+                                    <Link
+                                        to={`/artists/${fa.id}`}
+                                        className="hover:text-fg hover:underline"
+                                    >
+                                        {fa.name}
+                                    </Link>
+                                </span>
+                            ))}
+                        </span>
+                    )}
+                </div>
+
+                <div className="pt-1 text-xs text-fg-muted">
+                    {isPlaying ? '▶ воспроизводится' : '⏸ на паузе'} •{' '}
+                    {formatPosition(position)}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function formatPosition(seconds: number): string {
+    const total = Math.max(0, Math.floor(seconds));
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
 }

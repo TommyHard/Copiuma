@@ -5,18 +5,19 @@ import { useRoomStore } from './roomStore';
 import { usePlayer } from '@/features/player/store';
 
 /**
- * ��������� SignalR-������� ��� ���������� �������
+ * Подключение к SignalR-комнате совместного прослушивания
  *
- *   - Listener: �������� SyncCurrentTrack/ReceivePlay/ReceivePause/ReceiveSeek/ReceiveHeartbeat
- *     � ������������ ��������� player-store. ��������� togglePlay/seek/next ��������� � UI
+ *   - Listener: получает SyncCurrentTrack/ReceivePlay/ReceivePause/ReceiveSeek/ReceiveHeartbeat
+ *     и проигрывает синхронно через player-store. Локальные togglePlay/seek/next пользователя
+ *     перезаписываются следующим heartbeat DJ
  *
- *   - DJ: ��� ��������� ��������� player �������� (play/pause/seek) ��� SendPlay/Pause/Seek
- *     ������ 5 ������ � heartbeat, ����� ����� joiner �������� ���������� SyncCurrentTrack
+ *   - DJ: при любом изменении player (play/pause/seek/track) шлёт SendPlay/Pause/Seek
+ *     плюс SendHeartbeat каждые 1 секунду, чтобы новый joiner получил актуальное состояние
+ *     через SyncCurrentTrack
  */
 export function useRoom(roomId: string, requestDj: boolean) {
     const conn = useRef<signalR.HubConnection | null>(null);
     const heartbeat = useRef<number | null>(null);
-    const lastSentRef = useRef<{ playing: boolean; pos: number }>({ playing: false, pos: 0 });
 
     const upsertParticipant = useRoomStore((s) => s.upsertParticipant);
     const removeParticipant = useRoomStore((s) => s.removeParticipant);
@@ -27,7 +28,9 @@ export function useRoom(roomId: string, requestDj: boolean) {
         const base = (import.meta.env.VITE_GATEWAY_URL || '/api').replace(/\/$/, '');
         const url = `${base}/notifications-hub`;
 
-        setRoomState({ roomId, isDj: false, djName: null, participants: [], current: null, rejected: null });
+        setRoomState({
+            roomId, isDj: false, djName: null, participants: [], current: null, rejected: null,
+        });
 
         const c = new signalR.HubConnectionBuilder()
             .withUrl(url, { accessTokenFactory: () => tokenStore.getAccess() ?? '' })
@@ -35,25 +38,65 @@ export function useRoom(roomId: string, requestDj: boolean) {
             .configureLogging(signalR.LogLevel.Warning)
             .build();
 
+        let cancelled = false;
+        let unsubPlayer: (() => void) | null = null;
+
         // listeners (server -> client)
 
         c.on('RoomJoined', (isDj: boolean) => {
             setRoomState({ isDj });
+            // Если стали DJ и уже что-то играет в плеере — сразу транслируем
+            // (без этого слушатели не получат активного трека до следующей смены)
+            if (isDj) {
+                const player = usePlayer.getState();
+                const t = player.queue[player.index];
+                if (t) {
+                    void c.invoke(
+                        'SendPlay',
+                        roomId,
+                        t.id,
+                        t.title,
+                        t.artist ?? '',
+                        player.position,
+                    ).catch(() => { });
+                    if (!player.isPlaying) {
+                        void c.invoke('SendPause', roomId, player.position).catch(() => { });
+                    }
+                    setRoomState({
+                        current: {
+                            trackId: t.id,
+                            title: t.title,
+                            artist: t.artist ?? null,
+                            position: player.position,
+                            isPlaying: player.isPlaying,
+                        },
+                    });
+                }
+            }
         });
 
         c.on('DjRejected', (currentDjName: string | null) => {
-            setRoomState({ rejected: currentDjName ?? '���-�� ������', isDj: false });
+            setRoomState({ rejected: currentDjName ?? 'кто-то другой', isDj: false });
         });
 
         c.on(
             'SyncCurrentTrack',
             (trackId: string, title: string, artist: string | null, position: number, isPlaying: boolean) => {
-                setRoomState({
-                    current: { trackId, title, artist, position, isPlaying },
-                });
+                setRoomState({ current: { trackId, title, artist, position, isPlaying } });
                 applyToPlayer({ trackId, title, artist, position, isPlaying });
             },
         );
+
+        // Полный список участников комнаты, который шлёт сервер при JoinRoom
+        c.on('ParticipantList', (raw: any) => {
+            const arr = Array.isArray(raw) ? raw : [];
+            const list = arr.map((p: any) => ({
+                userId: p.userId ?? p.UserId,
+                userName: p.userName ?? p.UserName ?? 'unknown',
+                isDj: !!(p.isDj ?? p.IsDj),
+            })).filter((p) => !!p.userId);
+            setRoomState({ participants: list });
+        });
 
         c.on('ParticipantJoined', (raw: any) => {
             upsertParticipant({
@@ -70,107 +113,154 @@ export function useRoom(roomId: string, requestDj: boolean) {
         c.on(
             'ReceivePlay',
             (trackId: string, title: string, artist: string | null, position: number) => {
-                setRoomState({
-                    current: { trackId, title, artist, position, isPlaying: true },
-                });
+                setRoomState({ current: { trackId, title, artist, position, isPlaying: true } });
                 applyToPlayer({ trackId, title, artist, position, isPlaying: true });
             },
         );
 
         c.on('ReceivePause', (position: number) => {
-            setRoomState((current => ({ current: current.current ? { ...current.current, position, isPlaying: false } : null }))(useRoomStore.getState()));
-            // ��������� ����� � �� �����
+            const cur = useRoomStore.getState().current;
+            setRoomState({ current: cur ? { ...cur, position, isPlaying: false } : null });
             usePlayer.setState({ isPlaying: false });
             usePlayer.getState().seek(position);
         });
 
         c.on('ReceiveSeek', (position: number) => {
-            setRoomState((current => ({ current: current.current ? { ...current.current, position } : null }))(useRoomStore.getState()));
+            const cur = useRoomStore.getState().current;
+            setRoomState({ current: cur ? { ...cur, position } : null });
             usePlayer.getState().seek(position);
         });
 
         c.on('ReceiveHeartbeat', (position: number, isPlaying: boolean) => {
-            setRoomState((current => ({ current: current.current ? { ...current.current, position, isPlaying } : null }))(useRoomStore.getState()));
-            // ������������ �������
-            if (Math.abs(usePlayer.getState().position - position) > 1.5) {
+            const cur = useRoomStore.getState().current;
+            setRoomState({ current: cur ? { ...cur, position, isPlaying } : null });
+
+            if (Math.abs(usePlayer.getState().position - position) > 0.5) {
                 usePlayer.getState().seek(position);
             }
             usePlayer.setState({ isPlaying });
         });
 
-        // start
-        c.start()
-            .then(() => c.invoke('JoinRoom', roomId, requestDj))
+        // SignalR connection lifecycle с защитой от cancel во время negotiation
+        const startPromise = c.start()
             .then(() => {
+                if (cancelled) {
+                    return c.stop().catch(() => { });
+                }
                 conn.current = c;
+                return c.invoke('JoinRoom', roomId, requestDj);
+            })
+            .then(() => {
+                if (cancelled || conn.current !== c) return;
+
+                // DJ -> server: подписываемся на изменения плеера, чтобы транслировать
+                // play/pause/seek/смены трека в комнату
+                unsubPlayer = usePlayer.subscribe((s, prev) => {
+                    if (!useRoomStore.getState().isDj) return;
+                    if (conn.current !== c) return;
+
+                    const t = s.queue[s.index];
+                    if (!t) return;
+                    const prevTrack = prev.queue[prev.index];
+
+                    // Сменили трек
+                    if (t.id !== prevTrack?.id) {
+                        void c.invoke('SendPlay', roomId, t.id, t.title, t.artist ?? '', s.position).catch(() => { });
+                        setRoomState({
+                            current: {
+                                trackId: t.id,
+                                title: t.title,
+                                artist: t.artist ?? null,
+                                position: s.position,
+                                isPlaying: s.isPlaying,
+                            },
+                        });
+                        return;
+                    }
+
+                    // play/pause переключение
+                    if (s.isPlaying !== prev.isPlaying) {
+                        if (s.isPlaying) {
+                            void c.invoke('SendPlay', roomId, t.id, t.title, t.artist ?? '', s.position).catch(() => { });
+                        } else {
+                            void c.invoke('SendPause', roomId, s.position).catch(() => { });
+                        }
+                        const cur = useRoomStore.getState().current;
+                        setRoomState({
+                            current: cur
+                                ? { ...cur, position: s.position, isPlaying: s.isPlaying }
+                                : {
+                                    trackId: t.id,
+                                    title: t.title,
+                                    artist: t.artist ?? null,
+                                    position: s.position,
+                                    isPlaying: s.isPlaying,
+                                },
+                        });
+                        return;
+                    }
+
+                    // seek
+                    if (Math.abs(s.position - prev.position) > 2) {
+                        void c.invoke('SendSeek', roomId, s.position).catch(() => { });
+                        const cur = useRoomStore.getState().current;
+                        if (cur) setRoomState({ current: { ...cur, position: s.position } });
+                    }
+                });
+
+                // heartbeat каждые 1 секунду — listener корректируют рассинхронизацию,
+                // плюс поздно зашедшие получают актуальную позицию между Sync
+                heartbeat.current = window.setInterval(() => {
+                    if (!useRoomStore.getState().isDj || conn.current !== c) return;
+                    const s = usePlayer.getState();
+                    void c.invoke('SendHeartbeat', roomId, s.position, s.isPlaying).catch(() => { });
+                    const cur = useRoomStore.getState().current;
+                    if (cur) {
+                        setRoomState({ current: { ...cur, position: s.position, isPlaying: s.isPlaying } });
+                    } else {
+                        const t = s.queue[s.index];
+                        if (t) {
+                            setRoomState({
+                                current: {
+                                    trackId: t.id,
+                                    title: t.title,
+                                    artist: t.artist ?? null,
+                                    position: s.position,
+                                    isPlaying: s.isPlaying,
+                                },
+                            });
+                        }
+                    }
+                }, 1000);
             })
             .catch((err) => {
-                console.warn('[room] connect failed', err);
+                if (!cancelled) {
+                    console.warn('[room] connect failed', err);
+                }
             });
 
         return () => {
-            conn.current = null;
+            cancelled = true;
             if (heartbeat.current) {
                 window.clearInterval(heartbeat.current);
                 heartbeat.current = null;
             }
-            void c.invoke('LeaveRoom').catch(() => { });
-            void c.stop().catch(() => { });
+            if (unsubPlayer) {
+                unsubPlayer();
+                unsubPlayer = null;
+            }
+            // Дожидаемся завершения negotiation, иначе SignalR падает
+            // с "The connection was stopped during negotiation"
+            startPromise.finally(() => {
+                if (c.state === signalR.HubConnectionState.Connected) {
+                    void c.invoke('LeaveRoom').catch(() => { });
+                }
+                void c.stop().catch(() => { });
+            });
+            conn.current = null;
             resetRoom();
         };
     }, [roomId, requestDj]);
-
-    // DJ -> server: �� ������ ��������� play/pause/seek ��� �������
-    useEffect(() => {
-        if (!conn.current) return;
-
-        const unsub = usePlayer.subscribe((s, prev) => {
-            if (!useRoomStore.getState().isDj) return;
-            if (!conn.current) return;
-
-            const t = s.queue[s.index];
-            if (!t) return;
-
-            // ������� ����
-            if (t.id !== prev.queue[prev.index]?.id) {
-                void conn.current.invoke('SendPlay', useRoomStore.getState().roomId, t.id, t.title, t.artist ?? '', s.position).catch(() => { });
-                lastSentRef.current = { playing: s.isPlaying, pos: s.position };
-                return;
-            }
-
-            // play/pause toggle
-            if (s.isPlaying !== prev.isPlaying) {
-                if (s.isPlaying) {
-                    void conn.current.invoke('SendPlay', useRoomStore.getState().roomId, t.id, t.title, t.artist ?? '', s.position).catch(() => { });
-                } else {
-                    void conn.current.invoke('SendPause', useRoomStore.getState().roomId, s.position).catch(() => { });
-                }
-                lastSentRef.current = { playing: s.isPlaying, pos: s.position };
-                return;
-            }
-
-            // seek (�������� ������� �������)
-            if (Math.abs(s.position - prev.position) > 2) {
-                void conn.current.invoke('SendSeek', useRoomStore.getState().roomId, s.position).catch(() => { });
-                lastSentRef.current = { playing: s.isPlaying, pos: s.position };
-            }
-        });
-
-        // heartbeat ������ 5 ������
-        heartbeat.current = window.setInterval(() => {
-            if (!useRoomStore.getState().isDj || !conn.current) return;
-            const s = usePlayer.getState();
-            void conn.current.invoke('SendHeartbeat', useRoomStore.getState().roomId, s.position, s.isPlaying).catch(() => { });
-        }, 5000);
-
-        return () => {
-            unsub();
-            if (heartbeat.current) {
-                window.clearInterval(heartbeat.current);
-                heartbeat.current = null;
-            }
-        };
-    }, []);
 }
 
 function applyToPlayer(t: { trackId: string; title: string; artist: string | null; position: number; isPlaying: boolean }) {

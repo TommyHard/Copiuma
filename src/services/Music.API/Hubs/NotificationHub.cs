@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Music.API.Services;
+using System.Collections.Concurrent;
 using System.Security.Claims;
 
 namespace Music.API.Hubs;
@@ -11,7 +12,19 @@ public class NotificationHub : Hub
     private readonly RoomStore _rooms;
     private readonly ILogger<NotificationHub> _log;
 
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _connectionRooms = new();
+    /// <summary>
+    /// connectionId -> roomId. Нужен для быстрого LeaveRoom при disconnect
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, string> _connectionRooms = new();
+
+    /// <summary>
+    /// roomId -> (connectionId -> ParticipantInfo). Полный учёт участников комнаты,
+    /// чтобы новый joiner получил уже существующий список и чтобы при множественных
+    /// соединениях одного юзера ParticipantLeft не дублировал-дёргал список
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, ParticipantInfo>> _roomParticipants = new();
+
+    private record ParticipantInfo(string UserId, string UserName, bool IsDj);
 
     public NotificationHub(RoomStore rooms, ILogger<NotificationHub> log)
     {
@@ -58,10 +71,23 @@ public class NotificationHub : Hub
             await Clients.Caller.SendAsync("DjRejected", state.DjName);
         }
 
+        var participants = _roomParticipants.GetOrAdd(roomId,
+            _ => new ConcurrentDictionary<string, ParticipantInfo>());
+
+        // Снимок текущих участников ДО добавления нового
+        // Дедупим по userId — у одного юзера может быть несколько вкладок
+        var existing = participants.Values
+            .GroupBy(p => p.UserId)
+            .Select(g => g.FirstOrDefault(x => x.IsDj) ?? g.First())
+            .Select(p => new { userId = p.UserId, userName = p.UserName, isDj = p.IsDj })
+            .ToList();
+
         _connectionRooms[Context.ConnectionId] = roomId;
+        participants[Context.ConnectionId] = new ParticipantInfo(UserId, UserName, isDj);
         await Groups.AddToGroupAsync(Context.ConnectionId, RoomGroup(roomId));
 
         await Clients.Caller.SendAsync("RoomJoined", isDj);
+        await Clients.Caller.SendAsync("ParticipantList", existing);
 
         if (!isDj && state.CurrentTrackId.HasValue)
         {
@@ -72,7 +98,13 @@ public class NotificationHub : Hub
                 state.CurrentTrackId.Value, state.CurrentTitle, state.CurrentArtist, pos, state.IsPlaying);
         }
 
-        await BroadcastParticipant(roomId, "ParticipantJoined", isDj);
+        // Шлём ParticipantJoined только если у этого юзера это первое соединение в комнате
+        // (иначе F5 / вторая вкладка одного и того же юзера дёргает других участников)
+        var alreadyHere = existing.Any(p => p.userId == UserId);
+        if (!alreadyHere)
+        {
+            await BroadcastParticipant(roomId, "ParticipantJoined", isDj);
+        }
     }
 
     public Task LeaveRoom() => HandleLeaveRoom();
@@ -83,6 +115,16 @@ public class NotificationHub : Hub
 
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, RoomGroup(roomId));
 
+        ParticipantInfo? leaver = null;
+        if (_roomParticipants.TryGetValue(roomId, out var participants))
+        {
+            participants.TryRemove(Context.ConnectionId, out leaver);
+            if (participants.IsEmpty)
+            {
+                _roomParticipants.TryRemove(roomId, out _);
+            }
+        }
+
         var state = await _rooms.GetAsync(roomId);
         if (state is null) return;
 
@@ -92,12 +134,22 @@ public class NotificationHub : Hub
             await _rooms.SetAsync(state);
         }
 
-        await BroadcastParticipant(roomId, "ParticipantLeft", false);
+        // Только если у юзера не осталось других соединений в этой комнате
+        var leaverUserId = leaver?.UserId ?? UserId;
+        var stillHere = participants is not null
+            && participants.Values.Any(p => p.UserId == leaverUserId);
+
+        if (!stillHere)
+        {
+            await Clients.Group(RoomGroup(roomId))
+                .SendAsync("ParticipantLeft", new { userId = leaverUserId });
+        }
     }
 
     private Task BroadcastParticipant(string roomId, string eventName, bool isDj)
     {
-        return Clients.Group(RoomGroup(roomId)).SendAsync(eventName, new { UserId, UserName, IsDj = isDj });
+        return Clients.Group(RoomGroup(roomId))
+            .SendAsync(eventName, new { userId = UserId, userName = UserName, isDj });
     }
 
     public async Task SendPlay(string roomId, Guid trackId, string title, string artist, double position)
