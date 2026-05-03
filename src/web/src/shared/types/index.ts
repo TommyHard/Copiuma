@@ -164,6 +164,12 @@ export interface FeedItem {
     duration: string | null;
 }
 
+export interface FriendFeedItem {
+    userId: string;
+    lastPlayedAt: string;
+    track: TrackListItem;
+}
+
 // Playlists
 
 export type PlaylistVisibility = 'Private' | 'Unlisted' | 'Public';

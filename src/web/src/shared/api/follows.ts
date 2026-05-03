@@ -1,5 +1,34 @@
 import { api } from './http';
-import type { FeedItem, FollowedArtist, FollowedUser, FriendItem } from '@/shared/types';
+import type {
+    FeedItem,
+    FollowedArtist,
+    FollowedUser,
+    FriendFeedItem,
+    FriendItem,
+    TrackListItem,
+} from '@/shared/types';
+
+function normalizeFeedTrack(t: any): TrackListItem {
+    const featRaw = t?.featuredArtists ?? t?.FeaturedArtists ?? [];
+    return {
+        id: t?.id ?? t?.Id,
+        title: t?.title ?? t?.Title ?? '',
+        artist: t?.artist ?? t?.Artist ?? null,
+        duration: t?.duration ?? t?.Duration ?? null,
+        artistId: t?.artistId ?? t?.ArtistId ?? null,
+        albumId: t?.albumId ?? t?.AlbumId ?? null,
+        trackNumber: t?.trackNumber ?? t?.TrackNumber ?? null,
+        uploadedAt: t?.uploadedAt ?? t?.UploadedAt ?? '',
+        isExplicit: t?.isExplicit ?? t?.IsExplicit ?? false,
+        isLikedByMe: t?.isLikedByMe ?? t?.IsLikedByMe ?? false,
+        coverUrl: t?.coverUrl ?? t?.CoverUrl ?? null,
+        featuredArtists: Array.isArray(featRaw)
+            ? featRaw
+                .map((f: any) => ({ id: f?.id ?? f?.Id, name: f?.name ?? f?.Name ?? '' }))
+                .filter((f: { id?: string }) => !!f.id)
+            : [],
+    };
+}
 
 export async function followArtist(artistId: string): Promise<void> {
     await api.post(`/follows/artists/${artistId}`);
@@ -52,4 +81,20 @@ export async function getFollowedUsers(): Promise<FollowedUser[]> {
 export async function getFriends(): Promise<FriendItem[]> {
     const r = await api.get<FriendItem[]>('/follows/friends');
     return r.data;
+}
+
+/**
+ * Лента активности друзей — недавние прослушивания взаимных подписчиков
+ * Дедуплицировано по (друг, трек), отсортировано по времени последнего прослушивания
+ */
+export async function getFriendsFeed(take = 20): Promise<FriendFeedItem[]> {
+    const r = await api.get<any[]>('/follows/friends/feed', { params: { take } });
+    if (!Array.isArray(r.data)) return [];
+    return r.data
+        .map((item) => ({
+            userId: item.userId ?? item.UserId,
+            lastPlayedAt: item.lastPlayedAt ?? item.LastPlayedAt ?? '',
+            track: normalizeFeedTrack(item.track ?? item.Track ?? {}),
+        }))
+        .filter((x) => !!x.userId && !!x.track.id);
 }

@@ -20,11 +20,19 @@ public class FollowsController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly NotificationService _notify;
+    private readonly FileStorageService _storage;
+    private readonly ModerationService _moderation;
 
-    public FollowsController(AppDbContext db, NotificationService notify)
+    public FollowsController(
+        AppDbContext db,
+        NotificationService notify,
+        FileStorageService storage,
+        ModerationService moderation)
     {
         _db = db;
         _notify = notify;
+        _storage = storage;
+        _moderation = moderation;
     }
 
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -190,6 +198,118 @@ public class FollowsController : ControllerBase
         ).ToListAsync(ct);
 
         return Ok(list);
+    }
+
+    /// <summary>
+    /// Лента активности подписок: недавние прослушивания пользователей,
+    /// на которых подписан текущий юзер
+    /// Дедупликация по (UserId, TrackId), сортировка по последнему StartedAt
+    /// </summary>
+    /// <param name="take">1-50 (по умолчанию 20)</param>
+    /// <param name="sinceDays">1-90 (по умолчанию 14)</param>
+    [HttpGet("friends/feed")]
+    public async Task<IActionResult> GetFriendsFeed(
+        [FromQuery] int take = 20,
+        [FromQuery] int sinceDays = 14,
+        CancellationToken ct = default)
+    {
+        take = Math.Clamp(take, 1, 50);
+        sinceDays = Math.Clamp(sinceDays, 1, 90);
+        var since = DateTime.UtcNow.AddDays(-sinceDays);
+        var me = UserId;
+
+        // Все пользователи, на которых я подписан
+        var followedUserIds = await _db.Follows
+            .Where(f => f.FollowerUserId == me && f.TargetType == FollowTargetType.User)
+            .Select(f => f.TargetId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        if (followedUserIds.Count == 0) return Ok(Array.Empty<object>());
+
+        // Последнее прослушивание каждой пары (пользователь, трек)
+        var rawEvents = await _db.PlayEvents
+            .Where(p => followedUserIds.Contains(p.UserId) && p.StartedAt >= since)
+            .GroupBy(p => new { p.UserId, p.TrackId })
+            .Select(g => new
+            {
+                g.Key.UserId,
+                g.Key.TrackId,
+                LastPlayedAt = g.Max(x => x.StartedAt),
+            })
+            .OrderByDescending(x => x.LastPlayedAt)
+            .Take(take)
+            .ToListAsync(ct);
+
+        if (rawEvents.Count == 0) return Ok(Array.Empty<object>());
+
+        var trackIds = rawEvents.Select(e => e.TrackId).Distinct().ToList();
+        var trackData = await _moderation.ApplyVisibilityFilter(_db.Tracks, me)
+            .Where(t => trackIds.Contains(t.Id))
+            .Select(t => new
+            {
+                t.Id,
+                t.Title,
+                t.Artist,
+                t.ArtistId,
+                t.AlbumId,
+                AlbumTitle = t.Album != null ? t.Album.Title : null,
+                t.TrackNumber,
+                t.Duration,
+                t.IsExplicit,
+                t.UploadedAt,
+                t.CoverKey,
+                AlbumCoverKey = t.Album != null ? t.Album.CoverKey : null,
+                FeaturedArtists = _db.TrackFeaturedArtists
+                    .Where(fa => fa.TrackId == t.Id)
+                    .OrderBy(fa => fa.Position)
+                    .Select(fa => new { fa.Artist!.Id, fa.Artist.Name })
+                    .ToList(),
+                IsLikedByMe = _db.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == me),
+            })
+            .ToListAsync(ct);
+
+        var trackMap = trackData.ToDictionary(x => x.Id);
+
+        var coverUrlByTrack = new Dictionary<Guid, string?>();
+        foreach (var t in trackData)
+        {
+            var key = t.CoverKey ?? t.AlbumCoverKey;
+            coverUrlByTrack[t.Id] = key is null
+                ? null
+                : await _storage.GeneratePresignedImageGetUrlAsync(key);
+        }
+
+        var result = rawEvents
+            .Where(e => trackMap.ContainsKey(e.TrackId))
+            .Select(e =>
+            {
+                var t = trackMap[e.TrackId];
+                return new
+                {
+                    e.UserId,
+                    e.LastPlayedAt,
+                    Track = new
+                    {
+                        t.Id,
+                        t.Title,
+                        t.Artist,
+                        t.ArtistId,
+                        t.AlbumId,
+                        t.AlbumTitle,
+                        t.TrackNumber,
+                        t.Duration,
+                        t.IsExplicit,
+                        t.UploadedAt,
+                        CoverUrl = coverUrlByTrack[t.Id],
+                        t.FeaturedArtists,
+                        t.IsLikedByMe,
+                    }
+                };
+            })
+            .ToList();
+
+        return Ok(result);
     }
 
     // Feed

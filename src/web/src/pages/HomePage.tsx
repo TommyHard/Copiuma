@@ -1,15 +1,21 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/features/auth/useAuth';
-import { getFeed } from '@/shared/api/follows';
+import { getFeed, getFriendsFeed } from '@/shared/api/follows';
+import { batchUsers } from '@/shared/api/users';
 import { forYouTracks, popularTracks, trendingArtists } from '@/shared/api/recommendations';
 import { listTracks } from '@/shared/api/catalog';
 import { TrackRow } from './track-row';
+import type { FriendFeedItem } from '@/shared/types';
 
 export function HomePage() {
     const { user } = useAuth();
 
     const feed = useQuery({ queryKey: ['feed'], queryFn: () => getFeed(20) });
+    const friendsFeed = useQuery({
+        queryKey: ['friends-feed'],
+        queryFn: () => getFriendsFeed(20),
+    });
     const popular = useQuery({ queryKey: ['popular'], queryFn: () => popularTracks(15) });
     const forYou = useQuery({ queryKey: ['for-you'], queryFn: () => forYouTracks(15) });
     const artists = useQuery({ queryKey: ['trending-artists'], queryFn: () => trendingArtists(8) });
@@ -51,6 +57,12 @@ export function HomePage() {
                             />
                         ))}
                     </ul>
+                </Section>
+            )}
+
+            {friendsFeed.data && friendsFeed.data.length > 0 && (
+                <Section title="Лента подписок" actionTo="/friends" actionLabel="Все подписки">
+                    <FriendsFeedList items={friendsFeed.data} />
                 </Section>
             )}
 
@@ -114,6 +126,7 @@ export function HomePage() {
             )}
 
             {!feed.data?.length &&
+                !friendsFeed.data?.length &&
                 !popular.data?.length &&
                 !forYou.data?.length &&
                 !artists.data?.length && (
@@ -153,4 +166,66 @@ function Section({
             {children}
         </section>
     );
+}
+
+function FriendsFeedList({ items }: { items: FriendFeedItem[] }) {
+    const userIds = Array.from(new Set(items.map((i) => i.userId)));
+
+    const namesQ = useQuery({
+        queryKey: ['user-names', ...userIds.sort()],
+        queryFn: () => batchUsers(userIds),
+        enabled: userIds.length > 0,
+        staleTime: 5 * 60 * 1000,
+    });
+
+    const nameMap: Record<string, string> = {};
+    for (const u of namesQ.data ?? []) nameMap[u.id] = u.displayName;
+
+    return (
+        <div className="space-y-2">
+            {items.map((item, i) => {
+                const friendName =
+                    nameMap[item.userId] ?? `${item.userId.slice(0, 8)}…`;
+                return (
+                    <div
+                        key={`friend-feed-${item.userId}-${item.track.id}-${i}`}
+                        className="overflow-hidden rounded-md border border-border"
+                    >
+                        <div className="flex items-center justify-between gap-2 bg-bg-elevated/40 px-4 py-1.5 text-xs text-fg-muted">
+                            <span>
+                                <Link
+                                    to={`/users/${item.userId}`}
+                                    className="font-medium text-fg hover:underline"
+                                >
+                                    {friendName}
+                                </Link>{' '}
+                                слушал(а)
+                            </span>
+                            <span title={new Date(item.lastPlayedAt).toLocaleString('ru-RU')}>
+                                {formatRelativeTime(item.lastPlayedAt)}
+                            </span>
+                        </div>
+                        <ul>
+                            <TrackRow track={item.track} />
+                        </ul>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+function formatRelativeTime(iso: string): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const diffMs = Date.now() - d.getTime();
+    const min = Math.round(diffMs / 60_000);
+    if (min < 1) return 'только что';
+    if (min < 60) return `${min} мин назад`;
+    const h = Math.round(min / 60);
+    if (h < 24) return `${h} ч назад`;
+    const days = Math.round(h / 24);
+    if (days < 7) return `${days} дн назад`;
+    return d.toLocaleDateString('ru-RU', { month: 'short', day: 'numeric' });
 }
