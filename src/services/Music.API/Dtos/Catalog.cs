@@ -63,6 +63,7 @@ public record AlbumTrackItem(
     string? Artist = null,
     Guid? ArtistId = null,
     bool IsExplicit = false,
-    IReadOnlyList<AlbumFeaturedArtist>? FeaturedArtists = null);
+    IReadOnlyList<AlbumFeaturedArtist>? FeaturedArtists = null,
+    bool IsLikedByMe = false);
 
 public record AttachAlbumTrackRequest(int? TrackNumber);

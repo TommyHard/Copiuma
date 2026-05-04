@@ -16,7 +16,7 @@ import { usePlayer } from '@/features/player/store';
 import { InvitePeopleDialog } from '@/features/playlists/InvitePeopleDialog';
 import { PlaylistCover } from '@/features/playlists/PlaylistCover';
 import type { PlaylistTrack, PlaylistVisibility } from '@/shared/types';
-import { toggleLike } from '@/shared/api/tracks';
+import { useToggleTrackLike } from '@/features/track/useToggleTrackLike';
 import { AddToPlaylistMenu } from '@/features/playlists/AddToPlaylistMenu';
 import { usePlayTrack } from '@/features/player/usePlayTrack';
 import { batchUsers } from '@/shared/api/users';
@@ -392,15 +392,8 @@ function PlaylistTrackRow({
     onDrop: (e: React.DragEvent) => void;
 }) {
     const play = usePlayTrack();
-    const qc = useQueryClient();
 
-    const like = useMutation({
-        mutationFn: () => toggleLike(t.trackId),
-        onSuccess: () => {
-            qc.invalidateQueries({ queryKey: ['playlist'] });
-            qc.invalidateQueries({ queryKey: ['favorites'] });
-        },
-    });
+    const like = useToggleTrackLike();
 
     // Маппинг данных для плеера
     const trackForPlayer = {
@@ -447,7 +440,7 @@ function PlaylistTrackRow({
             <span className="text-xs tabular-nums text-fg-muted">{formatDuration(t.duration)}</span>
 
             <button
-                onClick={() => like.mutate()}
+                onClick={() => like.mutate({ trackId: t.trackId, nextLiked: !t.isLikedByMe })}
                 disabled={like.isPending}
                 className={cn(
                     "text-lg transition-colors hover:scale-110 disabled:opacity-50",

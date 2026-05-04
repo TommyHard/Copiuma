@@ -36,6 +36,9 @@ public class FollowsController : ControllerBase
     }
 
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    private string? UserName =>
+        User.FindFirstValue("DisplayName")
+        ?? User.FindFirstValue(ClaimTypes.Email);
 
     // Artists
 
@@ -96,11 +99,19 @@ public class FollowsController : ControllerBase
 
             try
             {
-                await _notify.CreateAsync(userId, NotificationTypes.UserFollowedYou, new { followerUserId = me }, ct);
+                var myName = UserName;
+                await _notify.CreateAsync(userId, NotificationTypes.UserFollowedYou, new
+                {
+                    followerUserId = me,
+                    followerName = myName
+                }, ct);
+
                 if (mutual)
                 {
-                    await _notify.CreateAsync(me, NotificationTypes.BecameFriends, new { userId }, ct);
-                    await _notify.CreateAsync(userId, NotificationTypes.BecameFriends, new { userId = me }, ct);
+                    // Имя другой стороны достаём из её последнего follow-а — DisplayName может быть только в её токене.
+                    // Если хранится в профиле — лучше тянуть оттуда; пока ограничиваемся id + своим именем.
+                    await _notify.CreateAsync(me, NotificationTypes.BecameFriends, new { userId, userName = (string?)null }, ct);
+                    await _notify.CreateAsync(userId, NotificationTypes.BecameFriends, new { userId = me, userName = myName }, ct);
                 }
             }
             catch { }
@@ -362,7 +373,8 @@ public class FollowsController : ControllerBase
                 a.Artist!.Name,
                 a.CoverKey,
                 a.CreatedAt,
-                null))
+                null,
+                false))
             .ToListAsync(ct);
 
         var tracksQuery = _db.Tracks
@@ -383,7 +395,8 @@ public class FollowsController : ControllerBase
                 t.ArtistEntity!.Name,
                 null,
                 t.UploadedAt,
-                t.Duration))
+                t.Duration,
+                _db.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == me)))
             .ToListAsync(ct);
 
         var merged = albums.Concat(tracks)

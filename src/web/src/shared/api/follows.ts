@@ -56,6 +56,7 @@ export async function getFeed(limit = 30): Promise<FeedItem[]> {
         artistId: item.artistId ?? null,
         uploadedAt: item.uploadedAt ?? item.releasedAt ?? '',
         duration: item.duration ?? null,
+        isLikedByMe: item.isLikedByMe ?? item.IsLikedByMe ?? false,
     }));
 }
 
@@ -83,10 +84,6 @@ export async function getFriends(): Promise<FriendItem[]> {
     return r.data;
 }
 
-/**
- * Лента активности друзей — недавние прослушивания взаимных подписчиков
- * Дедуплицировано по (друг, трек), отсортировано по времени последнего прослушивания
- */
 export async function getFriendsFeed(take = 20): Promise<FriendFeedItem[]> {
     const r = await api.get<any[]>('/follows/friends/feed', { params: { take } });
     if (!Array.isArray(r.data)) return [];

@@ -21,7 +21,8 @@ public record FeedItem(
     string ArtistName,
     string? CoverKey,
     DateTime ReleasedAt,
-    TimeSpan? Duration = null);
+    TimeSpan? Duration = null,
+    bool IsLikedByMe = false);
 
 /// <summary>
 /// Топ артистов юзера по истории прослушиваний. За окно sinceDays

@@ -3,9 +3,9 @@
 @tailwind utilities;
 
 @font-face {
-    font-family: 'TommyHard';
-    src: url('/assets/fonts/NotUI_TMH.ttf') format('truetype');
-    font-weight: 400;
+    font-family: 'Copiuma';
+    src: url('/assets/fonts/Copiuma-Regular.otf') format('opentype');
+    font-weight: normal;
     font-style: normal;
     font-display: swap;
 }
@@ -42,7 +42,7 @@ html, body, #root {
 }
 
 body {
-    font-family: 'TommyHard', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Copiuma', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
 }
 

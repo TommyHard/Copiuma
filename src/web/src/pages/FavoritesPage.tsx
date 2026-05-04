@@ -1,20 +1,14 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { listFavorites, toggleLike } from '@/shared/api/tracks';
+import { listFavorites } from '@/shared/api/tracks';
 import { usePlayTrack } from '@/features/player/usePlayTrack';
+import { useToggleTrackLike } from '@/features/track/useToggleTrackLike';
 
 export function FavoritesPage() {
-    const qc = useQueryClient();
     const q = useQuery({ queryKey: ['favorites'], queryFn: listFavorites });
     const play = usePlayTrack();
 
-    const unlike = useMutation({
-        mutationFn: (trackId: string) => toggleLike(trackId),
-        onSuccess: () => {
-            qc.invalidateQueries({ queryKey: ['favorites'] });
-            qc.invalidateQueries({ queryKey: ['catalog'] });
-        },
-    });
+    const unlike = useToggleTrackLike();
 
     if (q.isLoading) return <p className="text-fg-muted">Загружаем…</p>;
     if (q.isError) return <p className="text-danger">Не удалось загрузить.</p>;
@@ -72,7 +66,7 @@ export function FavoritesPage() {
                             {new Date(f.likedAt).toLocaleDateString('ru')}
                         </span>
                         <button
-                            onClick={() => unlike.mutate(f.id)}
+                            onClick={() => unlike.mutate({ trackId: f.id, nextLiked: false })}
                             disabled={unlike.isPending}
                             title="Убрать из избранного"
                             className="text-accent transition-colors hover:text-danger disabled:opacity-50">

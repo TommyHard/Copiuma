@@ -157,6 +157,7 @@ public class ArtistsController : ControllerBase
     {
         if (!await _db.Artists.AnyAsync(a => a.Id == id)) return NotFound();
 
+        var me = UserId;
         var tracks = await _db.Tracks
             .Where(t => t.ArtistId == id && t.DeletedAt == null)
             .OrderByDescending(t => t.UploadedAt)
@@ -171,6 +172,7 @@ public class ArtistsController : ControllerBase
                 t.TrackNumber,
                 t.UploadedAt,
                 t.IsExplicit,
+                IsLikedByMe = _db.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == me),
                 FeaturedArtists = _db.TrackFeaturedArtists
                     .Where(fa => fa.TrackId == t.Id)
                     .OrderBy(fa => fa.Position)
@@ -191,6 +193,7 @@ public class ArtistsController : ControllerBase
     {
         if (!await _db.Artists.AnyAsync(a => a.Id == id)) return NotFound();
 
+        var me = UserId;
         var tracks = await _db.Tracks
             .Where(t => t.DeletedAt == null
                         && t.ArtistId != id
@@ -207,6 +210,7 @@ public class ArtistsController : ControllerBase
                 t.TrackNumber,
                 t.UploadedAt,
                 t.IsExplicit,
+                IsLikedByMe = _db.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == me),
                 FeaturedArtists = _db.TrackFeaturedArtists
                     .Where(fa => fa.TrackId == t.Id)
                     .OrderBy(fa => fa.Position)

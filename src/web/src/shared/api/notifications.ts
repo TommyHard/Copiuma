@@ -18,3 +18,17 @@ export async function markRead(id: string): Promise<void> {
 export async function markAllRead(): Promise<void> {
     await api.post('/notifications/read-all');
 }
+
+export async function deleteNotification(id: string): Promise<void> {
+    await api.delete(`/notifications/${id}`);
+}
+
+/**
+ * ”далить уведомлени€.
+ * readOnly=true Ч только уже прочитанные ("очистить прочитанные")
+ * readOnly=false Ч все
+ */
+export async function deleteAllNotifications(readOnly = false): Promise<number> {
+    const r = await api.delete<{ deleted: number }>('/notifications', { params: { readOnly } });
+    return r.data?.deleted ?? 0;
+}

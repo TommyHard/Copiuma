@@ -50,6 +50,7 @@ export async function listAlbumTracks(id: string): Promise<TrackListItem[]> {
             albumId: t.albumId ?? t.AlbumId ?? id,
             trackNumber: t.trackNumber ?? t.TrackNumber ?? null,
             isExplicit: t.isExplicit ?? t.IsExplicit ?? false,
+            isLikedByMe: t.isLikedByMe ?? t.IsLikedByMe ?? false,
             coverUrl: t.coverUrl ?? t.CoverUrl ?? null,
             featuredArtists: Array.isArray(featRaw)
                 ? featRaw

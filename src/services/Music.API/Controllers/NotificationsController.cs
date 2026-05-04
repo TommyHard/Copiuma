@@ -82,4 +82,22 @@ public class NotificationsController : ControllerBase
         var n = await _svc.MarkAllReadAsync(UserId);
         return Ok(new { updated = n });
     }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        var ok = await _svc.DeleteAsync(UserId, id, ct);
+        return ok ? NoContent() : NotFound();
+    }
+
+    /// <summary>
+    /// Удалить все уведомления пользователя
+    /// readOnly=true — удалить только уже прочитанные (для кнопки "очистить прочитанные")
+    /// </summary>
+    [HttpDelete]
+    public async Task<IActionResult> DeleteAll([FromQuery] bool readOnly = false, CancellationToken ct = default)
+    {
+        var n = await _svc.DeleteAllAsync(UserId, readOnly, ct);
+        return Ok(new { deleted = n });
+    }
 }

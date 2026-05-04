@@ -79,4 +79,28 @@ public class NotificationService
         await _db.SaveChangesAsync(ct);
         return items.Count;
     }
+
+    public async Task<bool> DeleteAsync(Guid userId, Guid notificationId, CancellationToken ct = default)
+    {
+        var n = await _db.Notifications
+            .FirstOrDefaultAsync(x => x.Id == notificationId && x.UserId == userId, ct);
+        if (n is null) return false;
+
+        _db.Notifications.Remove(n);
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task<int> DeleteAllAsync(Guid userId, bool readOnly = false, CancellationToken ct = default)
+    {
+        var q = _db.Notifications.Where(x => x.UserId == userId);
+        if (readOnly) q = q.Where(x => x.IsRead);
+
+        var items = await q.ToListAsync(ct);
+        if (items.Count == 0) return 0;
+
+        _db.Notifications.RemoveRange(items);
+        await _db.SaveChangesAsync(ct);
+        return items.Count;
+    }
 }

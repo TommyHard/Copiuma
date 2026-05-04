@@ -162,6 +162,7 @@ export interface FeedItem {
     artistId: string | null;
     uploadedAt: string;
     duration: string | null;
+    isLikedByMe?: boolean;
 }
 
 export interface FriendFeedItem {

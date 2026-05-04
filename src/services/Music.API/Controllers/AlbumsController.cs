@@ -133,6 +133,7 @@ public class AlbumsController : ControllerBase
             .FirstOrDefaultAsync();
         if (album is null) return NotFound();
 
+        var me = UserId;
         var rows = await _db.Tracks
             .Where(t => t.AlbumId == id)
             .OrderBy(t => t.TrackNumber ?? int.MaxValue)
@@ -151,7 +152,8 @@ public class AlbumsController : ControllerBase
                     .Where(fa => fa.TrackId == t.Id)
                     .OrderBy(fa => fa.Position)
                     .Select(fa => new AlbumFeaturedArtist(fa.Artist!.Id, fa.Artist.Name))
-                    .ToList()
+                    .ToList(),
+                IsLikedByMe = _db.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == me),
             })
             .ToListAsync();
 
@@ -174,7 +176,8 @@ public class AlbumsController : ControllerBase
                 r.Artist ?? album.ArtistName,
                 r.ArtistId ?? album.ArtistId,
                 r.IsExplicit,
-                r.FeaturedArtists));
+                r.FeaturedArtists,
+                r.IsLikedByMe));
         }
 
         return Ok(items);

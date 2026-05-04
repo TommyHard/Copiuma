@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getTrack, getTrackStatus } from '@/shared/api/catalog';
-import { deleteTrack, deleteTrackCover, toggleLike, uploadTrackCover } from '@/shared/api/tracks';
+import { deleteTrack, deleteTrackCover, uploadTrackCover } from '@/shared/api/tracks';
+import { useToggleTrackLike } from '@/features/track/useToggleTrackLike';
 import { dislikeTrack } from '@/shared/api/dislikes';
 import { similarTracks } from '@/shared/api/recommendations';
 import { listGenres } from '@/shared/api/genres';
@@ -50,13 +51,7 @@ export function TrackPage() {
         staleTime: 10 * 60 * 1000,
     });
 
-    const like = useMutation({
-        mutationFn: () => toggleLike(id!),
-        onSuccess: () => {
-            qc.invalidateQueries({ queryKey: ['favorites'] });
-            qc.invalidateQueries({ queryKey: ['track', id] });
-        },
-    });
+    const like = useToggleTrackLike();
 
     const remove = useMutation({
         mutationFn: () => deleteTrack(id!),
@@ -204,7 +199,7 @@ export function TrackPage() {
                 </button>
 
                 <button
-                    onClick={() => like.mutate()}
+                    onClick={() => like.mutate({ trackId: t.id, nextLiked: !t.isLikedByMe })}
                     disabled={like.isPending}
                     className={`rounded-md border px-4 py-2 transition-colors disabled:opacity-50 ${t.isLikedByMe
                         ? 'border-accent/60 bg-accent/10 text-accent hover:bg-accent/20'
@@ -218,8 +213,8 @@ export function TrackPage() {
                     disabled={offline.busy || !ready}
                     title={offline.cached ? 'Убрать из офлайн' : 'Скачать для офлайн-проигрывания'}
                     className={`rounded-md border px-4 py-2 transition-colors disabled:opacity-50 ${offline.cached
-                            ? 'border-accent/60 bg-accent/10 text-accent hover:bg-accent/20'
-                            : 'border-border hover:bg-bg-elevated'
+                        ? 'border-accent/60 bg-accent/10 text-accent hover:bg-accent/20'
+                        : 'border-border hover:bg-bg-elevated'
                         }`}
                 >
                     {offline.busy

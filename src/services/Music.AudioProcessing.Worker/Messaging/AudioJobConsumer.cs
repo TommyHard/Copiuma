@@ -108,7 +108,7 @@ public class AudioJobConsumer : BackgroundService
             }
             catch (Exception nackEx)
             {
-                _log.LogError(nackEx, "Не удалось nack-нуть сообщение, channel мог закрыться.");
+                _log.LogError(nackEx, "Не удалось отриц. сообщение, channel мог закрыться.");
             }
         }
     }

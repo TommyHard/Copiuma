@@ -160,13 +160,40 @@ public class RecommendationsService
         if (userId is null) return rows.Take(take).ToList();
 
         var ex = await GetDislikesAsync(userId.Value, ct);
-        if (ex.TrackIds.Count == 0 && ex.ArtistIds.Count == 0)
-            return rows.Take(take).ToList();
 
+        IReadOnlyList<TrackRecommendationItem> filtered = (ex.TrackIds.Count == 0 && ex.ArtistIds.Count == 0)
+            ? rows.Take(take).ToList()
+            : rows
+                .Where(r => !ex.TrackIds.Contains(r.TrackId))
+                .Where(r => !r.ArtistId.HasValue || !ex.ArtistIds.Contains(r.ArtistId.Value))
+                .Take(take)
+                .ToList();
+
+        return await EnrichLikedAsync(filtered, userId.Value, ct);
+    }
+
+    /// <summary>
+    /// Кеш в RecommendationsService user-agnostic, поэтому IsLikedByMe всегда сидит false
+    /// На каждый запрос дочитываем LikedTracks для текущего пользователя и патчим записи
+    /// </summary>
+    private async Task<IReadOnlyList<TrackRecommendationItem>> EnrichLikedAsync(
+        IReadOnlyList<TrackRecommendationItem> rows,
+        Guid userId,
+        CancellationToken ct)
+    {
+        if (rows.Count == 0) return rows;
+
+        var ids = rows.Select(r => r.TrackId).ToList();
+        var liked = await _db.LikedTracks
+            .Where(l => l.UserId == userId && ids.Contains(l.TrackId))
+            .Select(l => l.TrackId)
+            .ToListAsync(ct);
+
+        if (liked.Count == 0) return rows;
+
+        var likedSet = new HashSet<Guid>(liked);
         return rows
-            .Where(r => !ex.TrackIds.Contains(r.TrackId))
-            .Where(r => !r.ArtistId.HasValue || !ex.ArtistIds.Contains(r.ArtistId.Value))
-            .Take(take)
+            .Select(r => likedSet.Contains(r.TrackId) ? r with { IsLikedByMe = true } : r)
             .ToList();
     }
 
@@ -179,7 +206,7 @@ public class RecommendationsService
         var key = await BuildKeyAsync("for-you", $"{userId}:{take}");
 
         if (await ReadCacheAsync<List<TrackRecommendationItem>>(key, ct) is { } cached)
-            return cached;
+            return await EnrichLikedAsync(cached, userId, ct);
 
         var since = DateTime.UtcNow.AddDays(-ForYouLookbackDays);
 
@@ -261,7 +288,7 @@ public class RecommendationsService
         }
 
         await WriteCacheAsync(key, filtered, TimeSpan.FromMinutes(10), ct);
-        return filtered;
+        return await EnrichLikedAsync(filtered, userId, ct);
     }
 
     // Trending artists

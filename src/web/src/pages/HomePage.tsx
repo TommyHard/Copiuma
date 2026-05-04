@@ -53,6 +53,7 @@ export function HomePage() {
                                     albumId: null,
                                     trackNumber: null,
                                     isExplicit: false,
+                                    isLikedByMe: f.isLikedByMe ?? false,
                                 }}
                             />
                         ))}
