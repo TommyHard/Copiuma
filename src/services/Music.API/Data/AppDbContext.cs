@@ -24,6 +24,7 @@ public class AppDbContext : DbContext
     public DbSet<Notification> Notifications { get; set; }
 
     public DbSet<TrackRating> TrackRatings { get; set; }
+    public DbSet<UserBlockedArtist> UserBlockedArtists { get; set; }
     public DbSet<TrackReview> TrackReviews { get; set; }
     public DbSet<ReviewLike> ReviewLikes { get; set; }
 
@@ -97,6 +98,12 @@ public class AppDbContext : DbContext
              .WithMany()
              .HasForeignKey(x => x.TrackId)
              .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserBlockedArtist>(b =>
+        {
+            b.HasKey(x => new { x.UserId, x.ArtistId });
+            b.HasIndex(x => x.ArtistId);
         });
 
         modelBuilder.Entity<TrackReview>(b =>

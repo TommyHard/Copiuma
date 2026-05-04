@@ -16,7 +16,8 @@ public record ArtistResponse(
     int AlbumCount,
     int TrackCount,
     int Followers = 0,
-    int MonthlyListeners = 0);
+    int MonthlyListeners = 0,
+    bool IsBlockedByMe = false);
 
 public record ArtistListItem(
     Guid Id,

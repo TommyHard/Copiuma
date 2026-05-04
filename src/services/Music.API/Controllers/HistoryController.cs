@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Music.API.Data;
 using Music.API.Dtos;
+using Music.API.Services;
 using System.Security.Claims;
 
 namespace Music.API.Controllers;
@@ -16,10 +17,12 @@ namespace Music.API.Controllers;
 public class HistoryController : ControllerBase
 {
     private readonly AppDbContext _db;
+    private readonly ModerationService _mod;
 
-    public HistoryController(AppDbContext db)
+    public HistoryController(AppDbContext db, ModerationService mod)
     {
         _db = db;
+        _mod = mod;
     }
 
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -56,7 +59,7 @@ public class HistoryController : ControllerBase
             return Ok(Array.Empty<HistoryTrackItem>());
 
         var trackIds = aggregated.Select(x => x.TrackId).ToList();
-        var tracks = await _db.Tracks
+        var tracks = await _mod.ApplyVisibilityFilter(_db.Tracks, UserId)
             .Where(t => trackIds.Contains(t.Id))
             .Select(t => new
             {
@@ -102,8 +105,11 @@ public class HistoryController : ControllerBase
         sinceDays = Math.Clamp(sinceDays, 1, 365);
         var since = DateTime.UtcNow.AddDays(-sinceDays);
 
+        var visibleTracks = _mod.ApplyVisibilityFilter(_db.Tracks, UserId);
+
         var events = await _db.PlayEvents
             .Where(p => p.UserId == UserId && p.StartedAt >= since)
+            .Where(p => visibleTracks.Any(t => t.Id == p.TrackId))
             .OrderByDescending(p => p.StartedAt)
             .Take(take)
             .Select(p => new
@@ -123,57 +129,6 @@ public class HistoryController : ControllerBase
     }
 
     /// <summary>
-    /// Лента прослушиваний с дедупликацией
-    /// </summary>
-    //[HttpGet("tracks/raw")]
-    //public async Task<IActionResult> GetRawHistory(
-    //[FromQuery] int take = 100,
-    //[FromQuery] int sinceDays = 30,
-    //CancellationToken ct = default)
-    //{
-    //    take = Math.Clamp(take, 1, 500);
-    //    sinceDays = Math.Clamp(sinceDays, 1, 365);
-    //    var since = DateTime.UtcNow.AddDays(-sinceDays);
-
-    //    var grouped = await _db.PlayEvents
-    //        .Where(p => p.UserId == UserId && p.StartedAt >= since)
-    //        .GroupBy(p => p.TrackId)
-    //        .Select(g => new
-    //        {
-    //            TrackId = g.Key,
-    //            LatestStartedAt = g.Max(p => p.StartedAt),
-    //            PlayCount = g.Count()
-    //        })
-    //        .OrderByDescending(x => x.LatestStartedAt)
-    //        .Take(take)
-    //        .ToListAsync(ct);
-
-    //    if (!grouped.Any())
-    //        return Ok(Array.Empty<object>());
-
-    //    var latestEvents = await _db.PlayEvents
-    //        .Where(p => p.UserId == UserId)
-    //        .Join(grouped,
-    //            p => new { p.TrackId, p.StartedAt },
-    //            g => new { g.TrackId, StartedAt = g.LatestStartedAt },
-    //            (p, g) => new
-    //            {
-    //                p.TrackId,
-    //                p.StartedAt,
-    //                p.PlayedMs,
-    //                p.Completed,
-    //                p.Source,
-    //                Title = p.Track!.Title,
-    //                Artist = p.Track!.Artist,
-    //                Duration = p.Track!.Duration,
-    //                g.PlayCount
-    //            })
-    //        .ToListAsync(ct);
-
-    //    return Ok(latestEvents);
-    //}
-
-    /// <summary>
     /// Топ артистов пользователя за окно.
     /// Score — число прослушиваний треков этого артиста
     /// </summary>
@@ -189,6 +144,7 @@ public class HistoryController : ControllerBase
 
         var aggregated = await _db.PlayEvents
             .Where(p => p.UserId == UserId && p.StartedAt >= since && p.Track!.ArtistId != null)
+            .Where(p => !_db.UserBlockedArtists.Any(b => b.UserId == UserId && b.ArtistId == p.Track!.ArtistId))
             .GroupBy(p => p.Track!.ArtistId!.Value)
             .Select(g => new
             {

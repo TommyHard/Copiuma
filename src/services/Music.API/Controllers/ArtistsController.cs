@@ -16,18 +16,19 @@ public class ArtistsController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly FileStorageService _storage;
+    private readonly ModerationService _moderation;
 
-    public ArtistsController(AppDbContext db, FileStorageService storage)
+    public ArtistsController(AppDbContext db, FileStorageService storage, ModerationService moderation)
     {
         _db = db;
         _storage = storage;
+        _moderation = moderation;
     }
 
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
     /// <summary>
     /// Возвращает первого артиста, созданного текущим пользователем (его "профиль артиста")
-    /// 200 + объект артиста, или 204 если артиста нет.
     /// </summary>
     [HttpGet("mine")]
     public async Task<IActionResult> GetMine()
@@ -76,6 +77,9 @@ public class ArtistsController : ControllerBase
         take = Math.Clamp(take, 1, 100);
 
         IQueryable<Artist> query = _db.Artists;
+
+        // Исключаем заблокированных артистов
+        query = query.Where(a => !_db.UserBlockedArtists.Any(b => b.UserId == UserId && b.ArtistId == a.Id));
 
         if (!string.IsNullOrWhiteSpace(q))
         {
@@ -158,8 +162,12 @@ public class ArtistsController : ControllerBase
         if (!await _db.Artists.AnyAsync(a => a.Id == id)) return NotFound();
 
         var me = UserId;
-        var tracks = await _db.Tracks
-            .Where(t => t.ArtistId == id && t.DeletedAt == null)
+
+        // Фильтруем забаненные треки, но НЕ ПРЯЧЕМ dislike (визуально desaturate)
+        var query = _moderation.ApplyVisibilityFilter(_db.Tracks, me, hideDislikes: false, hideBlocked: false)
+            .Where(t => t.ArtistId == id);
+
+        var tracks = await query
             .OrderByDescending(t => t.UploadedAt)
             .Select(t => new
             {
@@ -173,6 +181,7 @@ public class ArtistsController : ControllerBase
                 t.UploadedAt,
                 t.IsExplicit,
                 IsLikedByMe = _db.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == me),
+                IsDislikedByMe = _db.UserDislikes.Any(d => d.TargetType == DislikeTargetType.Track && d.TargetId == t.Id && d.UserId == me),
                 FeaturedArtists = _db.TrackFeaturedArtists
                     .Where(fa => fa.TrackId == t.Id)
                     .OrderBy(fa => fa.Position)
@@ -184,20 +193,17 @@ public class ArtistsController : ControllerBase
         return Ok(tracks);
     }
 
-    /// <summary>
-    /// Треки, где артист отмечен как feat. (он не основной исполнитель,
-    /// но числится в TrackFeaturedArtists)
-    /// </summary>
     [HttpGet("{id:guid}/featured-on")]
     public async Task<IActionResult> FeaturedOn(Guid id)
     {
         if (!await _db.Artists.AnyAsync(a => a.Id == id)) return NotFound();
 
         var me = UserId;
-        var tracks = await _db.Tracks
-            .Where(t => t.DeletedAt == null
-                        && t.ArtistId != id
-                        && _db.TrackFeaturedArtists.Any(fa => fa.TrackId == t.Id && fa.ArtistId == id))
+
+        var query = _moderation.ApplyVisibilityFilter(_db.Tracks, me, hideDislikes: false, hideBlocked: false)
+            .Where(t => t.ArtistId != id && _db.TrackFeaturedArtists.Any(fa => fa.TrackId == t.Id && fa.ArtistId == id));
+
+        var tracks = await query
             .OrderByDescending(t => t.UploadedAt)
             .Select(t => new
             {
@@ -211,6 +217,7 @@ public class ArtistsController : ControllerBase
                 t.UploadedAt,
                 t.IsExplicit,
                 IsLikedByMe = _db.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == me),
+                IsDislikedByMe = _db.UserDislikes.Any(d => d.TargetType == DislikeTargetType.Track && d.TargetId == t.Id && d.UserId == me),
                 FeaturedArtists = _db.TrackFeaturedArtists
                     .Where(fa => fa.TrackId == t.Id)
                     .OrderBy(fa => fa.Position)
@@ -273,10 +280,8 @@ public class ArtistsController : ControllerBase
         return NoContent();
     }
 
-    // Avatar
-
     [HttpPost("{id:guid}/avatar")]
-    [RequestSizeLimit(10_000_000)] // 10 MB
+    [RequestSizeLimit(10_000_000)]
     public async Task<IActionResult> UploadAvatar(Guid id, IFormFile file)
     {
         if (file is null || file.Length == 0) return BadRequest("Файл пуст.");
@@ -319,10 +324,8 @@ public class ArtistsController : ControllerBase
         return NoContent();
     }
 
-    // Banner
-
     [HttpPost("{id:guid}/banner")]
-    [RequestSizeLimit(15_000_000)] // 15 MB
+    [RequestSizeLimit(15_000_000)]
     public async Task<IActionResult> UploadBanner(Guid id, IFormFile file)
     {
         if (file is null || file.Length == 0) return BadRequest("Файл пуст.");
@@ -380,9 +383,11 @@ public class ArtistsController : ControllerBase
                 a.CreatedAt,
                 AlbumCount = _db.Albums.Count(al => al.ArtistId == a.Id),
                 TrackCount = _db.Tracks.Count(t => t.ArtistId == a.Id),
-                Followers = _db.Follows.Count(f => f.TargetType == Models.FollowTargetType.Artist && f.TargetId == a.Id)
+                Followers = _db.Follows.Count(f => f.TargetType == Models.FollowTargetType.Artist && f.TargetId == a.Id),
+                IsBlockedByMe = _db.UserBlockedArtists.Any(b => b.UserId == UserId && b.ArtistId == a.Id)
             })
             .FirstOrDefaultAsync();
+
         if (row is null) return null;
 
         var avatarUrl = row.AvatarKey is null
@@ -393,7 +398,6 @@ public class ArtistsController : ControllerBase
             ? null
             : await _storage.GeneratePresignedImageGetUrlAsync(row.BannerKey);
 
-        // Monthly listeners: уникальные пользователи, слушавшие треки этого артиста за 30 дней
         var since30 = DateTime.UtcNow.AddDays(-30);
         var monthlyListeners = await _db.PlayEvents
             .Where(pe => pe.Track!.ArtistId == id && pe.StartedAt >= since30)
@@ -405,6 +409,7 @@ public class ArtistsController : ControllerBase
             row.Id, row.Name, row.Bio, avatarUrl, bannerUrl,
             row.CreatedByUserId, row.CreatedAt,
             row.AlbumCount, row.TrackCount,
-            row.Followers, monthlyListeners);
+            row.Followers, monthlyListeners,
+            row.IsBlockedByMe);
     }
 }

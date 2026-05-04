@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Music.API.Dtos;
 using Music.API.Services;
+using System.Security.Claims;
 
 namespace Music.API.Controllers;
 
@@ -46,7 +47,10 @@ public class SearchController : ControllerBase
             MinDurationMs: minDurationMs,
             MaxDurationMs: maxDurationMs);
 
-        var result = await _search.SearchAsync(q, parsed, facets, take, ct);
+        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        Guid? userId = Guid.TryParse(userIdStr, out var id) ? id : null;
+
+        var result = await _search.SearchAsync(q, parsed, facets, take, userId, ct);
         return Ok(result);
     }
 

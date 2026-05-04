@@ -586,6 +586,15 @@ public class TracksController : ControllerBase
             UserId = userId,
             TrackId = id
         });
+
+        // Merge приоритет: лайк отменяет дизлайк
+        var dislike = await _context.UserDislikes
+            .FirstOrDefaultAsync(d => d.UserId == userId && d.TargetType == DislikeTargetType.Track && d.TargetId == id);
+        if (dislike != null)
+        {
+            _context.UserDislikes.Remove(dislike);
+        }
+
         await _context.SaveChangesAsync();
 
         return Ok(new { IsLiked = true });

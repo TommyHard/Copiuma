@@ -83,7 +83,7 @@ public class DislikesController : ControllerBase
         });
         await _db.SaveChangesAsync();
 
-        await _rec.BumpVersionAsync();
+        await _rec.BumpUserVersionAsync(UserId);
 
         return NoContent();
     }
@@ -97,7 +97,7 @@ public class DislikesController : ControllerBase
         _db.UserDislikes.Remove(row);
         await _db.SaveChangesAsync();
 
-        await _rec.BumpVersionAsync();
+        await _rec.BumpUserVersionAsync(UserId);
 
         return NoContent();
     }

@@ -76,6 +76,9 @@ public class AlbumsController : ControllerBase
 
         IQueryable<Album> query = _db.Albums;
 
+        // Исключаем альбомы заблокированных артистов
+        query = query.Where(a => !_db.UserBlockedArtists.Any(b => b.UserId == UserId && b.ArtistId == a.ArtistId));
+
         if (artistId.HasValue)
             query = query.Where(a => a.ArtistId == artistId.Value);
 

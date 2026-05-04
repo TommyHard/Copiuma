@@ -1,34 +1,53 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { TrackListItem } from '@/shared/types';
 import { usePlayTrack } from '@/features/player/usePlayTrack';
 import { AddToPlaylistMenu } from '@/features/playlists/AddToPlaylistMenu';
 import { useToggleTrackLike } from '@/features/track/useToggleTrackLike';
-import { dislikeTrack } from '@/shared/api/dislikes';
+import { dislikeTrack, undoDislikeTrack } from '@/shared/api/dislikes';
 import { cn } from '@/shared/lib/cn';
 
 export function TrackRow({ track, number }: { track: TrackListItem; number?: number }) {
     const play = usePlayTrack();
     const qc = useQueryClient();
-
     const like = useToggleTrackLike();
     const liked = !!track.isLikedByMe;
 
-    const dislike = useMutation({
-        mutationFn: () => dislikeTrack(track.id),
+    const [isDisliked, setIsDisliked] = useState(track.isDislikedByMe ?? false);
+
+    // Мутация теперь работает как переключатель (toggle)
+    const toggleDislike = useMutation({
+        mutationFn: () => isDisliked ? undoDislikeTrack(track.id) : dislikeTrack(track.id),
         onSuccess: () => {
+            setIsDisliked(!isDisliked);
+            // Обновление ленты в фоне
             qc.invalidateQueries({ queryKey: ['recommendations'] });
             qc.invalidateQueries({ queryKey: ['catalog'] });
+            qc.invalidateQueries({ queryKey: ['for-you'] });
+            qc.invalidateQueries({ queryKey: ['artist-tracks'] });
         },
     });
 
     return (
-        <li className="flex items-center gap-3 px-4 py-3 hover:bg-bg-elevated/50">
+        <li className={cn(
+            "flex items-center gap-3 px-4 py-3 hover:bg-bg-elevated/50 transition-all",
+            // Desaturate, если трек дизлайкнут
+            isDisliked && "opacity-50 grayscale"
+        )}>
+            {/* Кнопка Play */}
             <button
                 onClick={() => play(track)}
-                className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg hover:opacity-90"
-                title="Играть">
-                ▶
+                disabled={isDisliked}
+                className={cn(
+                    "flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg hover:opacity-90 transition-opacity",
+                    isDisliked && "cursor-not-allowed opacity-40"
+                )}
+                title={isDisliked ? "Трек скрыт" : "Играть"}
+            >
+                <svg className="size-4 ml-1" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                </svg>
             </button>
 
             {number !== undefined && (
@@ -46,7 +65,6 @@ export function TrackRow({ track, number }: { track: TrackListItem; number?: num
                         </span>
                     )}
                 </Link>
-
                 <div className="truncate text-xs text-fg-muted">
                     {track.artistId ? (
                         <Link
@@ -54,13 +72,13 @@ export function TrackRow({ track, number }: { track: TrackListItem; number?: num
                             className="hover:text-fg hover:underline"
                             onClick={(e) => e.stopPropagation()}
                         >
-                            {track.artist ?? 'Неизвестный исполнитель'}
+                            {track.artist ?? 'Неизвестен'}
                         </Link>
                     ) : (
-                        <span>{track.artist ?? 'Неизвестный исполнитель'}</span>
+                        <span>{track.artist ?? 'Неизвестен'}</span>
                     )}
 
-                    {/* Совместные исполнители */}
+                    {/* feat. */}
                     {track.featuredArtists && track.featuredArtists.length > 0 && (
                         <span>
                             {' '}feat.{' '}
@@ -90,20 +108,22 @@ export function TrackRow({ track, number }: { track: TrackListItem; number?: num
                     "text-lg transition-colors hover:scale-110 disabled:opacity-50",
                     liked ? "text-accent" : "text-fg-muted hover:text-fg"
                 )}
-                title={liked ? "Убрать из избранного" : "В избранное"}>
+                title={liked ? "Убрать из избранного" : "В избранное"}
+            >
                 ♥
             </button>
 
             <AddToPlaylistMenu trackId={track.id} />
 
+            {/* Dislike */}
             <button
-                onClick={() => dislike.mutate()}
-                disabled={dislike.isPending || dislike.isSuccess}
-                title="Не интересно — убрать из рекомендаций"
+                onClick={() => toggleDislike.mutate()}
+                disabled={toggleDislike.isPending}
+                title={isDisliked ? "Вернуть в рекомендации" : "Не интересно"}
                 className={cn(
                     "text-sm transition-colors disabled:opacity-40",
-                    dislike.isSuccess
-                        ? "text-fg-muted line-through"
+                    isDisliked
+                        ? "text-danger"
                         : "text-fg-muted hover:text-danger"
                 )}
             >
@@ -114,7 +134,7 @@ export function TrackRow({ track, number }: { track: TrackListItem; number?: num
 }
 
 function formatDuration(d: string | null): string {
-    if (!d) return '—';
+    if (!d) return '--:--';
     const m = /^(?:\d+\.)?(\d{2}):(\d{2}):(\d{2})/.exec(d);
     if (!m) return d;
     const h = parseInt(m[1], 10);

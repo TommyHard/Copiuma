@@ -41,6 +41,7 @@ export interface TrackListItem {
     trackNumber: number | null;
     isExplicit: boolean;
     isLikedByMe?: boolean;
+    isDislikedByMe?: boolean;
     featuredArtists?: FeaturedArtist[];
     coverUrl?: string | null;
 }
@@ -107,6 +108,7 @@ export interface ArtistSummary {
     createdByUserId?: string;
     albumCount?: number;
     trackCount?: number;
+    isBlockedByMe?: boolean;
 }
 
 export interface FeaturedArtist {

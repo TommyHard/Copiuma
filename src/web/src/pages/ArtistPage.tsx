@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
     getArtist,
     listArtistAlbums,
@@ -10,9 +10,12 @@ import { FollowArtistButton } from '@/features/follows/FollowArtistButton';
 import { TrackRow } from './track-row';
 import { usePlayer } from '@/features/player/store';
 import { useAuth } from '@/features/auth/useAuth';
+import { blockArtist, unblockArtist } from '@/shared/api/blocks';
+import { cn } from '@/shared/lib/cn';
 
 export function ArtistPage() {
     const { id } = useParams();
+    const qc = useQueryClient();
     const playQueue = usePlayer((s) => s.playQueue);
     const { user } = useAuth();
 
@@ -40,12 +43,32 @@ export function ArtistPage() {
         enabled: !!id,
     });
 
-    if (artist.isLoading) return <p className="text-fg-muted">Загрузка...</p>;
-    if (artist.isError || !artist.data) return <p className="text-danger">Ошибка загрузки профиля.</p>;
-
     const a = artist.data;
+    const isBlocked = a?.isBlockedByMe ?? false;
+    const isOwner = !!user && !!(a?.ownerUserId ?? a?.createdByUserId) && user.id === (a?.ownerUserId ?? a?.createdByUserId);
 
-    const isOwner = !!user && !!(a.ownerUserId ?? a.createdByUserId) && user.id === (a.ownerUserId ?? a.createdByUserId);
+    const toggleBlock = useMutation({
+        mutationFn: () => isBlocked ? unblockArtist(id!) : blockArtist(id!),
+        onMutate: async () => {
+            await qc.cancelQueries({ queryKey: ['artist', id] });
+            const prev = qc.getQueryData(['artist', id]);
+            qc.setQueryData(['artist', id], (old: any) => old ? { ...old, isBlockedByMe: !isBlocked } : old);
+            return { prev };
+        },
+        onError: (err, vars, ctx) => {
+            if (ctx?.prev) qc.setQueryData(['artist', id], ctx.prev);
+        },
+        onSettled: () => {
+            qc.invalidateQueries({ queryKey: ['recommendations'] });
+            qc.invalidateQueries({ queryKey: ['trending-artists'] });
+            qc.invalidateQueries({ queryKey: ['for-you'] });
+            qc.invalidateQueries({ queryKey: ['feed'] });
+            qc.invalidateQueries({ queryKey: ['catalog'] });
+        },
+    });
+
+    if (artist.isLoading) return <p className="text-fg-muted">Загрузка...</p>;
+    if (artist.isError || !a) return <p className="text-danger">Ошибка загрузки профиля.</p>;
 
     function formatNumber(n: number): string {
         if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -55,10 +78,9 @@ export function ArtistPage() {
 
     return (
         <article className="space-y-10">
-            {/* HEADER INFO */}
+            {/* ИНФОРМАЦИЯ В ШАПКЕ */}
             <header className="flex flex-wrap items-end gap-6 px-2 pt-4">
                 <div className="relative shrink-0">
-                    {/* Avatar */}
                     <div
                         className="size-24 rounded-full border-4 border-bg bg-bg-elevated bg-cover bg-center shadow-md md:size-32"
                         style={{ backgroundImage: a.avatarUrl ? `url('${a.avatarUrl}')` : undefined }}
@@ -76,26 +98,44 @@ export function ArtistPage() {
                         )}
                     </div>
                     <div className="flex flex-wrap gap-2 pt-1">
-                        {/* Прячем кнопку подписки, если это страница самого user */}
-                        {!isOwner && <FollowArtistButton artistId={a.id} />}
-
-                        {tracks.data && tracks.data.length > 0 && (
+                        {!isOwner && (
                             <button
-                                onClick={() => playQueue(tracks.data!, 0)}
-                                className="rounded-md bg-accent px-4 py-2 text-sm text-accent-fg hover:opacity-90"
+                                onClick={() => toggleBlock.mutate()}
+                                disabled={toggleBlock.isPending}
+                                className={cn(
+                                    "rounded-md border px-4 py-2 text-sm transition-colors disabled:opacity-50",
+                                    isBlocked
+                                        ? "border-danger text-danger bg-danger/10 hover:bg-danger/20"
+                                        : "border-border hover:bg-bg-elevated text-fg-muted hover:text-danger"
+                                )}
                             >
-                                Слушать
+                                {isBlocked ? 'Разблокировать' : 'Заблокировать'}
+                            </button>
+                        )}
+                        {!isBlocked && tracks.data && tracks.data.length > 0 && (
+                            <button onClick={() => playQueue(tracks.data!, 0)} className="rounded-md bg-accent px-4 py-2 text-sm text-accent-fg hover:opacity-90">
+                                Слушать всё
                             </button>
                         )}
                     </div>
                 </div>
             </header>
 
-            {/* ABOUT */}
+            {/* ПЛАШКА БЛОКИРОВКИ */}
+            {isBlocked && (
+                <div className="rounded-md border border-danger/40 bg-danger/10 p-4 text-danger flex items-center gap-3">
+                    <span className="text-2xl">🚫</span>
+                    <div className="text-sm">
+                        <strong>Вы заблокировали этого артиста.</strong> Его контент больше не появляется в ваших рекомендациях, ленте и поиске.
+                        Здесь вы по-прежнему можете просматривать его дискографию.
+                    </div>
+                </div>
+            )}
+
+            {/* ОБ АРТИСТЕ */}
             <section className="relative mt-8 overflow-hidden rounded-lg border border-border">
                 <div className="relative grid">
                     <div className="col-start-1 row-start-1 h-full w-full">
-                        {/* Только отображение баннера */}
                         <div
                             className="h-full w-full bg-bg-elevated bg-cover bg-center"
                             style={{ backgroundImage: a.bannerUrl ? `url('${a.bannerUrl}')` : undefined }}
@@ -107,7 +147,6 @@ export function ArtistPage() {
                         <div className="flex items-center gap-3">
                             <h2 className="text-xl font-semibold text-white">Об артисте</h2>
                         </div>
-                        {/* Текст только для чтения */}
                         <p className="max-w-2xl whitespace-pre-wrap text-sm text-gray-200 mt-3 relative z-20 pointer-events-auto">
                             {a.bio || 'Нет информации об артисте.'}
                         </p>
@@ -115,7 +154,7 @@ export function ArtistPage() {
                 </div>
             </section>
 
-            {/* ALBUMS */}
+            {/* АЛЬБОМЫ */}
             {albums.data && albums.data.length > 0 && (
                 <section className="space-y-3 px-2">
                     <h2 className="text-xl font-semibold">Альбомы</h2>
@@ -144,7 +183,7 @@ export function ArtistPage() {
                 </section>
             )}
 
-            {/* ALL TRACKS */}
+            {/* ТРЕКИ */}
             <section className="space-y-3 px-2">
                 <h2 className="text-xl font-semibold">Треки</h2>
                 {tracks.isLoading && <p className="text-fg-muted">Загрузка...</p>}
@@ -164,7 +203,7 @@ export function ArtistPage() {
                 )}
             </section>
 
-            {/* FEATURED ON */}
+            {/* FEATURED */}
             {featuredOn.data && featuredOn.data.length > 0 && (
                 <section className="space-y-3 px-2">
                     <div className="flex items-baseline gap-3">

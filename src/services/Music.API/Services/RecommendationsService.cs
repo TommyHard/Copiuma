@@ -148,6 +148,17 @@ public class RecommendationsService
             .Select(d => d.TargetId)
             .ToHashSet();
 
+        // Пробрасываем заблокированных артистов и добавляем в список исключений
+        var blockedArtists = await _db.UserBlockedArtists
+            .Where(b => b.UserId == userId)
+            .Select(b => b.ArtistId)
+            .ToListAsync(ct);
+
+        foreach (var ba in blockedArtists)
+        {
+            artists.Add(ba);
+        }
+
         return new Excluded(tracks, artists);
     }
 
@@ -203,7 +214,7 @@ public class RecommendationsService
         Guid userId, int take, CancellationToken ct = default)
     {
         take = Math.Clamp(take, 1, 50);
-        var key = await BuildKeyAsync("for-you", $"{userId}:{take}");
+        var key = await BuildKeyAsync("for-you", $"{take}", userId);
 
         if (await ReadCacheAsync<List<TrackRecommendationItem>>(key, ct) is { } cached)
             return await EnrichLikedAsync(cached, userId, ct);
@@ -213,11 +224,15 @@ public class RecommendationsService
         // Любимые артисты юзера: из прослушиваний + лайков
         // Score = count прослушиваний + 5 за каждый лайк
         var playsByArtist = _db.PlayEvents
-            .Where(e => e.UserId == userId && e.StartedAt >= since)
-            .Join(_db.Tracks, e => e.TrackId, t => t.Id, (e, t) => t.ArtistId)
-            .Where(a => a.HasValue)
-            .GroupBy(a => a!.Value)
-            .Select(g => new { ArtistId = g.Key, Score = g.Count() });
+                .Where(e => e.UserId == userId && e.StartedAt >= since)
+                .Join(_db.Tracks, e => e.TrackId, t => t.Id, (e, t) => new { t.ArtistId, e.PlayedMs, e.Completed })
+                .Where(x => x.ArtistId.HasValue)
+                .GroupBy(x => x.ArtistId!.Value)
+                .Select(g => new {
+                    ArtistId = g.Key,
+                    // Штраф -2 очка за скип на первых 2х секундах, иначе +1
+                    Score = g.Sum(x => x.PlayedMs < 2000 && !x.Completed ? -2 : 1)
+                });
 
         var likesByArtist = _db.LikedTracks
             .Where(l => l.UserId == userId)
@@ -385,10 +400,18 @@ public class RecommendationsService
         await _cache.SetStringAsync(VersionKey, next.ToString(), ct);
     }
 
-    private async Task<string> BuildKeyAsync(string kind, string suffix)
+    public async Task BumpUserVersionAsync(Guid userId, CancellationToken ct = default)
     {
-        var v = await _cache.GetStringAsync(VersionKey) ?? "0";
-        return $"rec:{kind}:v{v}:{suffix}";
+        var current = await _cache.GetStringAsync($"rec:version:user:{userId}", ct);
+        var next = (long.TryParse(current, out var v) ? v : 0) + 1;
+        await _cache.SetStringAsync($"rec:version:user:{userId}", next.ToString(), ct);
+    }
+
+    private async Task<string> BuildKeyAsync(string kind, string suffix, Guid? userId = null)
+    {
+        var globalV = await _cache.GetStringAsync(VersionKey) ?? "0";
+        var userV = userId.HasValue ? (await _cache.GetStringAsync($"rec:version:user:{userId}") ?? "0") : "0";
+        return $"rec:{kind}:v{globalV}:u{userV}:{suffix}";
     }
 
     private async Task<T?> ReadCacheAsync<T>(string key, CancellationToken ct) where T : class

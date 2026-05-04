@@ -39,21 +39,38 @@ public class ModerationService
     /// Применяется в списке, поиске, feed, рекомендациях
     /// Если viewerUserId = uploader, shadowban игнорируется (user видит свой контент)
     /// </summary>
-    public IQueryable<Track> ApplyVisibilityFilter(IQueryable<Track> q, Guid? viewerUserId = null)
+    public IQueryable<Track> ApplyVisibilityFilter(IQueryable<Track> q, Guid? viewerUserId = null, bool hideDislikes = true, bool hideBlocked = true)
     {
         var now = DateTime.UtcNow;
 
-        // Soft-delete фильтр
         q = q.Where(t => t.DeletedAt == null);
 
-        // Shadowban фильтр — NOT EXISTS (active Shadowbanned flag) для uploader,
-        // кроме случая когда viewer - uploader
+        // Shadowban фильтр
         q = q.Where(t =>
             viewerUserId != null && t.UploadedByUserId == viewerUserId
             || !_db.UserFlags.Any(f =>
                 f.UserId == t.UploadedByUserId
                 && f.Kind == UserFlagKind.Shadowbanned
                 && (f.ExpiresAt == null || f.ExpiresAt > now)));
+
+        if (viewerUserId.HasValue)
+        {
+            // ЖЕСТКИЙ БЛОК только если hideBlocked = true
+            if (hideBlocked)
+            {
+                q = q.Where(t =>
+                    (t.ArtistId == null || !_db.UserBlockedArtists.Any(b => b.UserId == viewerUserId.Value && b.ArtistId == t.ArtistId)) &&
+                    !_db.TrackFeaturedArtists.Any(fa => fa.TrackId == t.Id && _db.UserBlockedArtists.Any(b => b.UserId == viewerUserId.Value && b.ArtistId == fa.ArtistId))
+                );
+            }
+
+            // Дизлайки
+            if (hideDislikes)
+            {
+                q = q.Where(t => !_db.UserDislikes.Any(d => d.UserId == viewerUserId.Value && d.TargetType == DislikeTargetType.Track && d.TargetId == t.Id));
+                q = q.Where(t => t.ArtistId == null || !_db.UserDislikes.Any(d => d.UserId == viewerUserId.Value && d.TargetType == DislikeTargetType.Artist && d.TargetId == t.ArtistId));
+            }
+        }
 
         return q;
     }

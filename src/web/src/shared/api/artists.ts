@@ -57,6 +57,7 @@ function normalizeArtistTrack(t: any): TrackListItem {
         uploadedAt: t.uploadedAt ?? t.UploadedAt ?? '',
         isExplicit: t.isExplicit ?? t.IsExplicit ?? false,
         isLikedByMe: t.isLikedByMe ?? t.IsLikedByMe ?? false,
+        isDislikedByMe: t.isDislikedByMe ?? t.IsDislikedByMe ?? false,
         featuredArtists: Array.isArray(featRaw)
             ? featRaw
                 .map((f: any) => ({ id: f?.id ?? f?.Id, name: f?.name ?? f?.Name ?? '' }))

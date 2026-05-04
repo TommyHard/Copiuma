@@ -25,6 +25,7 @@ public class SearchService
         SearchTypes types,
         SearchFacets facets,
         int takePerType,
+        Guid? viewerUserId,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(query))
@@ -41,11 +42,11 @@ public class SearchService
             : Array.Empty<SearchTrackItem>();
 
         IReadOnlyList<SearchArtistItem> artists = types.HasFlag(SearchTypes.Artists)
-            ? await SearchArtistsAsync(query, takePerType, ct)
+            ? await SearchArtistsAsync(query, takePerType, viewerUserId, ct)
             : Array.Empty<SearchArtistItem>();
 
         IReadOnlyList<SearchAlbumItem> albums = types.HasFlag(SearchTypes.Albums)
-            ? await SearchAlbumsAsync(query, facets, takePerType, ct)
+            ? await SearchAlbumsAsync(query, facets, takePerType, viewerUserId, ct)
             : Array.Empty<SearchAlbumItem>();
 
         IReadOnlyList<SearchPlaylistItem> playlists = types.HasFlag(SearchTypes.Playlists)
@@ -126,10 +127,16 @@ public class SearchService
     }
 
     private async Task<IReadOnlyList<SearchArtistItem>> SearchArtistsAsync(
-        string q, int take, CancellationToken ct)
+            string q, int take, Guid? viewerUserId, CancellationToken ct)
     {
-        return await _db.Artists
-            .Where(a => a.SearchVector!.Matches(EF.Functions.WebSearchToTsQuery(Language, q)))
+        var query = _db.Artists.Where(a => a.SearchVector!.Matches(EF.Functions.WebSearchToTsQuery(Language, q)));
+
+        if (viewerUserId.HasValue)
+        {
+            query = query.Where(a => !_db.UserBlockedArtists.Any(b => b.UserId == viewerUserId.Value && b.ArtistId == a.Id));
+        }
+
+        return await query
             .Select(a => new SearchArtistItem(
                 a.Id,
                 a.Name,
@@ -141,10 +148,14 @@ public class SearchService
     }
 
     private async Task<IReadOnlyList<SearchAlbumItem>> SearchAlbumsAsync(
-        string q, SearchFacets f, int take, CancellationToken ct)
+        string q, SearchFacets f, int take, Guid? viewerUserId, CancellationToken ct)
     {
-        var query = _db.Albums
-            .Where(a => a.SearchVector!.Matches(EF.Functions.WebSearchToTsQuery(Language, q)));
+        var query = _db.Albums.Where(a => a.SearchVector!.Matches(EF.Functions.WebSearchToTsQuery(Language, q)));
+
+        if (viewerUserId.HasValue)
+        {
+            query = query.Where(a => !_db.UserBlockedArtists.Any(b => b.UserId == viewerUserId.Value && b.ArtistId == a.ArtistId));
+        }
 
         var genres = NormalizeFacetGenres(f.Genres);
         if (genres is not null)
