@@ -51,7 +51,7 @@ services:
         - ASPNETCORE_ENVIRONMENT=Development
         - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=copiuma_identity;Username=admin;Password=password123
         - JwtSettings__Key=C0piuma_Super_Secret_Security_Key_2077
-        - Redis__Configuration=redis:6379
+        - Redis__Configuration=redis:6379,abortConnect=false
       depends_on:
         postgres:
           condition: service_healthy
@@ -72,7 +72,7 @@ services:
       - Minio__AccessKey=minioadmin
       - Minio__SecretKey=minioadmin
       - RabbitMQ__HostName=rabbitmq
-      - Redis__Configuration=redis:6379
+      - Redis__Configuration=redis:6379,abortConnect=false
     depends_on:
       postgres:
         condition: service_healthy
@@ -94,6 +94,7 @@ services:
       - JwtSettings__Key=C0piuma_Super_Secret_Security_Key_2077
       - ReverseProxy__Clusters__identity-cluster__Destinations__destination1__Address=http://identity-api:8080
       - ReverseProxy__Clusters__music-cluster__Destinations__destination1__Address=http://music-api:8080
+      - Redis__Configuration=redis:6379,abortConnect=false
     depends_on:
       - identity-api
       - music-api

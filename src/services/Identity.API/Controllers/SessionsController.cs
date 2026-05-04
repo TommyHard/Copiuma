@@ -1,24 +1,26 @@
 ﻿using System.Security.Claims;
 using Identity.API.Data;
 using Identity.API.Dtos;
-using Identity.API.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using StackExchange.Redis;
 
 namespace Identity.API.Controllers;
 
-/// <summary>
-/// Auth-hardening: список активных сессий (refresh-token'ов) пользователя
-/// </summary>
 [ApiController]
 [Route("auth/sessions")]
 [Authorize]
 public class SessionsController : ControllerBase
 {
     private readonly AppDbContext _db;
+    private readonly IConnectionMultiplexer _redis;
 
-    public SessionsController(AppDbContext db) => _db = db;
+    public SessionsController(AppDbContext db, IConnectionMultiplexer redis)
+    {
+        _db = db;
+        _redis = redis;
+    }
 
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -51,15 +53,16 @@ public class SessionsController : ControllerBase
             .FirstOrDefaultAsync(t => t.Id == id && t.UserId == UserId, ct);
 
         if (token is null) return NotFound();
+
         token.IsRevoked = true;
         await _db.SaveChangesAsync(ct);
+
+        // Kill сессию в Redis
+        await _redis.GetDatabase().KeyDeleteAsync($"active_session:{token.Id}");
+
         return NoContent();
     }
 
-    /// <summary>
-    /// Реворкаем всё, кроме текущей сессии (если клиент передал X-Refresh-Token)
-    /// Если не передал — реворкаем вообще всё; пользователю придётся залогиниться заново
-    /// </summary>
     [HttpDelete]
     public async Task<IActionResult> RevokeAllExceptCurrent(CancellationToken ct)
     {
@@ -71,8 +74,16 @@ public class SessionsController : ControllerBase
         if (!string.IsNullOrEmpty(currentRefresh))
             query = query.Where(t => t.Token != currentRefresh);
 
-        await query.ExecuteUpdateAsync(
-            u => u.SetProperty(t => t.IsRevoked, true), ct);
+        var tokensToRevoke = await query.ToListAsync(ct);
+        var redisDb = _redis.GetDatabase();
+
+        foreach (var t in tokensToRevoke)
+        {
+            t.IsRevoked = true;
+            await redisDb.KeyDeleteAsync($"active_session:{t.Id}");
+        }
+
+        await _db.SaveChangesAsync(ct);
 
         return NoContent();
     }

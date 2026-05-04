@@ -6,6 +6,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 using Yarp.ReverseProxy.Transforms;
+using StackExchange.Redis;
 
 namespace Gateway.API;
 
@@ -22,6 +23,7 @@ public class Program
 
         var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
                              ?? new[] { "http://localhost:3000" };
+
         builder.Services.AddCors(options =>
         {
             options.AddDefaultPolicy(policy =>
@@ -44,7 +46,7 @@ public class Program
                 Scheme = "Bearer",
                 BearerFormat = "JWT",
                 In = ParameterLocation.Header,
-                Description = "¬ведите токен в формате: Bearer {ваш_токен}"
+                Description = "¬ведите токен в формате: Bearer {токен}"
             });
             options.AddSecurityRequirement(new OpenApiSecurityRequirement
             {
@@ -57,6 +59,17 @@ public class Program
                 }
             });
         });
+
+        // con. Redis к шлюзу
+        var redisConn = builder.Configuration["Redis:Configuration"] ?? "localhost:6379";
+
+        // √нида живи
+        if (!redisConn.Contains("abortConnect", StringComparison.OrdinalIgnoreCase))
+        {
+            redisConn = $"{redisConn},abortConnect=false";
+        }
+
+        builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConn));
 
         builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer(options =>
@@ -73,14 +86,12 @@ public class Program
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.FromSeconds(30)
                 };
-
                 options.Events = new JwtBearerEvents
                 {
                     OnMessageReceived = context =>
                     {
                         var accessToken = context.Request.Query["access_token"];
                         var path = context.HttpContext.Request.Path;
-
                         if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/api/notifications-hub"))
                         {
                             context.Token = accessToken;
@@ -159,13 +170,31 @@ public class Program
         app.UseCors();
         app.UseRateLimiter();
         app.UseAuthentication();
+
+        app.Use(async (context, next) =>
+        {
+            if (context.User.Identity?.IsAuthenticated == true)
+            {
+                var sessionId = context.User.FindFirst("SessionId")?.Value;
+                if (!string.IsNullOrEmpty(sessionId))
+                {
+                    var redis = context.RequestServices.GetRequiredService<IConnectionMultiplexer>();
+                    var db = redis.GetDatabase();
+
+                    var isSessionActive = await db.KeyExistsAsync($"active_session:{sessionId}");
+
+                    if (!isSessionActive)
+                    {
+                        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                        return;
+                    }
+                }
+            }
+            await next();
+        });
+
         app.UseAuthorization();
-
         app.MapReverseProxy();
-
-        app.MapGet("/test-security", () => "JWT принимаетс€.")
-           .RequireAuthorization("AuthenticatedUser");
-
         app.Run();
     }
 }

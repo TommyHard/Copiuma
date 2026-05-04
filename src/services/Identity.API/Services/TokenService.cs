@@ -13,7 +13,7 @@ public class TokenService
 
     public TokenService(IConfiguration config) => _config = config;
 
-    public string CreateToken(User user)
+    public string CreateToken(User user, Guid sessionId)
     {
         var claims = new List<Claim>
         {
@@ -21,7 +21,8 @@ public class TokenService
             new Claim(ClaimTypes.Email, user.Email),
             new Claim("DisplayName", user.DisplayName ?? ""),
             new Claim(ClaimTypes.Role, user.Role.ToString()),
-            new Claim("email_verified", (user.EmailVerifiedAt is not null).ToString().ToLowerInvariant())
+            new Claim("email_verified", (user.EmailVerifiedAt is not null).ToString().ToLowerInvariant()),
+            new Claim("SessionId", sessionId.ToString())
         };
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["JwtSettings:Key"]!));

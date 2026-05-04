@@ -40,8 +40,14 @@ public class Program
         builder.Services.AddScoped<TokenService>();
         builder.Services.AddDatabase(builder.Configuration);
 
-        // Redis
+        // √нида живи
         var redisConn = builder.Configuration["Redis:Configuration"] ?? "localhost:6379";
+
+        if (!redisConn.Contains("abortConnect", StringComparison.OrdinalIgnoreCase))
+        {
+            redisConn = $"{redisConn},abortConnect=false";
+        }
+
         builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConn));
         builder.Services.AddSingleton<AuthLockoutService>();
 

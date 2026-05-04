@@ -7,6 +7,7 @@ using Identity.API.Services.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using StackExchange.Redis;
 
 namespace Identity.API.Controllers;
 
@@ -20,6 +21,7 @@ public class AuthController : ControllerBase
     private readonly AuthLockoutService _lockout;
     private readonly IConfiguration _config;
     private readonly ILogger<AuthController> _log;
+    private readonly IConnectionMultiplexer _redis;
 
     private const int RefreshTokenDays = 30;
     private static readonly TimeSpan VerificationTtl = TimeSpan.FromHours(24);
@@ -31,7 +33,8 @@ public class AuthController : ControllerBase
         IEmailSender email,
         AuthLockoutService lockout,
         IConfiguration config,
-        ILogger<AuthController> log)
+        ILogger<AuthController> log,
+        IConnectionMultiplexer redis)
     {
         _db = db;
         _tokenService = tokenService;
@@ -39,6 +42,7 @@ public class AuthController : ControllerBase
         _lockout = lockout;
         _config = config;
         _log = log;
+        _redis = redis;
     }
 
     [HttpPost("register")]
@@ -47,13 +51,12 @@ public class AuthController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(request.Email) || !LooksLikeEmail(request.Email))
             return BadRequest("Некорректный email.");
-
         if (string.IsNullOrEmpty(request.Password) || request.Password.Length < 8)
-            return BadRequest("Пароль минимум 8 символов.");
+            return BadRequest("Пароль слишком короткий.");
 
         var email = request.Email.Trim().ToLowerInvariant();
         if (await _db.Users.AnyAsync(u => u.Email == email))
-            return Conflict("Пользователь с таким Email уже существует.");
+            return Conflict("Этот Email уже занят.");
 
         var user = new User
         {
@@ -66,9 +69,10 @@ public class AuthController : ControllerBase
             EmailVerifiedAt = null,
             Preferences = new UserPreferences()
         };
-        _db.Users.Add(user);
 
+        _db.Users.Add(user);
         var (plaintext, hash) = SecureTokenGenerator.Generate();
+
         _db.EmailVerificationTokens.Add(new EmailVerificationToken
         {
             Id = Guid.NewGuid(),
@@ -76,13 +80,13 @@ public class AuthController : ControllerBase
             TokenHash = hash,
             ExpiresAt = DateTime.UtcNow.Add(VerificationTtl)
         });
-        await _db.SaveChangesAsync();
 
+        await _db.SaveChangesAsync();
         await SendVerificationAsync(user.Email, plaintext);
 
         return Ok(new
         {
-            Message = "Регистрация успешна. Подтверди email — мы отправили ссылку на " + user.Email + "."
+            Message = "Письмо с подтверждением email отправлено на " + user.Email + "."
         });
     }
 
@@ -93,11 +97,11 @@ public class AuthController : ControllerBase
         [FromQuery] string? deviceLabel = null)
     {
         var email = request.Email?.Trim().ToLowerInvariant();
-        if (string.IsNullOrEmpty(email)) return Unauthorized("Неверный Email или пароль.");
+        if (string.IsNullOrEmpty(email)) return Unauthorized("Укажите Email и пароль.");
 
         if (await _lockout.IsLockedAsync(email))
             return StatusCode(StatusCodes.Status423Locked,
-                "Слишком много неудачных попыток. Попробуй через 15 минут или сбрось пароль.");
+                "Учетная запись временно заблокирована на 15 минут.");
 
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
         if (user is null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
@@ -108,12 +112,14 @@ public class AuthController : ControllerBase
 
         await _lockout.ClearAsync(email);
 
-        var jwt = _tokenService.CreateToken(user);
+        // Создаем ID сессии до токенов
+        var sessionId = Guid.NewGuid();
+        var jwt = _tokenService.CreateToken(user, sessionId);
         var refresh = _tokenService.GenerateRefreshToken();
 
         _db.RefreshTokens.Add(new RefreshToken
         {
-            Id = Guid.NewGuid(),
+            Id = sessionId,
             UserId = user.Id,
             Token = refresh,
             ExpiryDate = DateTime.UtcNow.AddDays(RefreshTokenDays),
@@ -121,7 +127,14 @@ public class AuthController : ControllerBase
             UserAgent = Truncate(HttpContext.Request.Headers.UserAgent.ToString(), 512),
             DeviceLabel = Truncate(deviceLabel, 128)
         });
+
         await _db.SaveChangesAsync();
+
+        // Записываем активную сессию в Redis
+        await _redis.GetDatabase().StringSetAsync(
+            $"active_session:{sessionId}",
+            "1",
+            TimeSpan.FromDays(RefreshTokenDays));
 
         return Ok(new { Token = jwt, RefreshToken = refresh });
     }
@@ -130,33 +143,34 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
     {
         using var tx = await _db.Database.BeginTransactionAsync();
-
         var stored = await _db.RefreshTokens
             .Include(r => r.User)
             .FirstOrDefaultAsync(r => r.Token == request.RefreshToken);
 
-        if (stored is null) return Unauthorized("Токен не существует.");
+        if (stored is null) return Unauthorized("Сессия не найдена.");
 
         if (stored.IsRevoked)
         {
-            await RevokeAllForUserAsync(stored.UserId);
-            await _db.SaveChangesAsync();
-            await tx.CommitAsync();
-            return Unauthorized("Токен уже был использован. Все сессии пользователя отозваны.");
+            // Сносить все сессии - т.е. 1 подключение за раз
+            //await RevokeAllForUserAsync(stored.UserId);
+            //await _db.SaveChangesAsync();
+            //await tx.CommitAsync();
+            return Unauthorized("Сессия была отозвана.");
         }
 
         if (stored.ExpiryDate <= DateTime.UtcNow)
-            return Unauthorized("Срок действия токена истёк.");
+            return Unauthorized("Срок действия сессии истек.");
 
         stored.IsRevoked = true;
         stored.LastUsedAt = DateTime.UtcNow;
 
-        var newJwt = _tokenService.CreateToken(stored.User!);
+        var newSessionId = Guid.NewGuid();
+        var newJwt = _tokenService.CreateToken(stored.User!, newSessionId);
         var newRefresh = _tokenService.GenerateRefreshToken();
 
         _db.RefreshTokens.Add(new RefreshToken
         {
-            Id = Guid.NewGuid(),
+            Id = newSessionId,
             UserId = stored.UserId,
             Token = newRefresh,
             ExpiryDate = DateTime.UtcNow.AddDays(RefreshTokenDays),
@@ -164,6 +178,11 @@ public class AuthController : ControllerBase
             UserAgent = Truncate(HttpContext.Request.Headers.UserAgent.ToString(), 512) ?? stored.UserAgent,
             DeviceLabel = stored.DeviceLabel
         });
+
+        // Kill old сессию из Redis и добавляем новую
+        var db = _redis.GetDatabase();
+        await db.KeyDeleteAsync($"active_session:{stored.Id}");
+        await db.StringSetAsync($"active_session:{newSessionId}", "1", TimeSpan.FromDays(RefreshTokenDays));
 
         await _db.SaveChangesAsync();
         await tx.CommitAsync();
@@ -179,6 +198,10 @@ public class AuthController : ControllerBase
 
         token.IsRevoked = true;
         await _db.SaveChangesAsync();
+
+        // Kill сессию в Redis
+        await _redis.GetDatabase().KeyDeleteAsync($"active_session:{token.Id}");
+
         return NoContent();
     }
 
@@ -209,14 +232,14 @@ public class AuthController : ControllerBase
             || record.ExpiresAt <= DateTime.UtcNow
             || record.User is null)
         {
-            return BadRequest("Токен недействителен или просрочен.");
+            return BadRequest("Недействительный или устаревший токен.");
         }
 
         record.ConsumedAt = DateTime.UtcNow;
         record.User.EmailVerifiedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
-        return Ok(new { Message = "Email подтверждён." });
+        return Ok(new { Message = "Email успешно подтвержден." });
     }
 
     [HttpPost("resend-verification")]
@@ -239,9 +262,10 @@ public class AuthController : ControllerBase
             TokenHash = hash,
             ExpiresAt = DateTime.UtcNow.Add(VerificationTtl)
         });
-        await _db.SaveChangesAsync();
 
+        await _db.SaveChangesAsync();
         await SendVerificationAsync(user.Email, plaintext);
+
         return AcceptedWithMaskedResponse();
     }
 
@@ -264,6 +288,7 @@ public class AuthController : ControllerBase
             TokenHash = hash,
             ExpiresAt = DateTime.UtcNow.Add(PasswordResetTtl)
         });
+
         await _db.SaveChangesAsync();
 
         var url = BuildPasswordResetUrl(plaintext);
@@ -278,7 +303,7 @@ public class AuthController : ControllerBase
         if (string.IsNullOrWhiteSpace(req.Token))
             return BadRequest("Token обязателен.");
         if (string.IsNullOrEmpty(req.NewPassword) || req.NewPassword.Length < 8)
-            return BadRequest("Пароль минимум 8 символов.");
+            return BadRequest("Пароль слишком короткий.");
 
         var hash = SecureTokenGenerator.Hash(req.Token);
         var record = await _db.PasswordResetTokens
@@ -290,7 +315,7 @@ public class AuthController : ControllerBase
             || record.ExpiresAt <= DateTime.UtcNow
             || record.User is null)
         {
-            return BadRequest("Токен недействителен или просрочен.");
+            return BadRequest("Недействительный или устаревший токен.");
         }
 
         record.ConsumedAt = DateTime.UtcNow;
@@ -298,19 +323,24 @@ public class AuthController : ControllerBase
         record.User.PasswordChangedAt = DateTime.UtcNow;
 
         await RevokeAllForUserAsync(record.User.Id);
-
         await _lockout.ClearAsync(record.User.Email);
-
         await _db.SaveChangesAsync();
 
-        return Ok(new { Message = "Пароль обновлён. Войди заново со всех устройств." });
+        return Ok(new { Message = "Пароль успешно изменен." });
     }
 
     private async Task RevokeAllForUserAsync(Guid userId)
     {
-        await _db.RefreshTokens
+        var tokens = await _db.RefreshTokens
             .Where(t => t.UserId == userId && !t.IsRevoked)
-            .ExecuteUpdateAsync(u => u.SetProperty(t => t.IsRevoked, true));
+            .ToListAsync();
+
+        var db = _redis.GetDatabase();
+        foreach (var t in tokens)
+        {
+            t.IsRevoked = true;
+            await db.KeyDeleteAsync($"active_session:{t.Id}");
+        }
     }
 
     private async Task SendVerificationAsync(string email, string plaintext)
@@ -322,7 +352,7 @@ public class AuthController : ControllerBase
         }
         catch (Exception ex)
         {
-            _log.LogError(ex, "Не удалось отправить verify-email для {Email}", email);
+            _log.LogError(ex, "Ошибка при отправке verify-email для {Email}", email);
         }
     }
 
@@ -339,7 +369,7 @@ public class AuthController : ControllerBase
     }
 
     private IActionResult AcceptedWithMaskedResponse() =>
-        Accepted(new { Message = "Если такой email существует, на него отправлено письмо." });
+        Accepted(new { Message = "Если email найден, инструкции отправлены." });
 
     private static bool LooksLikeEmail(string s)
     {

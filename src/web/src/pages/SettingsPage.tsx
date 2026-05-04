@@ -1,13 +1,14 @@
 import { useState, useEffect, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getProfile, updateProfile, changePassword } from '@/shared/api/profile';
 import { listGenres } from '@/shared/api/genres';
 import { listBlockedArtists, unblockArtist } from '@/shared/api/blocks';
 import { listDislikes, undoDislikeTrack, undoDislikeArtist } from '@/shared/api/dislikes';
-import { Link } from 'react-router-dom';
+import { listSessions, revokeSession, revokeAllOtherSessions } from '@/shared/api/sessions';
 import { cn } from '@/shared/lib/cn';
 
-type Tab = 'profile' | 'password' | 'blacklist';
+type Tab = 'profile' | 'security' | 'blacklist';
 
 const LANGUAGES = [
     { value: 'ru', label: 'Русский' },
@@ -23,14 +24,94 @@ export function SettingsPage() {
 
             <div className="flex gap-4 border-b border-border text-sm overflow-x-auto">
                 <TabBtn active={tab === 'profile'} onClick={() => setTab('profile')}>Профиль</TabBtn>
-                <TabBtn active={tab === 'password'} onClick={() => setTab('password')}>Безопасность</TabBtn>
+                <TabBtn active={tab === 'security'} onClick={() => setTab('security')}>Безопасность</TabBtn>
                 <TabBtn active={tab === 'blacklist'} onClick={() => setTab('blacklist')}>Рекомендации</TabBtn>
             </div>
 
             {tab === 'profile' && <ProfileSection />}
-            {tab === 'password' && <PasswordSection />}
+            {tab === 'security' && (
+                <div className="space-y-10 max-w-2xl">
+                    <PasswordSection />
+                    <SessionsSection />
+                </div>
+            )}
             {tab === 'blacklist' && <BlacklistSection />}
         </section>
+    );
+}
+
+function SessionsSection() {
+    const qc = useQueryClient();
+    const sessions = useQuery({ queryKey: ['sessions'], queryFn: listSessions });
+
+    const revoke = useMutation({
+        mutationFn: (id: string) => revokeSession(id),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
+    });
+
+    const revokeAllOthers = useMutation({
+        mutationFn: () => revokeAllOtherSessions(),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
+    });
+
+    if (sessions.isLoading) return <p className="text-sm text-fg-muted">Загрузка сессий...</p>;
+    if (sessions.isError) return <p className="text-sm text-danger">Ошибка загрузки сессий.</p>;
+
+    return (
+        <div className="space-y-4 pt-6 border-t border-border">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h2 className="text-lg font-semibold">Активные сеансы</h2>
+                    <p className="text-sm text-fg-muted">Список устройств, с которых выполнен вход в ваш аккаунт.</p>
+                </div>
+                {sessions.data && sessions.data.length > 1 && (
+                    <button
+                        onClick={() => {
+                            if (confirm('Выйти со всех других устройств?')) revokeAllOthers.mutate();
+                        }}
+                        disabled={revokeAllOthers.isPending}
+                        className="rounded-md border border-danger/40 px-3 py-1.5 text-xs text-danger hover:bg-danger/10 disabled:opacity-50"
+                    >
+                        Завершить другие
+                    </button>
+                )}
+            </div>
+
+            {sessions.data && (
+                <ul className="divide-y divide-border rounded-md border border-border bg-bg-elevated/30">
+                    {sessions.data.map((s) => (
+                        <li key={s.id} className="flex items-center justify-between gap-4 p-4 text-sm hover:bg-bg-elevated/50 transition-colors">
+                            <div>
+                                <div className="font-medium">
+                                    {s.deviceLabel || 'Неизвестное устройство'}
+                                    {s.isCurrent && (
+                                        <span className="ml-2 rounded bg-success/20 px-2 py-0.5 text-[10px] text-success uppercase font-bold tracking-wider">
+                                            Текущий сеанс
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="text-xs text-fg-muted mt-1">
+                                    {s.ipAddress ?? 'Неизвестный IP'} • {s.userAgent ?? 'Неизвестный браузер'}
+                                </div>
+                                <div className="text-xs text-fg-muted mt-0.5">
+                                    Вход: {new Date(s.createdAt).toLocaleString('ru')}
+                                    {s.lastUsedAt && ` • Активность: ${new Date(s.lastUsedAt).toLocaleString('ru')}`}
+                                </div>
+                            </div>
+                            {!s.isCurrent && (
+                                <button
+                                    onClick={() => revoke.mutate(s.id)}
+                                    disabled={revoke.isPending}
+                                    className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-bg-elevated disabled:opacity-50"
+                                >
+                                    Выйти
+                                </button>
+                            )}
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
     );
 }
 
@@ -359,6 +440,9 @@ function PasswordSection() {
 
     return (
         <form onSubmit={onSubmit} className="max-w-md space-y-4">
+            <div>
+                <h2 className="text-lg font-semibold">Смена пароля</h2>
+            </div>
             <label className="block">
                 <span className="mb-1 block text-sm text-fg-muted">Текущий пароль</span>
                 <input
