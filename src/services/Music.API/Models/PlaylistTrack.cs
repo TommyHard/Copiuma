@@ -10,6 +10,8 @@ public class PlaylistTrack
 
     public DateTime AddedAt { get; set; } = DateTime.UtcNow;
 
+    public Guid? AddedByUserId { get; set; }
+
     /// <summary>
     /// Порядковая позиция трека в плейлисте
     /// При добавлении трека max(Position) + 1

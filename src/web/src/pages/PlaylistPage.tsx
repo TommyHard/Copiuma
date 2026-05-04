@@ -14,6 +14,7 @@ import {
 import { useAuth } from '@/features/auth/useAuth';
 import { usePlayer } from '@/features/player/store';
 import { InvitePeopleDialog } from '@/features/playlists/InvitePeopleDialog';
+import { PlaylistAuditLog } from '@/features/playlists/PlaylistAuditLog';
 import { PlaylistCover } from '@/features/playlists/PlaylistCover';
 import type { PlaylistTrack, PlaylistVisibility } from '@/shared/types';
 import { useToggleTrackLike } from '@/features/track/useToggleTrackLike';
@@ -360,6 +361,17 @@ export function PlaylistPage() {
                     ))}
                 </ul>
             </section>
+
+            {/* audit log */}
+            {myMember && (
+                <section className="space-y-3 pt-6 border-t border-border">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-xl font-semibold">История изменений</h2>
+                        <span className="text-xs px-2 py-1 bg-bg-elevated rounded-md text-fg-muted">Видно только участникам</span>
+                    </div>
+                    <PlaylistAuditLog playlistId={p.id} />
+                </section>
+            )}
 
             {isOwner && id && (
                 <InvitePeopleDialog

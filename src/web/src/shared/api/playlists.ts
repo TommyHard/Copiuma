@@ -100,3 +100,22 @@ export async function leavePlaylist(playlistId: string): Promise<void> {
 export async function reorderTracks(playlistId: string, trackIds: string[]): Promise<void> {
     await api.patch(`/playlists/${playlistId}/tracks/order`, { trackIds });
 }
+
+export interface PlaylistAudit {
+    id: string;
+    entityType: string;
+    changeKind: number; // 0: Created, 1: Updated, 2: Deleted
+    actorUserId: string | null;
+    changes: string;
+    createdAt: string;
+    trackTitle: string | null;
+}
+
+export async function getPlaylistAudit(
+    playlistId: string,
+    skip: number = 0,
+    take: number = 8
+): Promise<PlaylistAudit[]> {
+    const r = await api.get<PlaylistAudit[]>(`/playlists/${playlistId}/audit?skip=${skip}&take=${take}`);
+    return r.data;
+}

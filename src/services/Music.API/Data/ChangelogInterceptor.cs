@@ -22,16 +22,19 @@ public class ChangelogInterceptor : SaveChangesInterceptor
     /// Всё остальное в игнор (Notifications, Likes, Ratings
     /// </summary>
     private static readonly Dictionary<string, string[]> Tracked =
-        new(StringComparer.Ordinal)
-        {
-            ["Playlist"] = new[] { "Title", "Visibility" },
-            ["Track"] = new[] { "Title", "Artist", "ArtistId", "AlbumId", "TrackNumber", "Duration", "Genres", "IsExplicit", "DeletedAt", "DeletionReason", "ProcessingStatus" },
-            ["Artist"] = new[] { "Name", "Bio", "AvatarKey" },
-            ["Album"] = new[] { "Title", "ArtistId", "ReleaseDate", "CoverKey", "Genres" },
-            ["PlaylistInvitation"] = new[] { "Status" },
-            ["UserFlag"] = new[] { "Kind", "ExpiresAt", "Note" },
-            ["Report"] = new[] { "Status", "ResolvedByUserId", "ResolvedAt" },
-        };
+            new(StringComparer.Ordinal)
+            {
+                ["Playlist"] = new[] { "Title", "Visibility", "IsCollaborative" },
+                ["PlaylistTrack"] = new[] { "TrackId", "Position" },
+                ["PlaylistMember"] = new[] { "UserId", "Role" },
+
+                ["Track"] = new[] { "Title", "Artist", "ArtistId", "AlbumId", "TrackNumber", "Duration", "Genres", "IsExplicit", "DeletedAt", "DeletionReason", "ProcessingStatus" },
+                ["Artist"] = new[] { "Name", "Bio", "AvatarKey" },
+                ["Album"] = new[] { "Title", "ArtistId", "ReleaseDate", "CoverKey", "Genres" },
+                ["PlaylistInvitation"] = new[] { "Status" },
+                ["UserFlag"] = new[] { "Kind", "ExpiresAt", "Note" },
+                ["Report"] = new[] { "Status", "ResolvedByUserId", "ResolvedAt" },
+            };
 
     public ChangelogInterceptor(IHttpContextAccessor http)
     {
@@ -128,11 +131,23 @@ public class ChangelogInterceptor : SaveChangesInterceptor
 
     private static Guid? TryGetEntityId(EntityEntry entry)
     {
+        var typeName = entry.Entity.GetType().Name;
+
+        if (typeName == "PlaylistTrack" || typeName == "PlaylistMember")
+        {
+            var playlistIdProp = entry.Metadata.FindProperty("PlaylistId");
+            if (playlistIdProp != null)
+            {
+                var val = entry.Property("PlaylistId").CurrentValue;
+                return val is Guid g ? g : null;
+            }
+        }
+
         var idProp = entry.Metadata.FindPrimaryKey()?.Properties.FirstOrDefault();
         if (idProp is null) return null;
 
         var value = entry.Property(idProp.Name).CurrentValue;
-        return value is Guid g ? g : null;
+        return value is Guid guid ? guid : null;
     }
 
     private Guid? GetActorUserId()
