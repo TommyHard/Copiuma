@@ -129,7 +129,7 @@ function PlaylistGrid({
                         <div className="flex flex-col min-w-0">
                             <span className="truncate font-medium">{p.title}</span>
                             <div className="flex items-center gap-1 text-xs text-fg-muted">
-                                <span className="text-accent/80 font-medium">
+                                <span className="font-medium">
                                     {p.ownerName || 'Автор'}
                                 </span>
                                 <span>•</span>

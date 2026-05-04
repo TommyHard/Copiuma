@@ -201,6 +201,7 @@ export interface PlaylistTrack {
     trackId: string;
     title: string;
     artist: string | null;
+    artistId: string | null;
     duration: string | null;
     isExplicit: boolean;
     position: number;

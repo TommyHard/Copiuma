@@ -442,6 +442,7 @@ public class PlaylistsController : ControllerBase
                     TrackId = pt.Track!.Id,
                     pt.Track.Title,
                     pt.Track.Artist,
+                    ArtistId = pt.Track.ArtistId,
                     pt.Track.Duration,
                     pt.Track.IsExplicit,
                     pt.Position,
@@ -546,11 +547,6 @@ public class PlaylistsController : ControllerBase
 
 public class SetVisibilityRequest
 {
-    /// <summary>
-    /// "Private"
-    /// или
-    /// "Public"
-    /// </summary>
     public required string Visibility { get; set; }
 }
 

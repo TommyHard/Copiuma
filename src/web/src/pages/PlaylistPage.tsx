@@ -1,5 +1,5 @@
 import { useState, useRef, type KeyboardEvent } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     deletePlaylist,
@@ -34,7 +34,7 @@ export function PlaylistPage() {
     const [inviteOpen, setInviteOpen] = useState(false);
     const [renaming, setRenaming] = useState(false);
     const [titleDraft, setTitleDraft] = useState('');
-
+    const [isDragMode, setIsDragMode] = useState(false);
     const [localOrder, setLocalOrder] = useState<string[] | null>(null);
     const dragId = useRef<string | null>(null);
     const dragOverId = useRef<string | null>(null);
@@ -176,7 +176,7 @@ export function PlaylistPage() {
                 artist: t.artist,
                 duration: t.duration,
                 uploadedAt: '',
-                artistId: null,
+                artistId: t.artistId || null,
                 albumId: null,
                 trackNumber: null,
                 isExplicit: t.isExplicit,
@@ -213,7 +213,7 @@ export function PlaylistPage() {
                             />
                             <button
                                 type="button"
-                                onMouseDown={(e) => e.preventDefault() /* del blur до клика */}
+                                onMouseDown={(e) => e.preventDefault()}
                                 onClick={commitRename}
                                 disabled={rename.isPending}
                                 className="rounded-md bg-accent px-3 py-2 text-sm text-accent-fg hover:opacity-90 disabled:opacity-50"
@@ -260,6 +260,20 @@ export function PlaylistPage() {
                                 className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:opacity-90"
                             >
                                 ▶ Играть всё
+                            </button>
+                        )}
+
+                        {canEdit && (
+                            <button
+                                onClick={() => setIsDragMode(!isDragMode)}
+                                className={cn(
+                                    "rounded-md border px-3 py-2 text-sm transition-colors",
+                                    isDragMode
+                                        ? "bg-accent text-accent-fg border-accent"
+                                        : "border-border hover:bg-bg-elevated"
+                                )}
+                            >
+                                {isDragMode ? "✓ Готово" : "Изменить порядок"}
                             </button>
                         )}
 
@@ -318,7 +332,7 @@ export function PlaylistPage() {
                             <PlaylistTrackRow
                                 key={t.trackId}
                                 t={t}
-                                canDrag={canEdit}
+                                canDrag={canEdit && isDragMode}
                                 canRemove={canEdit}
                                 onRemove={() => removeT.mutate(t.trackId)}
                                 removing={removeT.isPending}
@@ -339,10 +353,15 @@ export function PlaylistPage() {
                         <li key={m.userId} className="flex items-center gap-4 p-3 text-sm">
                             <div className="min-w-0 flex-1">
                                 <div className="truncate font-medium">
-                                    {memberNameMap[m.userId]
-                                        || (m.userId === user?.id ? (user.displayName ?? user.email) : null)
-                                        || m.displayName
-                                        || <span className="font-mono text-xs text-fg-muted">{m.userId.slice(0, 8)}…</span>}
+                                    <Link
+                                        to={`/users/${m.userId}`}
+                                        className="hover:text-accent hover:underline transition-colors"
+                                    >
+                                        {memberNameMap[m.userId]
+                                            || (m.userId === user?.id ? (user.displayName ?? user.email) : null)
+                                            || m.displayName
+                                            || <span className="font-mono text-xs text-fg-muted">{m.userId.slice(0, 8)}…</span>}
+                                    </Link>
                                 </div>
                                 <div className="text-xs text-fg-muted">
                                     {m.role} • с {new Date(m.joinedAt).toLocaleDateString('ru')}
@@ -394,7 +413,7 @@ function PlaylistTrackRow({
     onDragOver,
     onDrop,
 }: {
-    t: PlaylistTrack;
+    t: PlaylistTrack & { artistId?: string | null };
     canDrag?: boolean;
     canRemove?: boolean;
     onRemove: () => void;
@@ -404,17 +423,15 @@ function PlaylistTrackRow({
     onDrop: (e: React.DragEvent) => void;
 }) {
     const play = usePlayTrack();
-
     const like = useToggleTrackLike();
 
-    // Маппинг данных для плеера
     const trackForPlayer = {
         id: t.trackId,
         title: t.title,
         artist: t.artist,
+        artistId: t.artistId || null,
         duration: t.duration,
         uploadedAt: '',
-        artistId: null,
         albumId: null,
         trackNumber: null,
         isExplicit: t.isExplicit,
@@ -428,7 +445,7 @@ function PlaylistTrackRow({
             onDrop={onDrop}
             className={cn(
                 "flex items-center gap-3 px-4 py-3 hover:bg-bg-elevated/50",
-                canDrag && "cursor-grab active:cursor-grabbing"
+                canDrag ? "cursor-grab active:cursor-grabbing bg-accent/5" : ""
             )}>
             {canDrag && (
                 <span className="shrink-0 text-fg-muted/40 select-none" title="Перетащить">⠿</span>
@@ -445,8 +462,25 @@ function PlaylistTrackRow({
             </span>
 
             <div className="min-w-0 flex-1">
-                <div className="truncate font-medium">{t.title}</div>
-                <div className="truncate text-xs text-fg-muted">{t.artist ?? '—'}</div>
+                <Link
+                    to={`/tracks/${t.trackId}`}
+                    className="truncate font-medium block hover:underline transition-colors"
+                >
+                    {t.title}
+                </Link>
+
+                {t.artistId ? (
+                    <Link
+                        to={`/artists/${t.artistId}`}
+                        className="truncate text-xs text-fg-muted block hover:underline transition-colors"
+                    >
+                        {t.artist ?? '—'}
+                    </Link>
+                ) : (
+                    <div className="truncate text-xs text-fg-muted">
+                        {t.artist ?? '—'}
+                    </div>
+                )}
             </div>
 
             <span className="text-xs tabular-nums text-fg-muted">{formatDuration(t.duration)}</span>
