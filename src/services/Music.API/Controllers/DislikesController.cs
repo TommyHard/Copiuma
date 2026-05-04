@@ -28,37 +28,55 @@ public class DislikesController : ControllerBase
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
     [HttpGet]
-    public async Task<IActionResult> List()
+    public async Task<IActionResult> List(CancellationToken ct)
     {
-        var items = await _db.UserDislikes
+        var dislikes = await _db.UserDislikes
             .Where(d => d.UserId == UserId)
             .OrderByDescending(d => d.CreatedAt)
-            .Select(d => new
+            .ToListAsync(ct);
+
+        var trackIds = dislikes.Where(d => d.TargetType == DislikeTargetType.Track).Select(d => d.TargetId).ToList();
+        var artistIds = dislikes.Where(d => d.TargetType == DislikeTargetType.Artist).Select(d => d.TargetId).ToList();
+
+        var tracks = await _db.Tracks.Where(t => trackIds.Contains(t.Id))
+            .Select(t => new { t.Id, t.Title, t.Artist, t.ArtistId })
+            .ToDictionaryAsync(t => t.Id, ct);
+
+        var artists = await _db.Artists.Where(a => artistIds.Contains(a.Id))
+            .Select(a => new { a.Id, a.Name })
+            .ToDictionaryAsync(a => a.Id, ct);
+
+        var items = dislikes.Select(d =>
+        {
+            var isTrack = d.TargetType == DislikeTargetType.Track;
+            tracks.TryGetValue(d.TargetId, out var t);
+            artists.TryGetValue(d.TargetId, out var a);
+
+            return new
             {
                 targetType = d.TargetType.ToString(),
-                d.TargetId,
+                targetId = d.TargetId,
+                Title = isTrack ? t?.Title : a?.Name ?? "Удалено",
+                ArtistName = isTrack ? t?.Artist : null,
+                ArtistId = isTrack ? t?.ArtistId : null,
                 d.CreatedAt
-            })
-            .ToListAsync();
+            };
+        });
 
         return Ok(items);
     }
 
     [HttpPost("tracks/{trackId:guid}")]
-    public Task<IActionResult> DislikeTrack(Guid trackId) =>
-        AddAsync(DislikeTargetType.Track, trackId);
+    public Task<IActionResult> DislikeTrack(Guid trackId) => AddAsync(DislikeTargetType.Track, trackId);
 
     [HttpDelete("tracks/{trackId:guid}")]
-    public Task<IActionResult> UndoTrack(Guid trackId) =>
-        RemoveAsync(DislikeTargetType.Track, trackId);
+    public Task<IActionResult> UndoTrack(Guid trackId) => RemoveAsync(DislikeTargetType.Track, trackId);
 
     [HttpPost("artists/{artistId:guid}")]
-    public Task<IActionResult> DislikeArtist(Guid artistId) =>
-        AddAsync(DislikeTargetType.Artist, artistId);
+    public Task<IActionResult> DislikeArtist(Guid artistId) => AddAsync(DislikeTargetType.Artist, artistId);
 
     [HttpDelete("artists/{artistId:guid}")]
-    public Task<IActionResult> UndoArtist(Guid artistId) =>
-        RemoveAsync(DislikeTargetType.Artist, artistId);
+    public Task<IActionResult> UndoArtist(Guid artistId) => RemoveAsync(DislikeTargetType.Artist, artistId);
 
     private async Task<IActionResult> AddAsync(DislikeTargetType type, Guid targetId)
     {

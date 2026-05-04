@@ -15,15 +15,51 @@ namespace Music.API.Controllers;
 public class BlocksController : ControllerBase
 {
     private readonly AppDbContext _db;
+    private readonly FileStorageService _storage;
     private readonly RecommendationsService _rec;
 
-    public BlocksController(AppDbContext db, RecommendationsService rec)
+    public BlocksController(AppDbContext db, FileStorageService storage, RecommendationsService rec)
     {
         _db = db;
+        _storage = storage;
         _rec = rec;
     }
 
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+    [HttpGet("artists")]
+    public async Task<IActionResult> GetBlockedArtists(CancellationToken ct)
+    {
+        var blocksRaw = await _db.UserBlockedArtists
+            .Where(b => b.UserId == UserId)
+            .OrderByDescending(b => b.CreatedAt)
+            .Select(b => new
+            {
+                b.ArtistId,
+                Name = b.Artist!.Name,
+                AvatarKey = b.Artist.AvatarKey,
+                b.CreatedAt
+            })
+            .ToListAsync(ct);
+
+        var blocks = new List<object>();
+        foreach (var b in blocksRaw)
+        {
+            var avatarUrl = b.AvatarKey is null
+                ? null
+                : await _storage.GeneratePresignedImageGetUrlAsync(b.AvatarKey);
+
+            blocks.Add(new
+            {
+                b.ArtistId,
+                b.Name,
+                AvatarUrl = avatarUrl,
+                b.CreatedAt
+            });
+        }
+
+        return Ok(blocks);
+    }
 
     [HttpPost("artists/{artistId:guid}")]
     public async Task<IActionResult> BlockArtist(Guid artistId, CancellationToken ct)
@@ -38,14 +74,12 @@ public class BlocksController : ControllerBase
 
         using var tx = await _db.Database.BeginTransactionAsync(ct);
 
-        // Добавляем блок
         _db.UserBlockedArtists.Add(new UserBlockedArtist
         {
             UserId = UserId,
             ArtistId = artistId
         });
 
-        // Удаляем подписку, если была
         await _db.Follows
             .Where(f => f.FollowerUserId == UserId && f.TargetType == FollowTargetType.Artist && f.TargetId == artistId)
             .ExecuteDeleteAsync(ct);
@@ -64,7 +98,7 @@ public class BlocksController : ControllerBase
                 if (doc.RootElement.TryGetProperty("followerUserId", out var fIdElem) && fIdElem.TryGetGuid(out var fId))
                     return fId == artistId;
             }
-            catch { /* ignore */ }
+            catch { }
             return false;
         }).ToList();
 

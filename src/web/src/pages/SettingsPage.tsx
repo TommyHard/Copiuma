@@ -2,9 +2,12 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getProfile, updateProfile, changePassword } from '@/shared/api/profile';
 import { listGenres } from '@/shared/api/genres';
+import { listBlockedArtists, unblockArtist } from '@/shared/api/blocks';
+import { listDislikes, undoDislikeTrack, undoDislikeArtist } from '@/shared/api/dislikes';
+import { Link } from 'react-router-dom';
 import { cn } from '@/shared/lib/cn';
 
-type Tab = 'profile' | 'password';
+type Tab = 'profile' | 'password' | 'blacklist';
 
 const LANGUAGES = [
     { value: 'ru', label: 'Русский' },
@@ -18,27 +21,165 @@ export function SettingsPage() {
         <section className="space-y-6">
             <h1 className="text-2xl font-semibold">Настройки</h1>
 
-            <div className="flex gap-4 border-b border-border text-sm">
+            <div className="flex gap-4 border-b border-border text-sm overflow-x-auto">
                 <TabBtn active={tab === 'profile'} onClick={() => setTab('profile')}>Профиль</TabBtn>
-                <TabBtn active={tab === 'password'} onClick={() => setTab('password')}>Смена пароля</TabBtn>
+                <TabBtn active={tab === 'password'} onClick={() => setTab('password')}>Безопасность</TabBtn>
+                <TabBtn active={tab === 'blacklist'} onClick={() => setTab('blacklist')}>Рекомендации</TabBtn>
             </div>
 
             {tab === 'profile' && <ProfileSection />}
             {tab === 'password' && <PasswordSection />}
+            {tab === 'blacklist' && <BlacklistSection />}
         </section>
     );
 }
 
-// Profile section
+function BlacklistSection() {
+    const qc = useQueryClient();
+
+    const blocksQ = useQuery({ queryKey: ['blocked-artists'], queryFn: listBlockedArtists });
+    const dislikesQ = useQuery({ queryKey: ['dislikes'], queryFn: listDislikes });
+
+    const unblock = useMutation({
+        mutationFn: (artistId: string) => unblockArtist(artistId),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['blocked-artists'] });
+            qc.invalidateQueries({ queryKey: ['artist'] });
+            qc.invalidateQueries({ queryKey: ['catalog'] });
+        },
+    });
+
+    const undislikeTrack = useMutation({
+        mutationFn: (trackId: string) => undoDislikeTrack(trackId),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['dislikes'] });
+            qc.invalidateQueries({ queryKey: ['recommendations'] });
+            qc.invalidateQueries({ queryKey: ['for-you'] });
+            qc.invalidateQueries({ queryKey: ['catalog'] });
+        },
+    });
+
+    const undislikeArtist = useMutation({
+        mutationFn: (artistId: string) => undoDislikeArtist(artistId),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['dislikes'] });
+            qc.invalidateQueries({ queryKey: ['recommendations'] });
+            qc.invalidateQueries({ queryKey: ['for-you'] });
+        },
+    });
+
+    return (
+        <div className="space-y-10 max-w-4xl">
+            {/* ЗАБЛОКИРОВАННЫЕ АРТИСТЫ */}
+            <section className="space-y-4">
+                <div className="space-y-1">
+                    <h2 className="text-lg font-semibold text-danger">Заблокированные артисты</h2>
+                    <p className="text-sm text-fg-muted">Эти артисты и их контент полностью исключены из вашей библиотеки.</p>
+                </div>
+
+                {blocksQ.isLoading && <p className="text-sm text-fg-muted">Загрузка...</p>}
+                {blocksQ.data && blocksQ.data.length === 0 && <p className="text-sm text-fg-muted">Список пуст.</p>}
+
+                {blocksQ.data && blocksQ.data.length > 0 && (
+                    <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                        {blocksQ.data.map(b => (
+                            <li key={b.artistId} className="flex flex-col border border-border bg-bg-elevated rounded-md p-4 hover:bg-bg-elevated/70 transition-colors">
+                                <Link
+                                    to={`/artists/${b.artistId}`}
+                                    className="flex flex-col items-center group mb-3"
+                                >
+                                    <div
+                                        className="aspect-square w-full max-w-[120px] rounded-full bg-bg bg-cover bg-center flex items-center justify-center text-3xl font-bold text-fg-muted shadow-sm mb-3"
+                                        style={{ backgroundImage: b.avatarUrl ? `url('${b.avatarUrl}')` : undefined }}
+                                        aria-hidden={!!b.avatarUrl}
+                                    >
+                                        {!b.avatarUrl && b.name ? b.name.charAt(0).toUpperCase() : null}
+                                    </div>
+                                    <span className="font-medium text-sm text-center truncate w-full group-hover:underline">
+                                        {b.name}
+                                    </span>
+                                </Link>
+
+                                <button
+                                    onClick={() => unblock.mutate(b.artistId)}
+                                    disabled={unblock.isPending}
+                                    className="mt-auto w-full rounded-md border border-border px-3 py-1.5 text-xs text-fg hover:bg-bg hover:border-accent hover:text-accent transition-colors disabled:opacity-50"
+                                >
+                                    Разблокировать
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </section>
+
+            {/* НЕ ИНТЕРЕСНО */}
+            <section className="space-y-4 pt-4 border-t border-border">
+                <div className="space-y-1">
+                    <h2 className="text-lg font-semibold">Не интересно</h2>
+                    <p className="text-sm text-fg-muted">Эти треки не появляются в ваших персональных подборках.</p>
+                </div>
+
+                {dislikesQ.isLoading && <p className="text-sm text-fg-muted">Загрузка...</p>}
+                {dislikesQ.data && dislikesQ.data.length === 0 && <p className="text-sm text-fg-muted">Список пуст.</p>}
+
+                {dislikesQ.data && dislikesQ.data.length > 0 && (
+                    <ul className="divide-y divide-border rounded-md border border-border bg-bg-elevated/30">
+                        {dislikesQ.data.map(d => (
+                            <li key={`${d.targetType}-${d.targetId}`} className="flex items-center justify-between gap-4 p-3 hover:bg-bg-elevated/50 transition-colors">
+                                <div className="min-w-0 flex-1">
+                                    {d.targetType === 'Track' ? (
+                                        <>
+                                            <Link
+                                                to={`/tracks/${d.targetId}`}
+                                                className="font-medium text-sm truncate hover:text-accent hover:underline block"
+                                            >
+                                                {d.title}
+                                            </Link>
+                                            <div className="text-xs text-fg-muted mt-0.5">
+                                                {d.artistId ? (
+                                                    <Link to={`/artists/${d.artistId}`} className="hover:text-fg hover:underline">
+                                                        {d.artistName ?? 'Неизвестный исполнитель'}
+                                                    </Link>
+                                                ) : (
+                                                    <span>{d.artistName ?? 'Неизвестный исполнитель'}</span>
+                                                )}
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Link
+                                                to={`/artists/${d.targetId}`}
+                                                className="font-medium text-sm truncate hover:text-accent hover:underline block"
+                                            >
+                                                {d.title}
+                                            </Link>
+                                            <div className="text-xs text-fg-muted mt-0.5">Артист</div>
+                                        </>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={() => d.targetType === 'Track' ? undislikeTrack.mutate(d.targetId) : undislikeArtist.mutate(d.targetId)}
+                                    disabled={undislikeTrack.isPending || undislikeArtist.isPending}
+                                    className="shrink-0 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-bg-elevated disabled:opacity-50"
+                                >
+                                    Восстановить
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </section>
+        </div>
+    );
+}
 
 function ProfileSection() {
     const qc = useQueryClient();
-
     const profileQ = useQuery({
         queryKey: ['profile'],
         queryFn: getProfile,
     });
-
     const genresQ = useQuery({
         queryKey: ['genres'],
         queryFn: listGenres,
@@ -89,23 +230,21 @@ function ProfileSection() {
         save.mutate();
     }
 
-    if (profileQ.isLoading) return <p className="text-fg-muted">Загружаем…</p>;
-    if (profileQ.isError) return <p className="text-danger">Не удалось загрузить профиль.</p>;
+    if (profileQ.isLoading) return <p className="text-fg-muted">Загрузка...</p>;
+    if (profileQ.isError) return <p className="text-danger">Ошибка загрузки профиля.</p>;
 
     return (
         <form onSubmit={onSubmit} className="max-w-md space-y-5">
-            {/* Display name */}
             <label className="block">
-                <span className="mb-1 block text-sm text-fg-muted">Отображаемое имя</span>
+                <span className="mb-1 block text-sm text-fg-muted">Имя</span>
                 <input
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="Как тебя зовут?"
+                    placeholder="Ваше имя"
                     className="w-full rounded-md border border-border bg-bg-elevated px-3 py-2 outline-none focus:border-accent"
                 />
             </label>
 
-            {/* Bio */}
             <label className="block">
                 <span className="mb-1 block text-sm text-fg-muted">О себе</span>
                 <textarea
@@ -113,13 +252,12 @@ function ProfileSection() {
                     onChange={(e) => setBio(e.target.value)}
                     maxLength={500}
                     rows={3}
-                    placeholder="Расскажите немного о себе…"
+                    placeholder="Пара слов о вас..."
                     className="w-full rounded-md border border-border bg-bg-elevated px-3 py-2 text-sm outline-none focus:border-accent"
                 />
                 <span className="text-xs text-fg-muted">{bio.length}/500</span>
             </label>
 
-            {/* Language */}
             <label className="block">
                 <span className="mb-1 block text-sm text-fg-muted">Язык</span>
                 <select
@@ -133,7 +271,6 @@ function ProfileSection() {
                 </select>
             </label>
 
-            {/* Genres */}
             <div>
                 <span className="mb-1 block text-sm text-fg-muted">Любимые жанры</span>
                 {genres.length > 0 && (
@@ -149,7 +286,7 @@ function ProfileSection() {
                                     onClick={() => removeGenre(g)}
                                     className="leading-none text-fg-muted hover:text-danger"
                                 >
-                                    ×
+                                    &times;
                                 </button>
                             </span>
                         ))}
@@ -161,7 +298,7 @@ function ProfileSection() {
                         value={genreInput}
                         onChange={(e) => setGenreInput(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addGenre(genreInput); } }}
-                        placeholder="Добавить жанр…"
+                        placeholder="Например, rock"
                         className="flex-1 rounded-md border border-border bg-bg-elevated px-3 py-2 text-sm outline-none focus:border-accent"
                     />
                     <button
@@ -170,7 +307,7 @@ function ProfileSection() {
                         disabled={!genreInput.trim()}
                         className="rounded-md border border-border px-3 py-2 text-sm hover:bg-bg-elevated disabled:opacity-40"
                     >
-                        +
+                        Добавить
                     </button>
                 </div>
                 <datalist id="settings-genre-list">
@@ -179,10 +316,10 @@ function ProfileSection() {
             </div>
 
             {save.isSuccess && (
-                <p className="text-sm text-success">Профиль обновлён.</p>
+                <p className="text-sm text-success">Сохранено.</p>
             )}
             {save.isError && (
-                <p className="text-sm text-danger">Не удалось сохранить. Попробуй позже.</p>
+                <p className="text-sm text-danger">Ошибка при сохранении.</p>
             )}
 
             <button
@@ -190,13 +327,11 @@ function ProfileSection() {
                 disabled={save.isPending}
                 className="rounded-md bg-accent px-5 py-2 font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
             >
-                {save.isPending ? 'Сохраняем…' : 'Сохранить'}
+                {save.isPending ? 'Сохранение...' : 'Сохранить'}
             </button>
         </form>
     );
 }
-
-// Password section
 
 function PasswordSection() {
     const [current, setCurrent] = useState('');
@@ -210,14 +345,14 @@ function PasswordSection() {
             setCurrent(''); setNext(''); setConfirm(''); setLocalError('');
         },
         onError: (e: any) => {
-            setLocalError(e?.response?.data ?? 'Ошибка. Проверь текущий пароль.');
+            setLocalError(e?.response?.data ?? 'Ошибка смены пароля.');
         },
     });
 
     function onSubmit(e: FormEvent) {
         e.preventDefault();
         setLocalError('');
-        if (next.length < 8) { setLocalError('Новый пароль должен быть не менее 8 символов.'); return; }
+        if (next.length < 8) { setLocalError('Минимум 8 символов.'); return; }
         if (next !== confirm) { setLocalError('Пароли не совпадают.'); return; }
         save.mutate();
     }
@@ -235,7 +370,6 @@ function PasswordSection() {
                     className="w-full rounded-md border border-border bg-bg-elevated px-3 py-2 outline-none focus:border-accent"
                 />
             </label>
-
             <label className="block">
                 <span className="mb-1 block text-sm text-fg-muted">Новый пароль</span>
                 <input
@@ -248,9 +382,8 @@ function PasswordSection() {
                     className="w-full rounded-md border border-border bg-bg-elevated px-3 py-2 outline-none focus:border-accent"
                 />
             </label>
-
             <label className="block">
-                <span className="mb-1 block text-sm text-fg-muted">Повторить новый пароль</span>
+                <span className="mb-1 block text-sm text-fg-muted">Повторите новый пароль</span>
                 <input
                     type="password"
                     required
@@ -262,33 +395,25 @@ function PasswordSection() {
             </label>
 
             {localError && <p className="text-sm text-danger">{localError}</p>}
-            {save.isSuccess && <p className="text-sm text-success">Пароль успешно изменён.</p>}
+            {save.isSuccess && <p className="text-sm text-success">Пароль изменён.</p>}
 
             <button
                 type="submit"
                 disabled={save.isPending || !current || !next || !confirm}
                 className="rounded-md bg-accent px-5 py-2 font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
             >
-                {save.isPending ? 'Меняем…' : 'Изменить пароль'}
+                {save.isPending ? 'Смена...' : 'Сменить пароль'}
             </button>
         </form>
     );
 }
 
-function TabBtn({
-    active,
-    onClick,
-    children,
-}: {
-    active: boolean;
-    onClick: () => void;
-    children: React.ReactNode;
-}) {
+function TabBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
     return (
         <button
             onClick={onClick}
             className={cn(
-                '-mb-px border-b-2 px-3 py-2 text-fg-muted hover:text-fg',
+                '-mb-px border-b-2 px-3 py-2 text-fg-muted hover:text-fg whitespace-nowrap',
                 active ? 'border-accent text-fg' : 'border-transparent',
             )}
         >
