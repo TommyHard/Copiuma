@@ -70,7 +70,8 @@ public class RecommendationsService
                     p.Plays,
                     t.Duration,
                     t.IsExplicit,
-                    false))
+                    false,
+                    null))
             .ToListAsync(ct);
 
         await WriteCacheAsync(key, rows, TimeSpan.FromMinutes(15), ct);
@@ -123,7 +124,8 @@ public class RecommendationsService
                     p.CoUsers,
                     t.Duration,
                     t.IsExplicit,
-                    false))
+                    false,
+                    null))
             .ToListAsync(ct);
 
         await WriteCacheAsync(key, rows, TimeSpan.FromMinutes(30), ct);
@@ -292,7 +294,8 @@ public class RecommendationsService
                 x.Plays,
                 x.t.Duration,
                 x.t.IsExplicit,
-                false))
+                false,
+                null))
             .ToListAsync(ct);
 
         var filtered = candidates.Where(c => !knownSet.Contains(c.TrackId)).Take(take).ToList();
@@ -360,7 +363,7 @@ public class RecommendationsService
     }
 
     /// <summary>
-    /// Добавляет к каждому треку список feat. исполнителей
+    /// Добавляет к каждому треку список feat. исполнителей и генерирует CoverUrl
     /// </summary>
     public async Task<IReadOnlyList<object>> AttachFeaturedArtistsAsync(
         IReadOnlyList<TrackRecommendationItem> items, CancellationToken ct = default)
@@ -368,6 +371,7 @@ public class RecommendationsService
         if (items.Count == 0) return Array.Empty<object>();
 
         var ids = items.Select(i => i.TrackId).ToList();
+
         var rows = await _db.TrackFeaturedArtists
             .Where(fa => ids.Contains(fa.TrackId))
             .OrderBy(fa => fa.TrackId).ThenBy(fa => fa.Position)
@@ -377,6 +381,23 @@ public class RecommendationsService
         var byTrack = rows
             .GroupBy(r => r.TrackId)
             .ToDictionary(g => g.Key, g => g.Select(x => new { x.Id, x.Name }).ToList());
+
+        var trackCovers = await _db.Tracks
+            .Where(t => ids.Contains(t.Id))
+            .Select(t => new
+            {
+                t.Id,
+                t.CoverKey,
+                AlbumCoverKey = t.Album != null ? t.Album.CoverKey : null
+            })
+            .ToListAsync(ct);
+
+        var coverUrls = new Dictionary<Guid, string?>();
+        foreach (var tc in trackCovers)
+        {
+            var key = tc.CoverKey ?? tc.AlbumCoverKey;
+            coverUrls[tc.Id] = key != null ? await _storage.GeneratePresignedImageGetUrlAsync(key) : null;
+        }
 
         return items.Select(i => (object)new
         {
@@ -389,6 +410,7 @@ public class RecommendationsService
             i.Duration,
             i.IsExplicit,
             i.IsLikedByMe,
+            CoverUrl = coverUrls.TryGetValue(i.TrackId, out var curl) ? curl : null,
             FeaturedArtists = byTrack.TryGetValue(i.TrackId, out var f) ? f : new(),
         }).ToList();
     }

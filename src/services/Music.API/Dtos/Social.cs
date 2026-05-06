@@ -19,7 +19,7 @@ public record FeedItem(
     string Title,
     Guid ArtistId,
     string ArtistName,
-    string? CoverKey,
+    string? CoverUrl,
     DateTime ReleasedAt,
     TimeSpan? Duration = null,
     bool IsLikedByMe = false);

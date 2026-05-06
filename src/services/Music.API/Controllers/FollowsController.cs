@@ -362,20 +362,27 @@ public class FollowsController : ControllerBase
             albumsQuery = albumsQuery.Where(a => a.CreatedAt < before.Value);
         }
 
-        var albums = await albumsQuery
+        var albumsRaw = await albumsQuery
             .OrderByDescending(a => a.CreatedAt)
             .Take(take * 2)
-            .Select(a => new FeedItem(
-                "album",
-                a.Id,
-                a.Title,
-                a.ArtistId,
-                a.Artist!.Name,
-                a.CoverKey,
-                a.CreatedAt,
-                null,
-                false))
+            .Select(a => new { a.Id, a.Title, a.ArtistId, ArtistName = a.Artist!.Name, a.CoverKey, a.CreatedAt })
             .ToListAsync(ct);
+
+        var albums = new List<FeedItem>(albumsRaw.Count);
+        foreach (var a in albumsRaw)
+        {
+            var url = a.CoverKey != null ? await _storage.GeneratePresignedImageGetUrlAsync(a.CoverKey) : null;
+            albums.Add(new FeedItem(
+                "album", 
+                a.Id, 
+                a.Title, 
+                a.ArtistId, 
+                a.ArtistName, 
+                url, 
+                a.CreatedAt, 
+                null, 
+                false));
+        }
 
         var tracksQuery = _db.Tracks
             .Where(t => t.ArtistId != null
@@ -384,20 +391,29 @@ public class FollowsController : ControllerBase
                         && t.UploadedAt >= since);
         if (before.HasValue) tracksQuery = tracksQuery.Where(t => t.UploadedAt < before.Value);
 
-        var tracks = await tracksQuery
+        var tracksRaw = await tracksQuery
             .OrderByDescending(t => t.UploadedAt)
             .Take(take * 2)
-            .Select(t => new FeedItem(
-                "track",
+            .Select(t => new {
                 t.Id,
                 t.Title,
-                t.ArtistId!.Value,
-                t.ArtistEntity!.Name,
-                null,
+                t.ArtistId,
+                ArtistName = t.ArtistEntity!.Name,
+                t.CoverKey,
+                AlbumCoverKey = t.Album != null ? t.Album.CoverKey : null,
                 t.UploadedAt,
                 t.Duration,
-                _db.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == me)))
+                IsLikedByMe = _db.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == me)
+            })
             .ToListAsync(ct);
+
+        var tracks = new List<FeedItem>(tracksRaw.Count);
+        foreach (var t in tracksRaw)
+        {
+            var key = t.CoverKey ?? t.AlbumCoverKey;
+            var url = key != null ? await _storage.GeneratePresignedImageGetUrlAsync(key) : null;
+            tracks.Add(new FeedItem("track", t.Id, t.Title, t.ArtistId!.Value, t.ArtistName, url, t.UploadedAt, t.Duration, t.IsLikedByMe));
+        }
 
         var merged = albums.Concat(tracks)
             .OrderByDescending(x => x.ReleasedAt)

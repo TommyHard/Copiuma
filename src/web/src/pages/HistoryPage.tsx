@@ -89,6 +89,7 @@ export function HistoryPage() {
                                                 albumId: null,
                                                 trackNumber: null,
                                                 isExplicit: false,
+                                                coverUrl: t.coverUrl
                                             })
                                         }
                                         className="flex size-9 items-center justify-center rounded-full bg-accent text-accent-fg hover:opacity-90"

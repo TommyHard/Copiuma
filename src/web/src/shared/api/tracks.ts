@@ -64,7 +64,8 @@ export async function listFavorites(): Promise<FavoriteItem[]> {
         title: f.title ?? f.Title,
         artist: f.artist ?? f.Artist,
         artistId: f.artistId ?? f.ArtistId ?? null,
-        likedAt: f.likedAt ?? f.LikedAt ?? new Date().toISOString()
+        likedAt: f.likedAt ?? f.LikedAt ?? new Date().toISOString(),
+        coverUrl: f.coverUrl ?? f.CoverUrl ?? null
     }));
 }
 

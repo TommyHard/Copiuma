@@ -5,7 +5,10 @@ import { hlsMasterUrl } from '@/shared/api/catalog';
 import { reportPlayEvent } from '@/shared/api/tracks';
 import { useToggleTrackLike } from '@/features/track/useToggleTrackLike';
 import { Tooltip } from '@/shared/ui/Tooltip';
-import { PlayIcon, HeartIcon } from '@/shared/ui/icons';
+import { PlayIcon, HeartIcon, QueueIcon } from '@/shared/ui/icons';
+import { Link } from 'react-router-dom';
+import { useUIStore } from '@/shared/store/uiStore';
+import { getTrackStatus } from '@/shared/api/catalog';
 import { cn } from '@/shared/lib/cn';
 
 interface PlaySession {
@@ -273,6 +276,18 @@ export function Player() {
 
     const likeApi = useToggleTrackLike();
 
+    const { isRightOpen, rightTab, setRightTab, setRightOpen } = useUIStore();
+    const updateTrackState = usePlayer(s => s.updateTrackState);
+    const isQueueActive = isRightOpen && rightTab === 'queue';
+
+    const toggleQueue = () => {
+        if (!isRightOpen) {
+            setRightOpen(true);
+            setRightTab('queue');
+        } else {
+            setRightTab(rightTab === 'queue' ? 'friends' : 'queue');
+        }
+    };
     const [repeatState, setRepeatState] = useState<'off' | 'all' | 'one'>('off');
     const [isShuffle, setIsShuffle] = useState(false);
     const [showRemaining, setShowRemaining] = useState(false);
@@ -291,6 +306,7 @@ export function Player() {
         const nextLiked = !isLiked;
         setIsLiked(nextLiked);
         likeApi.mutate({ trackId: track.id, nextLiked });
+        updateTrackState(track.id, { isLikedByMe: nextLiked });
     };
 
     useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
@@ -329,14 +345,34 @@ export function Player() {
         if (!audioRef.current) return;
         if (!hlsRef.current) hlsRef.current = new HlsAudio(audioRef.current);
 
-        if (track && track.hlsReady !== false) {
-            hlsRef.current.load(hlsMasterUrl(track.id));
-        } else {
-            hlsRef.current.detach();
-        }
+        let cancelled = false;
 
-        return () => { };
-    }, [track?.id, track?.hlsReady]);
+        const prepareHls = async () => {
+            if (!track) {
+                hlsRef.current?.detach();
+                return;
+            }
+            try {
+                const st = await getTrackStatus(track.id);
+                if (cancelled) return;
+
+                if (st.status === 'Ready') {
+                    hlsRef.current?.load(hlsMasterUrl(track.id));
+                } else {
+                    console.warn("Трек не готов, пропускаем...");
+                    next();
+                }
+            } catch (e) {
+                if (cancelled) return;
+                console.error("Ошибка загрузки трека (404), пропускаем...", e);
+                next();
+            }
+        };
+
+        prepareHls();
+
+        return () => { cancelled = true; };
+    }, [track?.id]);
 
     useEffect(() => {
         const a = audioRef.current;
@@ -455,19 +491,52 @@ export function Player() {
 
             {/* ЛЕВАЯ ЧАСТЬ: Обложка, Инфо, Heart */}
             <div className="flex items-center gap-4 w-1/3 min-w-[200px] -translate-y-[5px]">
-                <div
-                    className="w-16 h-16 bg-bg-elevated rounded-md shrink-0 flex items-center justify-center text-fg-muted shadow-sm bg-cover bg-center overflow-hidden"
-                    style={{ backgroundImage: track.coverUrl ? `url(${track.coverUrl})` : undefined }}
-                >
-                    {!track.coverUrl && <CoverPlaceholderIcon />}
-                </div>
+                <Link to={`/tracks/${track.id}`} className="shrink-0 flex">
+                    <div
+                        className="w-16 h-16 bg-bg-elevated rounded-md flex items-center justify-center text-fg-muted shadow-sm bg-cover bg-center overflow-hidden"
+                        style={{ backgroundImage: track.coverUrl ? `url(${track.coverUrl})` : undefined }}
+                    >
+                        {!track.coverUrl && <CoverPlaceholderIcon />}
+                    </div>
+                </Link>
+
                 <div className="flex flex-col min-w-0 pr-2">
-                    <span className="text-sm font-semibold truncate text-fg hover:underline cursor-pointer">
+                    <Link
+                        to={`/tracks/${track.id}`}
+                        className="text-sm font-semibold truncate text-fg hover:underline cursor-pointer"
+                    >
                         {track.title}
-                    </span>
-                    <span className="text-xs text-fg-muted truncate hover:underline cursor-pointer">
-                        {track.artist ?? '—'}
-                    </span>
+                    </Link>
+                    <div className="text-xs text-fg-muted truncate">
+                        {track.artistId ? (
+                            <Link
+                                to={`/artists/${track.artistId}`}
+                                className="hover:text-fg hover:underline cursor-pointer"
+                            >
+                                {track.artist ?? 'Неизвестный исполнитель'}
+                            </Link>
+                        ) : (
+                            <span>
+                                {track.artist ?? 'Неизвестный исполнитель'}
+                            </span>
+                        )}
+                        {track.featuredArtists && track.featuredArtists.length > 0 && (
+                            <span>
+                                {', feat. '}
+                                {track.featuredArtists.map((fa, idx) => (
+                                    <span key={fa.id}>
+                                        {idx > 0 && ', '}
+                                        <Link
+                                            to={`/artists/${fa.id}`}
+                                            className="hover:text-fg hover:underline cursor-pointer"
+                                        >
+                                            {fa.name}
+                                        </Link>
+                                    </span>
+                                ))}
+                            </span>
+                        )}
+                    </div>
                 </div>
 
                 <LikeButton
@@ -550,6 +619,22 @@ export function Player() {
 
             {/* ПРАВАЯ ЧАСТЬ: Volume */}
             <div className="flex items-center justify-end gap-2 w-1/3 min-w-[150px] pr-[25px] -translate-y-[5px]">
+
+                <Tooltip content="Очередь">
+                    <button
+                        onClick={toggleQueue}
+                        className={cn(
+                            "relative transition-transform duration-200 hover:scale-105 active:scale-100 mr-2",
+                            isQueueActive ? "text-accent" : "text-fg-muted hover:text-fg"
+                        )}
+                    >
+                        <QueueIcon />
+                        {isQueueActive && (
+                            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-[5px] h-[5px] bg-accent rounded-full" />
+                        )}
+                    </button>
+                </Tooltip>
+
                 <Tooltip content={muted ? 'Включить' : 'Выключить'}>
                     <button
                         onClick={toggleMute}

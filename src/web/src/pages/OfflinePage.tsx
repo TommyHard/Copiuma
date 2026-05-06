@@ -187,6 +187,7 @@ function OfflineRow({ item }: { item: OfflineTrackItem }) {
                     trackNumber: null,
                     uploadedAt: '',
                     isExplicit: false,
+                    coverUrl: item.coverUrl
                 })}
                 className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg hover:opacity-90"
                 title="Играть"

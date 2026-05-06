@@ -20,6 +20,7 @@ function normalizeRec(t: any): TrackListItem {
         isExplicit: t.isExplicit ?? t.IsExplicit ?? false,
         isLikedByMe: t.isLikedByMe ?? t.IsLikedByMe ?? false,
         featuredArtists: feat,
+        coverUrl: t.coverUrl ?? t.CoverUrl ?? null,
     };
 }
 

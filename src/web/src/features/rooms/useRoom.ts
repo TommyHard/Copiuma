@@ -278,6 +278,7 @@ function applyToPlayer(t: { trackId: string; title: string; artist: string | nul
             trackNumber: null,
             isExplicit: false,
             hlsReady: true,
+            coverUrl: null,
         });
     }
     if (t.position) player.seek(t.position);

@@ -38,10 +38,11 @@ export function FavoritesPage() {
                                     artist: f.artist,
                                     duration: null,
                                     uploadedAt: '',
-                                    artistId: null,
+                                    artistId: f.artistId ?? null,
                                     albumId: null,
                                     trackNumber: null,
                                     isExplicit: false,
+                                    coverUrl: f.coverUrl
                                 })
                             }
                             className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg hover:opacity-90"

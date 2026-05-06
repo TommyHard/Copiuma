@@ -222,7 +222,7 @@ public class TracksController : ControllerBase
 
         var visibleTracks = _moderation.ApplyVisibilityFilter(_context.Tracks, UserId);
 
-        var tracks = await visibleTracks
+        var tracksRaw = await visibleTracks
             .OrderByDescending(t => t.UploadedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -237,6 +237,8 @@ public class TracksController : ControllerBase
                 t.AlbumId,
                 t.TrackNumber,
                 t.IsExplicit,
+                t.CoverKey,
+                AlbumCoverKey = t.Album != null ? t.Album.CoverKey : null,
                 IsLikedByMe = _context.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == UserId),
                 FeaturedArtists = _context.TrackFeaturedArtists
                     .Where(fa => fa.TrackId == t.Id)
@@ -246,7 +248,30 @@ public class TracksController : ControllerBase
             })
             .ToListAsync();
 
-        var payload = JsonSerializer.Serialize(tracks, CamelCaseJson);
+        var tracksToCache = new List<object>(tracksRaw.Count);
+        foreach (var t in tracksRaw)
+        {
+            var key = t.CoverKey ?? t.AlbumCoverKey;
+            var url = key != null ? await _storage.GeneratePresignedImageGetUrlAsync(key) : null;
+
+            tracksToCache.Add(new
+            {
+                t.Id,
+                t.Title,
+                t.Artist,
+                t.Duration,
+                t.UploadedAt,
+                t.ArtistId,
+                t.AlbumId,
+                t.TrackNumber,
+                t.IsExplicit,
+                CoverUrl = url,
+                t.IsLikedByMe,
+                t.FeaturedArtists
+            });
+        }
+
+        var payload = JsonSerializer.Serialize(tracksToCache, CamelCaseJson);
         await _cache.SetStringAsync(cacheKey, payload, new DistributedCacheEntryOptions
         {
             AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)

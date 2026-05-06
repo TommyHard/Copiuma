@@ -86,6 +86,7 @@ export interface FavoriteItem {
     artist: string | null;
     artistId?: string | null;
     likedAt: string;
+    coverUrl?: string | null;
 }
 
 export interface UploadResult {
@@ -165,6 +166,7 @@ export interface FeedItem {
     uploadedAt: string;
     duration: string | null;
     isLikedByMe?: boolean;
+    coverUrl?: string | null;
 }
 
 export interface FriendFeedItem {
@@ -208,6 +210,7 @@ export interface PlaylistTrack {
     addedAt: string;
     addedByUserId?: string;
     isLikedByMe?: boolean;
+    coverUrl?: string | null;
 }
 
 export interface PlaylistDetail extends PlaylistSummary {
@@ -284,6 +287,7 @@ export interface HistoryTrackEntry {
     lastPlayedAt: string;
     playCount: number;
     totalPlayedMs: number;
+    coverUrl?: string | null;
 }
 
 export interface HistoryArtistEntry {

@@ -11,7 +11,8 @@ public record TrackRecommendationItem(
     int Score,
     TimeSpan? Duration = null,
     bool IsExplicit = false,
-    bool IsLikedByMe = false);
+    bool IsLikedByMe = false,
+    string? CoverUrl = null);
 
 public record ArtistRecommendationItem(
     Guid ArtistId,

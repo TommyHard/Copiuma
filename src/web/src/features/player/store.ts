@@ -22,6 +22,8 @@ export interface PlayerState {
 
     playTrack(track: PlayerTrack): void;
     playQueue(tracks: PlayerTrack[], startIndex?: number): void;
+    removeFromQueue(index: number): void;
+    updateTrackState(trackId: string, partial: Partial<PlayerTrack>): void;
     togglePlay(): void;
     next(): void;
     prev(): void;
@@ -85,6 +87,21 @@ export const usePlayer = create<PlayerState>()(
                 } else {
                     set({ seekRequest: { value: 0, nonce: Date.now() } });
                 }
+            },
+
+            removeFromQueue(idx) {
+                set((s) => {
+                    const newQueue = [...s.queue];
+                    newQueue.splice(idx, 1);
+                    let newIndex = s.index;
+                    if (idx < s.index) newIndex--;
+                    return { queue: newQueue, index: newIndex };
+                });
+            },
+            updateTrackState(trackId, partial) {
+                set((s) => ({
+                    queue: s.queue.map((t) => t.id === trackId ? { ...t, ...partial } : t)
+                }));
             },
 
             setPosition(value) {

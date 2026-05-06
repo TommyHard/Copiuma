@@ -191,6 +191,7 @@ export function TrackPage() {
                             albumId: t.albumId,
                             trackNumber: t.trackNumber,
                             isExplicit: t.isExplicit,
+                            coverUrl: t.coverUrl
                         })
                     }
                     className="rounded-md bg-accent px-4 py-2 font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"

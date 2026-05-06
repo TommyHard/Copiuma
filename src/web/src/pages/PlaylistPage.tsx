@@ -180,6 +180,7 @@ export function PlaylistPage() {
                 albumId: null,
                 trackNumber: null,
                 isExplicit: t.isExplicit,
+                coverUrl: t.coverUrl
             })),
             0,
         );
@@ -435,6 +436,7 @@ function PlaylistTrackRow({
         albumId: null,
         trackNumber: null,
         isExplicit: t.isExplicit,
+        coverUrl: t.coverUrl
     };
 
     return (

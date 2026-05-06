@@ -3,18 +3,20 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { TrackListItem } from '@/shared/types';
 import { usePlayTrack } from '@/features/player/usePlayTrack';
+import { usePlayer } from '@/features/player/store';
 import { useToggleTrackLike } from '@/features/track/useToggleTrackLike';
 import { dislikeTrack, undoDislikeTrack } from '@/shared/api/dislikes';
 import { addTrack, listPlaylists } from '@/shared/api/playlists';
 import { Tooltip } from '@/shared/ui/Tooltip';
 import { useContextMenu, ContextMenuPortal, ContextMenuItem, ContextMenuSub, ContextMenuSeparator } from '@/shared/ui/ContextMenu';
-import { PlayIcon, HeartIcon, PlusIcon, DislikeIcon, SearchIcon } from '@/shared/ui/icons';
+import { PlayIcon, HeartIcon, PlusIcon, DislikeIcon, SearchIcon, TrashIcon } from '@/shared/ui/icons';
 import { cn } from '@/shared/lib/cn';
 
-export function TrackRow({ track, number }: { track: TrackListItem; number?: number }) {
+export function TrackRow({ track, number, onPlay, onRemoveFromQueue }: { track: TrackListItem; number?: number; onPlay?: () => void; onRemoveFromQueue?: () => void; }) {
     const play = usePlayTrack();
     const qc = useQueryClient();
     const like = useToggleTrackLike();
+    const updatePlayerTrack = usePlayer(s => s.updateTrackState);
     const liked = !!track.isLikedByMe;
 
     const [isDisliked, setIsDisliked] = useState(track.isDislikedByMe ?? false);
@@ -67,7 +69,7 @@ export function TrackRow({ track, number }: { track: TrackListItem; number?: num
             >
                 <Tooltip position="top" content={isDisliked ? "Трек скрыт" : "Играть"}>
                     <button
-                        onClick={() => play(track)}
+                        onClick={() => onPlay ? onPlay() : play(track)}
                         disabled={isDisliked}
                         className="relative flex items-center justify-center size-8 shrink-0 text-fg-muted hover:text-fg transition-colors disabled:opacity-50"
                     >
@@ -126,7 +128,10 @@ export function TrackRow({ track, number }: { track: TrackListItem; number?: num
 
                 <Tooltip position="top" content={liked ? "Убрать из избранного" : "В избранное"}>
                     <button
-                        onClick={() => like.mutate({ trackId: track.id, nextLiked: !liked })}
+                        onClick={() => {
+                            like.mutate({ trackId: track.id, nextLiked: !liked });
+                            updatePlayerTrack?.(track.id, { isLikedByMe: !liked });
+                        }}
                         disabled={like.isPending}
                         className={cn(
                             "relative transition-transform hover:scale-110 disabled:opacity-50 shrink-0",
@@ -179,6 +184,21 @@ export function TrackRow({ track, number }: { track: TrackListItem; number?: num
                         ))}
                     </div>
                 </ContextMenuSub>
+
+                {onRemoveFromQueue && (
+                    <>
+                        <ContextMenuItem
+                            icon={<TrashIcon />}
+                            onClick={() => {
+                                onRemoveFromQueue();
+                                contextMenu.close();
+                            }}
+                        >
+                            Удалить из очереди
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                    </>
+                )}
 
                 <ContextMenuItem
                     danger

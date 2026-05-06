@@ -11,6 +11,7 @@ export interface OfflineTrackItem {
     artistId: string | null;
     albumId: string | null;
     fileKey: string | null;
+    coverUrl?: string | null;
 }
 
 function normalize(t: any): OfflineTrackItem {
@@ -25,6 +26,7 @@ function normalize(t: any): OfflineTrackItem {
         artistId: t.artistId ?? t.ArtistId ?? null,
         albumId: t.albumId ?? t.AlbumId ?? null,
         fileKey: t.fileKey ?? t.FileKey ?? null,
+        coverUrl: t.coverUrl ?? t.CoverUrl ?? null
     };
 }
 

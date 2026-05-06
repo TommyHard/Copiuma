@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/features/auth/useAuth';
@@ -7,12 +7,20 @@ import { batchUsers } from '@/shared/api/users';
 import { forYouTracks, popularTracks, trendingArtists } from '@/shared/api/recommendations';
 import { listTracks } from '@/shared/api/catalog';
 import { TrackRow } from './track-row';
-import type { FriendFeedItem } from '@/shared/types';
+import { useUIStore } from '@/shared/store/uiStore';
+import { usePlayer } from '@/features/player/store';
+import { getTrackStatus } from '@/shared/api/catalog';
+import type { FriendFeedItem, TrackListItem } from '@/shared/types';
 import { Tooltip } from '@/shared/ui/Tooltip';
-import { SidebarLeftIcon, SidebarRightIcon, UsersIcon, MusicIcon } from '@/shared/ui/icons';
+import { SidebarLeftIcon, SidebarRightIcon, UsersIcon, MusicIcon, ArrowRightIcon, QueueIcon, TrashIcon } from '@/shared/ui/icons';
 import { cn } from '@/shared/lib/cn';
 
 const scrollbarClasses = "[&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-fg-muted/50";
+
+const scrollableListClasses = cn(
+    "max-h-[400px] overflow-y-auto overflow-x-hidden rounded-md border border-border",
+    scrollbarClasses
+);
 
 function ResizeHandle({
     width,
@@ -69,12 +77,42 @@ export function HomePage() {
         enabled: popularEmpty,
     });
 
+    const playQueueStore = usePlayer(s => s.playQueue);
+
+    const handlePlayContext = async (list: TrackListItem[], index: number) => {
+        const sliced = list.slice(index);
+
+        const playerTracks = sliced.map(t => ({
+            id: t.id, title: t.title, artist: t.artist, duration: t.duration,
+            uploadedAt: t.uploadedAt, artistId: t.artistId ?? null,
+            albumId: t.albumId ?? null, trackNumber: t.trackNumber ?? null,
+            isExplicit: t.isExplicit, coverUrl: t.coverUrl,
+            isLikedByMe: t.isLikedByMe, featuredArtists: t.featuredArtists,
+            hlsReady: true
+        }));
+
+        try {
+            const st = await getTrackStatus(playerTracks[0].id);
+            if (st.status !== 'Ready') {
+                alert('Трек обрабатывается. Подождите...');
+                return;
+            }
+            playQueueStore(playerTracks as any, 0);
+        } catch (e) {
+            console.error("Ошибка проверки статуса трека");
+        }
+    };
+
+    const feedTracks = feed.data?.map(f => ({
+        id: f.trackId, title: f.title, artist: f.artist, duration: f.duration, uploadedAt: f.uploadedAt,
+        artistId: f.artistId, albumId: null, trackNumber: null, isExplicit: false, isLikedByMe: f.isLikedByMe ?? false, coverUrl: f.coverUrl
+    })) || [];
+
     const [leftWidth, setLeftWidth] = useState(250);
     const [rightWidth, setRightWidth] = useState(280);
 
     const [isLeftOpen, setIsLeftOpen] = useState(true);
-    const [isRightOpen, setIsRightOpen] = useState(true);
-    const [rightTab, setRightTab] = useState<'nowPlaying' | 'friends'>('nowPlaying');
+    const { isRightOpen, rightTab, setRightOpen, setRightTab } = useUIStore();
 
     const clampWidth = useCallback((w: number) => {
         const maxW = typeof window !== 'undefined' ? window.innerWidth * 0.25 : 300;
@@ -166,7 +204,7 @@ export function HomePage() {
                 <div className="absolute top-4 right-4 z-30 bg-bg rounded-md border border-border shadow-sm">
                     <Tooltip position="left" content={isRightOpen ? "Скрыть панель" : "Показать панель"}>
                         <button
-                            onClick={() => setIsRightOpen(!isRightOpen)}
+                            onClick={() => setRightOpen(!isRightOpen)}
                             className={cn(
                                 "relative p-1.5 rounded-md transition-colors",
                                 !isRightOpen ? 'bg-bg-elevated text-accent shadow-sm' : 'text-fg-muted hover:text-fg hover:bg-bg-elevated/50'
@@ -185,57 +223,29 @@ export function HomePage() {
                         </h1>
                     </div>
 
-                    {forYou.data && forYou.data.length > 0 && (
-                        <Section title="Для вас">
-                            <ul className="rounded-md border border-border">
-                                {forYou.data.map((t, i) => (
-                                    <TrackRow key={`foryou-${t.id}-${i}`} track={t} />
-                                ))}
-                            </ul>
+                    {/* ПОПУЛЯРНЫЕ АРТИСТЫ */}
+                    {artists.data && artists.data.length > 0 && (
+                        <Section title="Популярные артисты">
+                            <ArtistSlider artists={artists.data} />
                         </Section>
                     )}
 
-                    <Section title={popularEmpty ? 'Каталог' : 'Популярное'} actionTo="/catalog" actionLabel="Смотреть все">
-                        {popular.isLoading && <p className="text-fg-muted">Загрузка...</p>}
-                        {popular.data && popular.data.length > 0 && (
-                            <ul className="rounded-md border border-border">
-                                {popular.data.map((t, i) => (
-                                    <TrackRow key={`pop-${t.id}-${i}`} track={t} />
-                                ))}
-                            </ul>
-                        )}
-                        {popularEmpty && catalog.data && catalog.data.length > 0 && (
-                            <ul className="rounded-md">
-                                {catalog.data.map((t, i) => (
-                                    <TrackRow key={`cat-${t.id}-${i}`} track={t} />
-                                ))}
-                            </ul>
-                        )}
-                    </Section>
-
+                    {/* ЛЕНТА ПОДПИСОК */}
                     <Section title="Лента подписок">
                         {feed.isLoading && <p className="text-fg-muted">Загрузка ленты...</p>}
                         {feed.data && feed.data.length > 0 ? (
-                            <ul className="rounded-md border border-border">
-                                {feed.data.map((f, i) => (
-                                    <TrackRow
-                                        key={`feed-${f.trackId}-${i}`}
-                                        number={i + 1}
-                                        track={{
-                                            id: f.trackId,
-                                            title: f.title,
-                                            artist: f.artist,
-                                            duration: f.duration,
-                                            uploadedAt: f.uploadedAt,
-                                            artistId: f.artistId,
-                                            albumId: null,
-                                            trackNumber: null,
-                                            isExplicit: false,
-                                            isLikedByMe: f.isLikedByMe ?? false,
-                                        }}
-                                    />
-                                ))}
-                            </ul>
+                            <div className={scrollableListClasses}>
+                                <ul>
+                                    {feedTracks.map((t, i) => (
+                                        <TrackRow
+                                            key={`feed-${t.id}-${i}`}
+                                            number={i + 1}
+                                            track={t} // Используем уже подготовленный массив
+                                            onPlay={() => handlePlayContext(feedTracks, i)} // <-- Передаем функцию для очереди!
+                                        />
+                                    ))}
+                                </ul>
+                            </div>
                         ) : (
                             !feed.isLoading && (
                                 <div className="rounded-md border border-border bg-bg p-6 text-center text-fg-muted">
@@ -244,6 +254,53 @@ export function HomePage() {
                             )
                         )}
                     </Section>
+
+                    {/* ДЛЯ ВАС */}
+                    {forYou.data && forYou.data.length > 0 && (
+                        <Section title="Для вас">
+                            <div className={scrollableListClasses}>
+                                <ul>
+                                    {forYou.data.map((t, i) => (
+                                        <TrackRow
+                                            key={`foryou-${t.id}-${i}`}
+                                            track={t}
+                                            onPlay={() => handlePlayContext(forYou.data!, i)}
+                                        />
+                                    ))}
+                                </ul>
+                            </div>
+                        </Section>
+                    )}
+
+                    {/* ПОПУЛЯРНОЕ ИЛИ КАТАЛОГ */}
+                    <Section title={popularEmpty ? 'Каталог' : 'Популярное'} actionTo="/catalog" actionLabel="Смотреть все">
+                        <div className={scrollableListClasses}>
+                            {popular.isLoading && <p className="text-fg-muted">Загрузка...</p>}
+                            {popular.data && popular.data.length > 0 && (
+                                <ul>
+                                    {popular.data.map((t, i) => (
+                                        <TrackRow
+                                            key={`pop-${t.id}-${i}`}
+                                            track={t}
+                                            onPlay={() => handlePlayContext(popular.data!, i)}
+                                        />
+                                    ))}
+                                </ul>
+                            )}
+                            {popularEmpty && catalog.data && catalog.data.length > 0 && (
+                                <ul>
+                                    {catalog.data.map((t, i) => (
+                                        <TrackRow
+                                            key={`cat-${t.id}-${i}`}
+                                            track={t}
+                                            onPlay={() => handlePlayContext(catalog.data!, i)}
+                                        />
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    </Section>
+
                 </div>
             </section>
 
@@ -269,15 +326,15 @@ export function HomePage() {
 
                         <div className="flex items-center justify-between mb-5">
                             <h2 className="text-lg font-semibold truncate mr-2">
-                                {rightTab === 'nowPlaying' ? 'Сейчас играет' : 'Активность'}
+                                {rightTab === 'queue' ? 'Очередь' : 'Активность'}
                             </h2>
 
-                            <Tooltip position="left" content={rightTab === 'nowPlaying' ? "Смотреть активность друзей" : "Вернуться к плееру"}>
+                            <Tooltip position="left" content={rightTab === 'queue' ? "Смотреть активность друзей" : "Смотреть очередь"}>
                                 <button
-                                    onClick={() => setRightTab(prev => prev === 'nowPlaying' ? 'friends' : 'nowPlaying')}
+                                    onClick={() => setRightTab(rightTab === 'queue' ? 'friends' : 'queue')}
                                     className="relative p-1.5 rounded-md border border-border bg-bg hover:bg-bg-elevated transition-colors text-fg-muted hover:text-fg shadow-sm shrink-0"
                                 >
-                                    {rightTab === 'nowPlaying' ? <UsersIcon /> : <MusicIcon />}
+                                    {rightTab === 'queue' ? <UsersIcon /> : <QueueIcon />}
                                 </button>
                             </Tooltip>
                         </div>
@@ -290,14 +347,7 @@ export function HomePage() {
                                     <p className="text-fg-muted text-center mt-4">Нет недавней активности</p>
                                 )
                             ) : (
-                                <div className="flex items-center justify-center h-48 rounded-lg border border-dashed border-border bg-bg/50">
-                                    <div className="text-center text-fg-muted">
-                                        <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-bg-elevated mb-3 shadow-sm">
-                                            <MusicIcon />
-                                        </div>
-                                        <p className="text-xs">Музыка не воспроизводится</p>
-                                    </div>
-                                </div>
+                                <QueueView />
                             )}
                         </div>
                     </div>
@@ -330,6 +380,158 @@ function Section({
                 )}
             </header>
             {children}
+        </div>
+    );
+}
+
+function QueueView() {
+    const queue = usePlayer(s => s.queue);
+    const index = usePlayer(s => s.index);
+    const removeFromQueue = usePlayer(s => s.removeFromQueue);
+    const playQueueStore = usePlayer(s => s.playQueue);
+
+    if (queue.length === 0) {
+        return (
+            <div className="flex items-center justify-center h-48 rounded-lg border border-dashed border-border bg-bg/50">
+                <div className="text-center text-fg-muted">
+                    <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-bg-elevated mb-3 shadow-sm">
+                        <MusicIcon />
+                    </div>
+                    <p className="text-xs">Очередь пуста</p>
+                </div>
+            </div>
+        );
+    }
+
+    const currentTrack = queue[index];
+    const upcoming = queue.map((t, i) => ({ track: t, originalIndex: i })).slice(index + 1);
+
+    return (
+        <div className="space-y-6">
+            {currentTrack && (
+                <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-fg">Сейчас играет</h3>
+                    <div className="rounded-md border border-border bg-bg-elevated p-3 flex items-center gap-3">
+                        <Link to={`/tracks/${currentTrack.id}`} className="shrink-0">
+                            <div
+                                className="w-12 h-12 rounded bg-cover bg-center bg-bg shadow-sm"
+                                style={{ backgroundImage: currentTrack.coverUrl ? `url(${currentTrack.coverUrl})` : undefined }}
+                            />
+                        </Link>
+                        <div className="min-w-0 flex-1">
+                            <div className="text-sm font-medium truncate text-fg hover:underline">
+                                <Link to={`/tracks/${currentTrack.id}`}>{currentTrack.title}</Link>
+                            </div>
+                            <div className="text-xs text-fg-muted truncate">
+                                {currentTrack.artistId ? (
+                                    <Link to={`/artists/${currentTrack.artistId}`} className="hover:underline hover:text-fg">
+                                        {currentTrack.artist || 'Неизвестный исполнитель'}
+                                    </Link>
+                                ) : (
+                                    currentTrack.artist || 'Неизвестный исполнитель'
+                                )}
+                                {currentTrack.featuredArtists?.map(fa => (
+                                    <span key={fa.id}>
+                                        {', feat. '}
+                                        <Link to={`/artists/${fa.id}`} className="hover:underline hover:text-fg">{fa.name}</Link>
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {upcoming.length > 0 && (
+                <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-fg">Далее</h3>
+                    <ul className="rounded-md border border-border bg-bg-elevated">
+                        {upcoming.map(({ track, originalIndex }) => (
+                            <TrackRow
+                                key={`queue-${track.id}-${originalIndex}`}
+                                track={track as any}
+                                onPlay={() => playQueueStore(queue, originalIndex)}
+                                onRemoveFromQueue={() => removeFromQueue(originalIndex)}
+                            />
+                        ))}
+                    </ul>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function ArtistSlider({ artists }: { artists: import('@/shared/types').ArtistSummary[] }) {
+    const scrollRef = useRef<HTMLUListElement>(null);
+    const [showLeft, setShowLeft] = useState(false);
+    const [showRight, setShowRight] = useState(true);
+
+    const handleScroll = () => {
+        if (!scrollRef.current) return;
+        const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
+        setShowLeft(scrollLeft > 0);
+        setShowRight(Math.ceil(scrollLeft + clientWidth) < scrollWidth - 2);
+    };
+
+    useEffect(() => {
+        handleScroll();
+        window.addEventListener('resize', handleScroll);
+        return () => window.removeEventListener('resize', handleScroll);
+    }, [artists]);
+
+    const scroll = (dir: 'left' | 'right') => {
+        if (!scrollRef.current) return;
+        const clientWidth = scrollRef.current.clientWidth;
+        const scrollAmount = clientWidth * 0.75;
+        scrollRef.current.scrollBy({
+            left: dir === 'left' ? -scrollAmount : scrollAmount,
+            behavior: 'smooth'
+        });
+    };
+
+    return (
+        <div className="relative group/slider -mx-2 px-2">
+            {showLeft && (
+                <button
+                    onClick={() => scroll('left')}
+                    className="absolute left-0 top-1/2 -translate-y-1/2 z-10 flex size-8 items-center justify-center rounded-full border border-border bg-bg-elevated shadow-md text-fg hover:text-accent transition-all opacity-0 group-hover/slider:opacity-100"
+                >
+                    <ArrowRightIcon className="rotate-180" />
+                </button>
+            )}
+
+            <ul
+                ref={scrollRef}
+                onScroll={handleScroll}
+                className="flex gap-4 overflow-x-auto scroll-smooth py-2 snap-x snap-mandatory [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+            >
+                {artists.map((a, i) => (
+                    <li key={`artist-${a.id}-${i}`} className="snap-start shrink-0 w-28 sm:w-32 md:w-36">
+                        <Link
+                            to={`/artists/${a.id}`}
+                            className="block space-y-2 rounded-md border border-border bg-bg p-3 hover:bg-bg/70 hover:underline transition-colors"
+                        >
+                            <div
+                                className="aspect-square w-full rounded-full bg-bg-elevated bg-cover bg-center flex items-center justify-center text-xl font-bold text-fg-muted mx-auto"
+                                style={{ backgroundImage: a.avatarUrl ? `url('${a.avatarUrl}')` : undefined }}
+                                aria-hidden={!!a.avatarUrl}
+                            >
+                                {!a.avatarUrl && a.name ? a.name.charAt(0).toUpperCase() : null}
+                            </div>
+                            <div className="truncate text-center text-xs font-medium">{a.name}</div>
+                        </Link>
+                    </li>
+                ))}
+            </ul>
+
+            {showRight && (
+                <button
+                    onClick={() => scroll('right')}
+                    className="absolute right-0 top-1/2 -translate-y-1/2 z-10 flex size-8 items-center justify-center rounded-full border border-border bg-bg-elevated shadow-md text-fg hover:text-accent transition-all opacity-0 group-hover/slider:opacity-100"
+                >
+                    <ArrowRightIcon />
+                </button>
+            )}
         </div>
     );
 }
