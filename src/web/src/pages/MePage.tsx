@@ -4,12 +4,6 @@ import { useAuth } from '@/features/auth/useAuth';
 import { becomeArtist } from '@/shared/api/me';
 import { listSessions, revokeSession, revokeAllOtherSessions } from '@/shared/api/sessions';
 
-/**
- * Профиль: основная инфа, кнопка become-artist, список активных сессий
- *
- * После успешного апгрейда роли роль в JWT остаётся User до перелогина
- * Показываем подсказку "нужно войти заново"
- */
 export function MePage() {
     const { user, refreshUser, logout } = useAuth();
     const qc = useQueryClient();

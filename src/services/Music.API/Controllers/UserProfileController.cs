@@ -55,18 +55,28 @@ public class UserProfileController : ControllerBase
         var totalHours = (playStats?.TotalMs ?? 0) / 3_600_000.0;
         var uniqueTracks = playStats?.TrackCount ?? 0;
 
-        // Топ-3 артиста за 30 дней
+        // Топ-5 артиста за 30 дней
         var topArtistsRaw = await _db.PlayEvents
             .Where(pe => pe.UserId == id && pe.StartedAt >= since30 && pe.Track!.ArtistId != null)
-            .GroupBy(pe => new { pe.Track!.ArtistId, ArtistName = pe.Track.Artist })
+            .GroupBy(pe => new { pe.Track!.ArtistId, ArtistName = pe.Track.Artist, AvatarKey = pe.Track.ArtistEntity!.AvatarKey })
             .OrderByDescending(g => g.Sum(x => x.PlayedMs))
-            .Take(3)
-            .Select(g => new { g.Key.ArtistId, g.Key.ArtistName })
+            .Take(5)
+            .Select(g => new { g.Key.ArtistId, g.Key.ArtistName, g.Key.AvatarKey })
             .ToListAsync(ct);
 
-        var topArtists = topArtistsRaw
-            .Select(x => new UserTopArtistItem(x.ArtistId!.Value, x.ArtistName ?? "Unknown"))
-            .ToList();
+        var topArtists = new List<UserTopArtistItem>();
+        foreach (var artist in topArtistsRaw)
+        {
+            string? artistAvatarUrl = !string.IsNullOrEmpty(artist.AvatarKey)
+                ? await _storage.GeneratePresignedImageGetUrlAsync(artist.AvatarKey)
+                : null;
+
+            topArtists.Add(new UserTopArtistItem(
+                artist.ArtistId!.Value,
+                artist.ArtistName ?? "Unknown",
+                artistAvatarUrl
+            ));
+        }
 
         // Подписчики (followers) — кто подписан на этого пользователя
         var followersCount = await _db.Follows
@@ -146,7 +156,7 @@ public class UserProfileController : ControllerBase
 // DTO
 internal record AvatarKeySyncResponse(string? OldKey);
 
-public record UserTopArtistItem(Guid ArtistId, string Name);
+public record UserTopArtistItem(Guid ArtistId, string Name, string? AvatarUrl);
 
 public record UserProfileStatsResponse(
     string? AvatarUrl,

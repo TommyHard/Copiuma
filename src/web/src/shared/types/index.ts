@@ -349,7 +349,7 @@ export interface PublicUserProfile {
     favoriteGenres: string[];
     listeningHours: number;
     uniqueTracksPlayed: number;
-    topArtists: { artistId: string; name: string }[];
+    topArtists: { artistId: string; name: string; avatarUrl?: string | null }[];
     followers: number;
     following: number;
 }
