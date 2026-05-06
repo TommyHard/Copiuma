@@ -1,18 +1,22 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/features/auth/useAuth';
-import { getFeed, getFriendsFeed } from '@/shared/api/follows';
+import { getFeed, getFriendsFeed, followArtist, unfollowArtist, listFollowedArtists, getFollowedUsers, unfollowUser } from '@/shared/api/follows';
 import { batchUsers } from '@/shared/api/users';
 import { forYouTracks, popularTracks, trendingArtists } from '@/shared/api/recommendations';
 import { listTracks } from '@/shared/api/catalog';
+import { listFavorites } from '@/shared/api/tracks';
 import { TrackRow } from './track-row';
 import { useUIStore } from '@/shared/store/uiStore';
 import { usePlayer } from '@/features/player/store';
 import { getTrackStatus } from '@/shared/api/catalog';
-import type { FriendFeedItem, TrackListItem } from '@/shared/types';
+import { getArtist } from '@/shared/api/artists';
+import { getPublicUserProfile } from '@/shared/api/profile';
+import { useContextMenu, ContextMenuPortal, ContextMenuItem } from '@/shared/ui/ContextMenu';
+import type { FriendFeedItem, TrackListItem, FollowedUser, FollowedArtist } from '@/shared/types';
 import { Tooltip } from '@/shared/ui/Tooltip';
-import { SidebarLeftIcon, SidebarRightIcon, UsersIcon, MusicIcon, ArrowRightIcon, QueueIcon, TrashIcon } from '@/shared/ui/icons';
+import { SidebarLeftIcon, SidebarRightIcon, UsersIcon, MusicIcon, ArrowRightIcon, QueueIcon, HeartIcon, TrashIcon } from '@/shared/ui/icons';
 import { cn } from '@/shared/lib/cn';
 
 const scrollbarClasses = "[&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-fg-muted/50";
@@ -61,6 +65,116 @@ function ResizeHandle({
     );
 }
 
+// === КОМПОНЕНТ ДЛЯ ОТОБРАЖЕНИЯ ДРУГА С КОНТЕКСТНЫМ МЕНЮ И АВАТАРОМ ===
+function FriendSidebarItem({ user, nameMap }: { user: FollowedUser; nameMap: Record<string, string> }) {
+    const qc = useQueryClient();
+    const contextMenu = useContextMenu();
+    const name = nameMap[user.userId] ?? user.userId.slice(0, 8);
+
+    // Дополнительно запрашиваем профиль, чтобы получить avatarUrl
+    const profileQ = useQuery({
+        queryKey: ['user-profile', user.userId],
+        queryFn: () => getPublicUserProfile(user.userId),
+        staleTime: 5 * 60 * 1000,
+    });
+    const avatarUrl = profileQ.data?.avatarUrl;
+
+    const unfollow = useMutation({
+        mutationFn: () => unfollowUser(user.userId),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['following-users'] })
+    });
+
+    return (
+        <>
+            <Link
+                to={`/users/${user.userId}`}
+                onContextMenu={contextMenu.onContextMenu}
+                className="flex items-center gap-3 mb-1 p-2 -mx-2 rounded-lg hover:bg-accent/10 transition-colors group"
+            >
+                <div
+                    className="w-14 h-14 shrink-0 rounded-full bg-bg-elevated bg-cover bg-center flex items-center justify-center shadow-md transition-transform duration-300 group-hover:scale-105 text-xl font-bold text-fg-muted"
+                    style={{ backgroundImage: avatarUrl ? `url('${avatarUrl}')` : undefined }}
+                >
+                    {!avatarUrl && name.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex flex-col min-w-0">
+                    <span className="text-[17px] font-semibold text-fg tracking-tight truncate group-hover:text-accent transition-colors">{name}</span>
+                    <span className="text-[13px] text-fg-muted truncate">
+                        Друг • {new Date(user.subscribedAt).toLocaleDateString('ru-RU')}
+                    </span>
+                </div>
+            </Link>
+            <ContextMenuPortal isOpen={contextMenu.isOpen} position={contextMenu.position}>
+                <ContextMenuItem
+                    danger
+                    icon={<TrashIcon className="w-4 h-4" />}
+                    onClick={() => {
+                        unfollow.mutate();
+                        contextMenu.close();
+                    }}
+                >
+                    Отписаться
+                </ContextMenuItem>
+            </ContextMenuPortal>
+        </>
+    );
+}
+
+// === КОМПОНЕНТ ДЛЯ ОТОБРАЖЕНИЯ АРТИСТА С КОНТЕКСТНЫМ МЕНЮ И АВАТАРОМ ===
+function ArtistSidebarItem({ artist }: { artist: FollowedArtist }) {
+    const qc = useQueryClient();
+    const contextMenu = useContextMenu();
+
+    // Дополнительно запрашиваем артиста, чтобы получить его актуальный avatarUrl
+    const artistQ = useQuery({
+        queryKey: ['artist', artist.artistId],
+        queryFn: () => getArtist(artist.artistId),
+        staleTime: 5 * 60 * 1000,
+    });
+    const avatarUrl = artistQ.data?.avatarUrl;
+
+    const unfollow = useMutation({
+        mutationFn: () => unfollowArtist(artist.artistId),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['followed-artists'] })
+    });
+
+    return (
+        <>
+            <Link
+                to={`/artists/${artist.artistId}`}
+                onContextMenu={contextMenu.onContextMenu}
+                className="flex items-center gap-3 mb-1 p-2 -mx-2 rounded-lg hover:bg-accent/10 transition-colors group"
+            >
+                <div
+                    className="w-14 h-14 shrink-0 rounded-full bg-bg-elevated bg-cover bg-center flex items-center justify-center shadow-md transition-transform duration-300 group-hover:scale-105 text-xl font-bold text-fg-muted"
+                    style={{ backgroundImage: avatarUrl ? `url('${avatarUrl}')` : undefined }}
+                >
+                    {!avatarUrl && artist.name ? artist.name.charAt(0).toUpperCase() : null}
+                </div>
+                <div className="flex flex-col min-w-0">
+                    <span className="text-[17px] font-semibold text-fg tracking-tight truncate group-hover:text-accent transition-colors">{artist.name}</span>
+                    <span className="text-[13px] text-fg-muted truncate">
+                        Артист • {new Date(artist.followedAt).toLocaleDateString('ru-RU')}
+                    </span>
+                </div>
+            </Link>
+            <ContextMenuPortal isOpen={contextMenu.isOpen} position={contextMenu.position}>
+                <ContextMenuItem
+                    danger
+                    icon={<TrashIcon className="w-4 h-4" />}
+                    onClick={() => {
+                        unfollow.mutate();
+                        contextMenu.close();
+                    }}
+                >
+                    Отписаться
+                </ContextMenuItem>
+            </ContextMenuPortal>
+        </>
+    );
+}
+
+
 export function HomePage() {
     const { user } = useAuth();
 
@@ -69,6 +183,21 @@ export function HomePage() {
     const popular = useQuery({ queryKey: ['popular'], queryFn: () => popularTracks(15) });
     const forYou = useQuery({ queryKey: ['for-you'], queryFn: () => forYouTracks(15) });
     const artists = useQuery({ queryKey: ['trending-artists'], queryFn: () => trendingArtists(8) });
+    const favoritesQ = useQuery({ queryKey: ['favorites'], queryFn: listFavorites });
+
+    // Для SECTION 1: подписки
+    const followingQ = useQuery({ queryKey: ['following-users'], queryFn: getFollowedUsers });
+    const followedArtistsQ = useQuery({ queryKey: ['followed-artists'], queryFn: listFollowedArtists });
+
+    const userIds = (followingQ.data ?? []).map((u) => u.userId);
+    const namesQ = useQuery({
+        queryKey: ['user-names', ...userIds.sort()],
+        queryFn: () => batchUsers(userIds),
+        enabled: userIds.length > 0,
+        staleTime: 5 * 60 * 1000,
+    });
+    const nameMap: Record<string, string> = {};
+    for (const u of namesQ.data ?? []) nameMap[u.id] = u.displayName;
 
     const popularEmpty = !popular.isLoading && (!popular.data || popular.data.length === 0);
     const catalog = useQuery({
@@ -136,35 +265,38 @@ export function HomePage() {
                     scrollbarClasses,
                     isLeftOpen ? "opacity-100" : "opacity-0 pointer-events-none"
                 )}>
-                    {artists.data && artists.data.length > 0 && (
-                        <Section title="Популярные артисты">
-                            <ul className="grid grid-cols-2 gap-3 mt-3">
-                                {artists.data.map((a, i) => (
-                                    <li key={`artist-${a.id}-${i}`}>
-                                        <Link
-                                            to={`/artists/${a.id}`}
-                                            className="block space-y-2 rounded-md border border-border bg-bg p-3 hover:bg-bg/70 transition-colors"
-                                        >
-                                            <div
-                                                className="aspect-square w-full rounded-full bg-bg-elevated bg-cover bg-center flex items-center justify-center text-xl font-bold text-fg-muted"
-                                                style={{ backgroundImage: a.avatarUrl ? `url('${a.avatarUrl}')` : undefined }}
-                                                aria-hidden={!!a.avatarUrl}
-                                            >
-                                                {!a.avatarUrl && a.name ? a.name.charAt(0).toUpperCase() : null}
-                                            </div>
-                                            <div className="truncate text-center text-xs font-medium">{a.name}</div>
-                                        </Link>
-                                    </li>
-                                ))}
-                            </ul>
-                        </Section>
-                    )}
+
+                    {/* БЛОК ИЗБРАННОЕ */}
+                    <Link to="/favorites" className="flex items-center gap-3 p-2 -mx-2 rounded-lg hover:bg-accent/10 transition-colors group">
+                        <div className="w-14 h-14 shrink-0 rounded-xl bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center shadow-md transition-transform duration-300 group-hover:scale-105">
+                            <HeartIcon filled={true} className="text-white w-6 h-6" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                            <span className="text-[17px] font-semibold text-fg tracking-tight truncate group-hover:text-accent transition-colors">Избранное</span>
+                            <span className="text-[13px] text-fg-muted truncate">
+                                {favoritesQ.data?.length ?? 0} {pluralTracks(favoritesQ.data?.length ?? 0)}
+                            </span>
+                        </div>
+                    </Link>
+
+                    {/* Разделитель */}
+                    <div className="h-px bg-border my-4 -mx-2" />
+
+                    {/* ПОДПИСКИ (Друзья) */}
+                    {followingQ.data?.map(u => (
+                        <FriendSidebarItem key={u.userId} user={u} nameMap={nameMap} />
+                    ))}
+
+                    {/* ПОДПИСКИ (Артисты) */}
+                    {followedArtistsQ.data?.map(a => (
+                        <ArtistSidebarItem key={a.artistId} artist={a} />
+                    ))}
                 </div>
 
                 {!isLeftOpen && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <span className="rotate-[-90deg] whitespace-nowrap text-fg-muted font-bold tracking-widest uppercase text-xs">
-                            В тренде
+                            Подписки
                         </span>
                     </div>
                 )}
@@ -182,10 +314,8 @@ export function HomePage() {
             {/* SECTION 2 */}
             <section className="relative flex-1 flex flex-col min-w-[350px] rounded-xl bg-bg-elevated border border-border shadow-sm overflow-hidden">
 
-                {/* GRADIENT */}
                 <div className="absolute inset-x-0 top-0 h-36 bg-gradient-to-b from-accent/20 to-transparent pointer-events-none z-0" />
 
-                {/* COLLAPSE SECTION 1 */}
                 <div className="absolute top-4 left-4 z-30 bg-bg rounded-md border border-border shadow-sm">
                     <Tooltip position="right" content={isLeftOpen ? "Свернуть панель" : "Развернуть панель"}>
                         <button
@@ -200,7 +330,6 @@ export function HomePage() {
                     </Tooltip>
                 </div>
 
-                {/* COLLAPSE SECTION 3 */}
                 <div className="absolute top-4 right-4 z-30 bg-bg rounded-md border border-border shadow-sm">
                     <Tooltip position="left" content={isRightOpen ? "Скрыть панель" : "Показать панель"}>
                         <button
@@ -223,14 +352,12 @@ export function HomePage() {
                         </h1>
                     </div>
 
-                    {/* ПОПУЛЯРНЫЕ АРТИСТЫ */}
                     {artists.data && artists.data.length > 0 && (
                         <Section title="Популярные артисты">
                             <ArtistSlider artists={artists.data} />
                         </Section>
                     )}
 
-                    {/* ЛЕНТА ПОДПИСОК */}
                     <Section title="Лента подписок">
                         {feed.isLoading && <p className="text-fg-muted">Загрузка ленты...</p>}
                         {feed.data && feed.data.length > 0 ? (
@@ -240,8 +367,8 @@ export function HomePage() {
                                         <TrackRow
                                             key={`feed-${t.id}-${i}`}
                                             number={i + 1}
-                                            track={t} // Используем уже подготовленный массив
-                                            onPlay={() => handlePlayContext(feedTracks, i)} // <-- Передаем функцию для очереди!
+                                            track={t}
+                                            onPlay={() => handlePlayContext(feedTracks, i)}
                                         />
                                     ))}
                                 </ul>
@@ -255,7 +382,6 @@ export function HomePage() {
                         )}
                     </Section>
 
-                    {/* ДЛЯ ВАС */}
                     {forYou.data && forYou.data.length > 0 && (
                         <Section title="Для вас">
                             <div className={scrollableListClasses}>
@@ -272,7 +398,6 @@ export function HomePage() {
                         </Section>
                     )}
 
-                    {/* ПОПУЛЯРНОЕ ИЛИ КАТАЛОГ */}
                     <Section title={popularEmpty ? 'Каталог' : 'Популярное'} actionTo="/catalog" actionLabel="Смотреть все">
                         <div className={scrollableListClasses}>
                             {popular.isLoading && <p className="text-fg-muted">Загрузка...</p>}
@@ -325,29 +450,40 @@ export function HomePage() {
                     <div className={cn("flex-1 overflow-y-auto p-5", scrollbarClasses)}>
 
                         <div className="flex items-center justify-between mb-5">
-                            <h2 className="text-lg font-semibold truncate mr-2">
-                                {rightTab === 'queue' ? 'Очередь' : 'Активность'}
+                            <h2 className="flex items-center gap-2 text-lg font-semibold truncate mr-2">
+                                {rightTab === 'friends' ? 'Активность друзей' :
+                                    rightTab === 'queue' ? 'Очередь' : 'Сейчас играет'}
                             </h2>
-
-                            <Tooltip position="left" content={rightTab === 'queue' ? "Смотреть активность друзей" : "Смотреть очередь"}>
-                                <button
-                                    onClick={() => setRightTab(rightTab === 'queue' ? 'friends' : 'queue')}
-                                    className="relative p-1.5 rounded-md border border-border bg-bg hover:bg-bg-elevated transition-colors text-fg-muted hover:text-fg shadow-sm shrink-0"
-                                >
-                                    {rightTab === 'queue' ? <UsersIcon /> : <QueueIcon />}
-                                </button>
-                            </Tooltip>
+                            <div className="flex gap-2">
+                                <Tooltip position="bottom" content="Активность друзей">
+                                    <button
+                                        onClick={() => {
+                                            setRightTab(rightTab === 'friends' ? 'now-playing' : 'friends');
+                                        }}
+                                        className={cn(
+                                            "p-1.5 rounded-md transition-colors shadow-sm border",
+                                            rightTab === 'friends'
+                                                ? "bg-accent text-accent-fg border-accent"
+                                                : "bg-bg border-border text-fg-muted hover:text-fg hover:bg-bg-elevated"
+                                        )}
+                                    >
+                                        <UsersIcon className="w-4 h-4" />
+                                    </button>
+                                </Tooltip>
+                            </div>
                         </div>
 
-                        <div className="flex-1">
+                        <div className="flex-1 pb-10">
                             {rightTab === 'friends' ? (
                                 friendsFeed.data && friendsFeed.data.length > 0 ? (
                                     <FriendsFeedList items={friendsFeed.data} />
                                 ) : (
                                     <p className="text-fg-muted text-center mt-4">Нет недавней активности</p>
                                 )
-                            ) : (
+                            ) : rightTab === 'queue' ? (
                                 <QueueView />
+                            ) : (
+                                <NowPlayingView onOpenQueue={() => setRightTab('queue')} />
                             )}
                         </div>
                     </div>
@@ -430,7 +566,7 @@ function QueueView() {
                                 ) : (
                                     currentTrack.artist || 'Неизвестный исполнитель'
                                 )}
-                                {currentTrack.featuredArtists?.map(fa => (
+                                {currentTrack.featuredArtists?.map((fa: { id: string, name: string }) => (
                                     <span key={fa.id}>
                                         {', feat. '}
                                         <Link to={`/artists/${fa.id}`} className="hover:underline hover:text-fg">{fa.name}</Link>
@@ -442,6 +578,7 @@ function QueueView() {
                 </div>
             )}
 
+            {/* СПИСОК "ДАЛЕЕ" */}
             {upcoming.length > 0 && (
                 <div className="space-y-3">
                     <h3 className="text-sm font-semibold text-fg">Далее</h3>
@@ -454,6 +591,167 @@ function QueueView() {
                                 onRemoveFromQueue={() => removeFromQueue(originalIndex)}
                             />
                         ))}
+                    </ul>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function NowPlayingView({ onOpenQueue }: { onOpenQueue: () => void }) {
+    const queue = usePlayer(s => s.queue);
+    const index = usePlayer(s => s.index);
+    const currentTrack = queue[index];
+    const nextTrack = queue[index + 1];
+    const playQueueStore = usePlayer(s => s.playQueue);
+
+    const artistId = currentTrack?.artistId;
+
+    const artistQ = useQuery({
+        queryKey: ['artist', artistId],
+        queryFn: () => getArtist(artistId!),
+        enabled: !!artistId,
+    });
+
+    const followedQ = useQuery({
+        queryKey: ['followed-artists'],
+        queryFn: listFollowedArtists,
+    });
+
+    const qc = useQueryClient();
+    const { user } = useAuth();
+
+    const follow = useMutation({
+        mutationFn: () => followArtist(artistId!),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['followed-artists'] }),
+    });
+
+    const unfollow = useMutation({
+        mutationFn: () => unfollowArtist(artistId!),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['followed-artists'] }),
+    });
+
+    if (queue.length === 0 || !currentTrack) {
+        return (
+            <div className="flex items-center justify-center h-48 rounded-lg border border-dashed border-border bg-bg/50">
+                <div className="text-center text-fg-muted">
+                    <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-bg-elevated mb-3 shadow-sm">
+                        <MusicIcon />
+                    </div>
+                    <p className="text-xs">Очередь пуста</p>
+                </div>
+            </div>
+        );
+    }
+
+    const a = artistQ.data;
+    const isOwner = !!user && !!(a?.ownerUserId ?? a?.createdByUserId) && user.id === (a?.ownerUserId ?? a?.createdByUserId);
+    const isFollowed = followedQ.data?.some((fa: { artistId: string }) => fa.artistId === artistId);
+
+    function formatNumber(n: number): string {
+        if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+        if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+        return String(n);
+    }
+
+    return (
+        <div className="space-y-6">
+            {/* trackCover */}
+            <div
+                className="w-full aspect-square rounded-xl bg-bg-elevated border border-border bg-cover bg-center shadow-sm"
+                style={{ backgroundImage: currentTrack.coverUrl ? `url(${currentTrack.coverUrl})` : undefined }}
+            >
+                {!currentTrack.coverUrl && (
+                    <div className="w-full h-full flex items-center justify-center text-fg-muted/30">
+                        <MusicIcon className="w-20 h-20" />
+                    </div>
+                )}
+            </div>
+
+            <div className="flex flex-col min-w-0 px-1">
+                <Link to={`/tracks/${currentTrack.id}`} className="text-2xl font-bold truncate text-fg hover:underline">
+                    {currentTrack.title}
+                </Link>
+                <div className="text-base text-fg-muted truncate mt-1">
+                    {currentTrack.artistId ? (
+                        <Link to={`/artists/${currentTrack.artistId}`} className="hover:underline hover:text-fg transition-colors">
+                            {currentTrack.artist || 'Неизвестный исполнитель'}
+                        </Link>
+                    ) : (
+                        currentTrack.artist || 'Неизвестный исполнитель'
+                    )}
+                    {currentTrack.featuredArtists?.map((fa: { id: string, name: string }) => (
+                        <span key={fa.id}>
+                            {', feat. '}
+                            <Link to={`/artists/${fa.id}`} className="hover:underline hover:text-fg transition-colors">{fa.name}</Link>
+                        </span>
+                    ))}
+                </div>
+            </div>
+
+            {/* Artist info */}
+            {a && (
+                <div className="rounded-xl overflow-hidden border border-border bg-bg-elevated shadow-sm flex flex-col">
+                    {/* ArtistBanner */}
+                    <div
+                        className="h-32 w-full bg-cover bg-center relative border-b border-border bg-bg"
+                        style={{ backgroundImage: a.bannerUrl ? `url('${a.bannerUrl}')` : undefined }}
+                    >
+                        <span className="absolute top-3 left-4 text-xs font-bold uppercase tracking-wider text-white bg-black/60 px-2 py-1 rounded">
+                            Об артисте
+                        </span>
+                    </div>
+
+                    <div className="p-4 space-y-3 bg-[rgb(var(--bg-accent))]">
+                        <Link to={`/artists/${a.id}`} className="text-xl font-bold hover:underline block text-fg">
+                            {a.name}
+                        </Link>
+
+                        {/* Слушатели в месяц | Кнопка */}
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <span className="text-sm font-medium text-fg-muted">
+                                {typeof a.monthlyListeners === 'number' ? `${formatNumber(a.monthlyListeners)} слушателей за месяц` : ' '}
+                            </span>
+                            {!isOwner && (
+                                <button
+                                    onClick={() => isFollowed ? unfollow.mutate() : follow.mutate()}
+                                    disabled={follow.isPending || unfollow.isPending}
+                                    className={cn(
+                                        "rounded-full px-5 py-1.5 text-xs font-semibold transition-transform active:scale-95 disabled:opacity-50",
+                                        isFollowed
+                                            ? "border border-border text-fg hover:bg-bg-elevated"
+                                            : "bg-fg text-bg hover:opacity-90"
+                                    )}
+                                >
+                                    {isFollowed ? 'Отписаться' : 'Подписаться'}
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Информация "Об артисте"*/}
+                        {a.bio && (
+                            <p className="text-sm text-fg-muted line-clamp-3 leading-relaxed">
+                                {a.bio}
+                            </p>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Следующее в очереди */}
+            {nextTrack && (
+                <div className="space-y-3 pt-6 border-t border-border">
+                    <div className="flex items-center justify-between px-1">
+                        <h3 className="text-sm font-bold text-fg">Следующее в очереди</h3>
+                        <button onClick={onOpenQueue} className="text-xs font-medium text-accent hover:underline transition-colors">
+                            Открыть очередь
+                        </button>
+                    </div>
+                    <ul className="rounded-lg border border-border bg-bg-elevated overflow-hidden -mx-1">
+                        <TrackRow
+                            track={nextTrack as any}
+                            onPlay={() => playQueueStore(queue, index + 1)}
+                        />
                     </ul>
                 </div>
             )}
@@ -589,4 +887,13 @@ function formatRelativeTime(iso: string): string {
     const days = Math.round(h / 24);
     if (days < 7) return `${days} д`;
     return d.toLocaleDateString('ru-RU', { month: 'short', day: 'numeric' });
+}
+
+function pluralTracks(n: number): string {
+    const last2 = n % 100;
+    const last1 = n % 10;
+    if (last2 >= 11 && last2 <= 14) return 'треков';
+    if (last1 === 1) return 'трек';
+    if (last1 >= 2 && last1 <= 4) return 'трека';
+    return 'треков';
 }

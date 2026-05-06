@@ -285,9 +285,10 @@ export function Player() {
             setRightOpen(true);
             setRightTab('queue');
         } else {
-            setRightTab(rightTab === 'queue' ? 'friends' : 'queue');
+            setRightTab(rightTab === 'queue' ? 'now-playing' : 'queue');
         }
     };
+
     const [repeatState, setRepeatState] = useState<'off' | 'all' | 'one'>('off');
     const [isShuffle, setIsShuffle] = useState(false);
     const [showRemaining, setShowRemaining] = useState(false);

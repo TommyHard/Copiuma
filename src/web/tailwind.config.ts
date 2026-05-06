@@ -8,6 +8,7 @@ export default {
             colors: {
                 bg: 'rgb(var(--bg) / <alpha-value>)',
                 'bg-elevated': 'rgb(var(--bg-elevated) / <alpha-value>)',
+                'bg-accent': 'rgb(var(--bg-accent) / <alpha-value>)',
                 fg: 'rgb(var(--fg) / <alpha-value>)',
                 'fg-muted': 'rgb(var(--fg-muted) / <alpha-value>)',
                 border: 'rgb(var(--border) / <alpha-value>)',
