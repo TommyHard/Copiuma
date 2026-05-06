@@ -10,28 +10,46 @@
     font-display: swap;
 }
 
-:root,
-:root[data-theme='dark'] {
+:root, :root[data-theme='dark'] {
     color-scheme: dark;
-    --bg: 11 11 16;
-    --bg-elevated: 22 22 30;
+
+    /* Фон */
+    --bg: 0 0 0;
+
+    /* Секции */
+    --bg-elevated: 19 16 25;
+
     --fg: 240 240 245;
     --fg-muted: 160 160 175;
-    --border: 38 38 48;
+
+    /* Цвет секций для границ */
+    --border: 42 36 56; 
+
     --accent: 202 162 230;
-    --accent-fg: 255 255 255;
+
+    /* Темный текст на светлом акценте для контраста */
+    --accent-fg: 19 16 25; 
+
     --danger: 240 80 90;
     --success: 80 200 130;
 }
 
     :root[data-theme='light'] {
         color-scheme: light;
-        --bg: 250 250 252;
+
+        /* Фон: #F6F3FA */
+        --bg: 246 243 250;
+
+        /* Секции: #FFFFFF */
         --bg-elevated: 255 255 255;
+
         --fg: 22 22 30;
         --fg-muted: 102 102 120;
         --border: 224 224 232;
-        --accent: 102 71 240;
+
+        /* Более темный фиолетовый для читаемости на белом */
+        --accent: 138 76 184;
+
         --accent-fg: 255 255 255;
         --danger: 220 60 70;
         --success: 50 160 100;
@@ -44,13 +62,14 @@ html, body, #root {
 body {
     font-family: 'Copiuma', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    background-color: rgb(var(--bg));
 }
 
 input, textarea, select, button {
     font: inherit;
 }
 
-    input:-webkit-autofill {
-        -webkit-text-fill-color: rgb(var(--fg));
-        transition: background-color 600000s 0s, color 600000s 0s;
-    }
+input:-webkit-autofill {
+    -webkit-text-fill-color: rgb(var(--fg));
+    transition: background-color 600000s 0s, color 600000s 0s;
+}

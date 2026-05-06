@@ -107,7 +107,7 @@ export function OfflinePage() {
             {tracksQ.data && tracksQ.data.length === 0 && (
                 <div className="rounded-md border border-border bg-bg-elevated p-6 text-fg-muted">
                     Пока ничего не отмечено офлайн. Зайдите на страницу любого трека и
-                    нажмите «Скачать офлайн».
+                    нажмите "Скачать офлайн".
                 </div>
             )}
 

@@ -7,16 +7,23 @@ import { OfflineBanner } from '@/features/offline/OfflineBanner';
 
 export function AppLayout() {
     useNotificationHub();
-
     return (
-        <div className="flex min-h-screen flex-col bg-bg">
+        <div className="flex h-screen flex-col bg-bg overflow-hidden">
+
             <OfflineBanner />
-            <Header />
-            <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
+
+            <div className="px-3 pt-3 shrink-0">
+                <Header />
+            </div>
+
+            {/* Мин. отступ X / Y */}
+            <main className="mx-auto w-full flex-1 px-3 py-3 flex flex-col min-h-0">
                 <Outlet />
             </main>
+
             <ToastContainer />
-            <div className="sticky bottom-0">
+
+            <div className="z-50 w-full shrink-0">
                 <Player />
             </div>
         </div>

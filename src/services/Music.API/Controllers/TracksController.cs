@@ -256,17 +256,25 @@ public class TracksController : ControllerBase
     }
 
     [HttpGet("favorites")]
-    public async Task<IActionResult> GetFavoriteTracks()
+    public async Task<IActionResult> GetFavorites(CancellationToken ct)
     {
-        var userId = UserId;
-        var favs = await _context.LikedTracks
-            .Where(l => l.UserId == userId)
-            .Include(l => l.Track)
-            .OrderByDescending(l => l.LikedAt)
-            .Select(l => new { l.Track!.Id, l.Track.Title, l.Track.Artist, l.LikedAt })
-            .ToListAsync();
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-        return Ok(favs);
+        var favorites = await _context.LikedTracks
+            .Where(lt => lt.UserId == userId)
+            .Include(lt => lt.Track)
+            .OrderByDescending(lt => lt.LikedAt)
+            .Select(lt => new
+            {
+                Id = lt.Track!.Id,
+                Title = lt.Track.Title,
+                Artist = lt.Track.Artist,
+                ArtistId = lt.Track.ArtistId,
+                LikedAt = lt.LikedAt
+            })
+            .ToListAsync(ct);
+
+        return Ok(favorites);
     }
 
     [HttpGet("search")]

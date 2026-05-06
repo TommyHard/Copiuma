@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { TrackListItem } from '@/shared/types';
 import { usePlayTrack } from '@/features/player/usePlayTrack';
-import { AddToPlaylistMenu } from '@/features/playlists/AddToPlaylistMenu';
 import { useToggleTrackLike } from '@/features/track/useToggleTrackLike';
 import { dislikeTrack, undoDislikeTrack } from '@/shared/api/dislikes';
+import { addTrack, listPlaylists } from '@/shared/api/playlists';
+import { Tooltip } from '@/shared/ui/Tooltip';
+import { useContextMenu, ContextMenuPortal, ContextMenuItem, ContextMenuSub, ContextMenuSeparator } from '@/shared/ui/ContextMenu';
+import { PlayIcon, HeartIcon, PlusIcon, DislikeIcon, SearchIcon } from '@/shared/ui/icons';
 import { cn } from '@/shared/lib/cn';
 
 export function TrackRow({ track, number }: { track: TrackListItem; number?: number }) {
@@ -15,13 +18,18 @@ export function TrackRow({ track, number }: { track: TrackListItem; number?: num
     const liked = !!track.isLikedByMe;
 
     const [isDisliked, setIsDisliked] = useState(track.isDislikedByMe ?? false);
+    const contextMenu = useContextMenu();
 
-    // Мутация теперь работает как переключатель (toggle)
+    const [playlistSearch, setPlaylistSearch] = useState('');
+
+    useEffect(() => {
+        if (!contextMenu.isOpen) setPlaylistSearch('');
+    }, [contextMenu.isOpen]);
+
     const toggleDislike = useMutation({
         mutationFn: () => isDisliked ? undoDislikeTrack(track.id) : dislikeTrack(track.id),
         onSuccess: () => {
             setIsDisliked(!isDisliked);
-            // Обновление ленты в фоне
             qc.invalidateQueries({ queryKey: ['recommendations'] });
             qc.invalidateQueries({ queryKey: ['catalog'] });
             qc.invalidateQueries({ queryKey: ['for-you'] });
@@ -29,112 +37,166 @@ export function TrackRow({ track, number }: { track: TrackListItem; number?: num
         },
     });
 
+    const qPlaylists = useQuery({
+        queryKey: ['playlists'],
+        queryFn: listPlaylists,
+        enabled: contextMenu.isOpen,
+        staleTime: 60_000,
+    });
+
+    const addTrackToPlaylist = useMutation({
+        mutationFn: (playlistId: string) => addTrack(playlistId, track.id),
+        onSuccess: (_, playlistId) => {
+            qc.invalidateQueries({ queryKey: ['playlist', playlistId] });
+            contextMenu.close();
+        },
+    });
+
+    const filteredPlaylists = qPlaylists.data?.filter(p =>
+        p.title.toLowerCase().includes(playlistSearch.toLowerCase())
+    ) || [];
+
     return (
-        <li className={cn(
-            "flex items-center gap-3 px-4 py-3 hover:bg-bg-elevated/50 transition-all",
-            // Desaturate, если трек дизлайкнут
-            isDisliked && "opacity-50 grayscale"
-        )}>
-            {/* Кнопка Play */}
-            <button
-                onClick={() => play(track)}
-                disabled={isDisliked}
+        <>
+            <li
+                onContextMenu={contextMenu.onContextMenu}
                 className={cn(
-                    "flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg hover:opacity-90 transition-opacity",
-                    isDisliked && "cursor-not-allowed opacity-40"
+                    "flex items-center gap-3 px-3 py-2 hover:bg-fg/5 transition-colors rounded-md cursor-default select-none",
+                    isDisliked && "opacity-40 grayscale"
                 )}
-                title={isDisliked ? "Трек скрыт" : "Играть"}
             >
-                <svg className="size-4 ml-1" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8 5v14l11-7z" />
-                </svg>
-            </button>
+                <Tooltip position="top" content={isDisliked ? "Трек скрыт" : "Играть"}>
+                    <button
+                        onClick={() => play(track)}
+                        disabled={isDisliked}
+                        className="relative flex items-center justify-center size-8 shrink-0 text-fg-muted hover:text-fg transition-colors disabled:opacity-50"
+                    >
+                        <PlayIcon className="size-4" />
+                    </button>
+                </Tooltip>
 
-            {number !== undefined && (
-                <span className="hidden w-6 text-right text-xs tabular-nums text-fg-muted md:inline-block">
-                    {number}
-                </span>
-            )}
+                {number !== undefined && (
+                    <span className="hidden w-5 text-right text-xs tabular-nums text-fg-muted md:inline-block">
+                        {number}
+                    </span>
+                )}
 
-            <div className="min-w-0 flex-1">
-                <Link to={`/tracks/${track.id}`} className="block truncate font-medium hover:underline">
-                    {track.title}
-                    {track.isExplicit && (
-                        <span className="ml-2 rounded bg-fg/15 px-1.5 py-0.5 text-[10px] uppercase text-fg-muted">
-                            E
-                        </span>
-                    )}
-                </Link>
-                <div className="truncate text-xs text-fg-muted">
-                    {track.artistId ? (
-                        <Link
-                            to={`/artists/${track.artistId}`}
-                            className="hover:text-fg hover:underline"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            {track.artist ?? 'Неизвестен'}
-                        </Link>
+                <div className="size-10 bg-bg-elevated rounded flex items-center justify-center overflow-hidden shrink-0 shadow-sm ml-1">
+                    {(track as any).coverUrl ? (
+                        <img src={(track as any).coverUrl} alt="" className="w-full h-full object-cover" />
                     ) : (
-                        <span>{track.artist ?? 'Неизвестен'}</span>
-                    )}
-
-                    {/* feat. */}
-                    {track.featuredArtists && track.featuredArtists.length > 0 && (
-                        <span>
-                            {' '}feat.{' '}
-                            {track.featuredArtists.map((fa, idx) => (
-                                <span key={fa.id}>
-                                    {idx > 0 && ', '}
-                                    <Link
-                                        to={`/artists/${fa.id}`}
-                                        className="hover:text-fg hover:underline"
-                                        onClick={(e) => e.stopPropagation()}
-                                    >
-                                        {fa.name}
-                                    </Link>
-                                </span>
-                            ))}
-                        </span>
+                        <span className="text-xs text-fg-muted">♪</span>
                     )}
                 </div>
-            </div>
 
-            <span className="text-xs tabular-nums text-fg-muted">{formatDuration(track.duration)}</span>
+                <div className="flex flex-col min-w-0 flex-1 ml-2 justify-center">
+                    <Link to={`/tracks/${track.id}`} className="block truncate font-semibold text-sm hover:underline text-fg">
+                        {track.title}
+                        {track.isExplicit && (
+                            <span className="ml-2 rounded bg-fg/15 px-1.5 py-0.5 text-[9px] uppercase text-fg-muted align-middle">
+                                E
+                            </span>
+                        )}
+                    </Link>
 
-            <button
-                onClick={() => like.mutate({ trackId: track.id, nextLiked: !liked })}
-                disabled={like.isPending}
-                className={cn(
-                    "text-lg transition-colors hover:scale-110 disabled:opacity-50",
-                    liked ? "text-accent" : "text-fg-muted hover:text-fg"
-                )}
-                title={liked ? "Убрать из избранного" : "В избранное"}
-            >
-                ♥
-            </button>
+                    <div className="truncate text-xs text-fg-muted mt-0.5">
+                        {track.artistId ? (
+                            <Link to={`/artists/${track.artistId}`} className="hover:text-fg hover:underline" onClick={(e) => e.stopPropagation()}>
+                                {track.artist ?? 'Неизвестен'}
+                            </Link>
+                        ) : (
+                            <span>{track.artist ?? 'Неизвестен'}</span>
+                        )}
 
-            <AddToPlaylistMenu trackId={track.id} />
+                        {track.featuredArtists && track.featuredArtists.length > 0 && (
+                            <span>
+                                {', feat. '}
+                                {track.featuredArtists.map((fa, idx) => (
+                                    <span key={fa.id}>
+                                        {idx > 0 && ', '}
+                                        <Link to={`/artists/${fa.id}`} className="hover:text-fg hover:underline" onClick={(e) => e.stopPropagation()}>
+                                            {fa.name}
+                                        </Link>
+                                    </span>
+                                ))}
+                            </span>
+                        )}
+                    </div>
+                </div>
 
-            {/* Dislike */}
-            <button
-                onClick={() => toggleDislike.mutate()}
-                disabled={toggleDislike.isPending}
-                title={isDisliked ? "Вернуть в рекомендации" : "Не интересно"}
-                className={cn(
-                    "text-sm transition-colors disabled:opacity-40",
-                    isDisliked
-                        ? "text-danger"
-                        : "text-fg-muted hover:text-danger"
-                )}
-            >
-                🚫
-            </button>
-        </li>
+                <Tooltip position="top" content={liked ? "Убрать из избранного" : "В избранное"}>
+                    <button
+                        onClick={() => like.mutate({ trackId: track.id, nextLiked: !liked })}
+                        disabled={like.isPending}
+                        className={cn(
+                            "relative transition-transform hover:scale-110 disabled:opacity-50 shrink-0",
+                            liked ? "text-accent" : "text-fg-muted hover:text-fg"
+                        )}
+                    >
+                        <HeartIcon filled={liked} />
+                    </button>
+                </Tooltip>
+
+                <span className="text-xs tabular-nums text-fg-muted ml-3 w-10 text-right shrink-0">
+                    {formatDuration(track.duration)}
+                </span>
+            </li>
+
+            <ContextMenuPortal isOpen={contextMenu.isOpen} position={contextMenu.position}>
+                <ContextMenuSub label="Добавить в плейлист" icon={<PlusIcon />}>
+                    <div className="px-2 py-1.5">
+                        <div className="relative">
+                            <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fg-muted" />
+                            <input
+                                type="text"
+                                placeholder="Найти плейлист"
+                                value={playlistSearch}
+                                onChange={(e) => setPlaylistSearch(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                                onKeyDown={(e) => e.stopPropagation()}
+                                className="w-full bg-bg border border-border rounded-md pl-8 pr-3 py-1 text-xs text-fg focus:outline-none focus:border-accent transition-colors"
+                            />
+                        </div>
+                    </div>
+
+                    <ContextMenuSeparator />
+
+                    <div className="max-h-[200px] overflow-y-auto">
+                        {qPlaylists.isLoading && <p className="px-3 py-2 text-xs text-fg-muted">Загрузка...</p>}
+
+                        {qPlaylists.data && filteredPlaylists.length === 0 && (
+                            <p className="px-3 py-2 text-xs text-fg-muted">Ничего не найдено</p>
+                        )}
+
+                        {filteredPlaylists.map((p) => (
+                            <ContextMenuItem
+                                key={p.id}
+                                disabled={addTrackToPlaylist.isPending}
+                                onClick={() => addTrackToPlaylist.mutate(p.id)}
+                            >
+                                {p.title}
+                            </ContextMenuItem>
+                        ))}
+                    </div>
+                </ContextMenuSub>
+
+                <ContextMenuItem
+                    danger
+                    icon={<DislikeIcon />}
+                    onClick={() => {
+                        toggleDislike.mutate();
+                        contextMenu.close();
+                    }}
+                >
+                    {isDisliked ? "Вернуть в рекомендации" : "Не интересует"}
+                </ContextMenuItem>
+            </ContextMenuPortal>
+        </>
     );
 }
 
 function formatDuration(d: string | null): string {
-    if (!d) return '--:--';
+    if (!d) return '-:-';
     const m = /^(?:\d+\.)?(\d{2}):(\d{2}):(\d{2})/.exec(d);
     if (!m) return d;
     const h = parseInt(m[1], 10);

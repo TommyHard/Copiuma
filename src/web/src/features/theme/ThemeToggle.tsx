@@ -1,17 +1,17 @@
 import { setTheme, useTheme } from './useTheme';
 
 /**
- * Минимальный 3-state toggle: light / system / dark
+ * Минимальный 2-state toggle: light / dark
  */
 export function ThemeToggle() {
     const { theme } = useTheme();
 
     function next() {
-        setTheme(theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system');
+        setTheme(theme === 'light' ? 'dark' : 'light');
     }
 
-    const label = theme === 'system' ? 'Авто' : theme === 'light' ? 'Светлая' : 'Тёмная';
-    const icon = theme === 'system' ? '🌓' : theme === 'light' ? '☀' : '☾';
+    const label = theme === 'light' ? 'Светлая' : 'Тёмная';
+    const icon = theme === 'light' ? '☀' : '☾';
 
     return (
         <button
