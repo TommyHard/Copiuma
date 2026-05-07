@@ -84,8 +84,8 @@ export function TrackRow({ track, number, onPlay, onRemoveFromQueue }: { track: 
                 )}
 
                 <div className="size-10 bg-bg-elevated rounded flex items-center justify-center overflow-hidden shrink-0 shadow-sm ml-1">
-                    {(track as any).coverUrl ? (
-                        <img src={(track as any).coverUrl} alt="" className="w-full h-full object-cover" />
+                    {track.coverUrl ? (
+                        <img src={track.coverUrl} alt="" className="w-full h-full object-cover" />
                     ) : (
                         <span className="text-xs text-fg-muted">♪</span>
                     )}

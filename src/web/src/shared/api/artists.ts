@@ -40,8 +40,8 @@ export async function searchArtists(q: string): Promise<ArtistSummary[]> {
 }
 
 export async function listArtistAlbums(artistId: string): Promise<AlbumSummary[]> {
-    const r = await api.get<AlbumSummary[]>(`/artists/${artistId}/albums`);
-    return r.data;
+    const r = await api.get<any[]>(`/artists/${artistId}/albums`);
+    return Array.isArray(r.data) ? r.data.map(normalizeAlbumSummary) : [];
 }
 
 function normalizeArtistTrack(t: any): TrackListItem {
@@ -58,11 +58,27 @@ function normalizeArtistTrack(t: any): TrackListItem {
         isExplicit: t.isExplicit ?? t.IsExplicit ?? false,
         isLikedByMe: t.isLikedByMe ?? t.IsLikedByMe ?? false,
         isDislikedByMe: t.isDislikedByMe ?? t.IsDislikedByMe ?? false,
+        coverUrl: t.coverUrl ?? t.CoverUrl ?? null,
         featuredArtists: Array.isArray(featRaw)
             ? featRaw
                 .map((f: any) => ({ id: f?.id ?? f?.Id, name: f?.name ?? f?.Name ?? '' }))
                 .filter((f: { id?: string }) => !!f.id)
             : [],
+    };
+}
+
+function normalizeAlbumSummary(a: any): AlbumSummary {
+    return {
+        id: a.id ?? a.Id,
+        title: a.title ?? a.Title ?? '',
+        artistId: a.artistId ?? a.ArtistId,
+        artistName: a.artistName ?? a.ArtistName ?? null,
+        releasedAt: a.releasedAt ?? a.ReleasedAt ?? a.releaseDate ?? a.ReleaseDate ?? null,
+        coverUrl: a.coverUrl ?? a.CoverUrl ?? null,
+        trackCount: a.trackCount ?? a.TrackCount,
+        ownerUserId: a.ownerUserId ?? a.OwnerUserId,
+        createdAt: a.createdAt ?? a.CreatedAt ?? null,
+        genres: a.genres ?? a.Genres ?? [],
     };
 }
 

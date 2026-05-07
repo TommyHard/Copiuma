@@ -4,9 +4,16 @@ import {
     listFollowedArtists,
     unfollowArtist,
 } from '@/shared/api/follows';
+import { cn } from '@/shared/lib/cn';
 
-export function FollowArtistButton({ artistId }: { artistId: string }) {
+interface FollowArtistButtonProps {
+    artistId: string;
+    className?: string;
+}
+
+export function FollowArtistButton({ artistId, className }: FollowArtistButtonProps) {
     const qc = useQueryClient();
+
     const followed = useQuery({
         queryKey: ['followed-artists'],
         queryFn: listFollowedArtists,
@@ -18,6 +25,7 @@ export function FollowArtistButton({ artistId }: { artistId: string }) {
         mutationFn: () => followArtist(artistId),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['followed-artists'] }),
     });
+
     const unfollow = useMutation({
         mutationFn: () => unfollowArtist(artistId),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['followed-artists'] }),
@@ -25,15 +33,15 @@ export function FollowArtistButton({ artistId }: { artistId: string }) {
 
     const busy = follow.isPending || unfollow.isPending || followed.isLoading;
 
+    const baseClasses = isFollowing
+        ? 'rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-black dark:text-white hover:border-fg/40 hover:bg-bg-elevated disabled:opacity-50 transition-colors'
+        : 'rounded-md bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90 disabled:opacity-50 transition-colors';
+
     return (
         <button
             onClick={() => (isFollowing ? unfollow.mutate() : follow.mutate())}
             disabled={busy}
-            className={
-                isFollowing
-                    ? 'rounded-md border border-border px-4 py-2 text-sm hover:bg-bg-elevated disabled:opacity-50'
-                    : 'rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:opacity-90 disabled:opacity-50'
-            }
+            className={cn(baseClasses, className)}
         >
             {isFollowing ? 'Отписаться' : 'Подписаться'}
         </button>

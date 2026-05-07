@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { unreadCount } from '@/shared/api/notifications';
 import { Tooltip } from '@/shared/ui/Tooltip';
 import { cn } from '@/shared/lib/cn';
+import { BellIcon } from '@/shared/ui/icons';
 
 /**
  * Уведомления(колокольчик) в header. Цифра обновляется:
@@ -18,21 +19,6 @@ export function NotificationsBell() {
     });
 
     const n = q.data ?? 0;
-
-    const BellIcon = ({ className }: { className?: string }) => (
-        <svg
-            viewBox="0 0 28 28"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={cn("size-6", className)}
-        >
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-            <path d="M14.5 18a2 2 0 0 1-4.99 0" />
-        </svg>
-    );
 
     return (
         <Tooltip position="bottom" content="Уведомления">

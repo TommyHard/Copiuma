@@ -163,11 +163,10 @@ public class ArtistsController : ControllerBase
 
         var me = UserId;
 
-        // Фильтруем забаненные треки, но НЕ ПРЯЧЕМ dislike (визуально desaturate)
         var query = _moderation.ApplyVisibilityFilter(_db.Tracks, me, hideDislikes: false, hideBlocked: false)
             .Where(t => t.ArtistId == id);
 
-        var tracks = await query
+        var rows = await query
             .OrderByDescending(t => t.UploadedAt)
             .Select(t => new
             {
@@ -180,6 +179,7 @@ public class ArtistsController : ControllerBase
                 t.TrackNumber,
                 t.UploadedAt,
                 t.IsExplicit,
+                CoverKey = t.CoverKey ?? t.Album!.CoverKey,
                 IsLikedByMe = _db.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == me),
                 IsDislikedByMe = _db.UserDislikes.Any(d => d.TargetType == DislikeTargetType.Track && d.TargetId == t.Id && d.UserId == me),
                 FeaturedArtists = _db.TrackFeaturedArtists
@@ -189,6 +189,31 @@ public class ArtistsController : ControllerBase
                     .ToList()
             })
             .ToListAsync();
+
+        var tracks = new List<object>(rows.Count);
+        foreach (var r in rows)
+        {
+            var coverUrl = r.CoverKey is null
+                ? null
+                : await _storage.GeneratePresignedImageGetUrlAsync(r.CoverKey);
+
+            tracks.Add(new
+            {
+                r.Id,
+                r.Title,
+                r.Artist,
+                r.ArtistId,
+                r.Duration,
+                r.AlbumId,
+                r.TrackNumber,
+                r.UploadedAt,
+                r.IsExplicit,
+                CoverUrl = coverUrl,
+                r.IsLikedByMe,
+                r.IsDislikedByMe,
+                r.FeaturedArtists
+            });
+        }
 
         return Ok(tracks);
     }
