@@ -80,7 +80,7 @@ export function SidebarLeft() {
             )}>
                 {/* ИЗБРАННОЕ */}
                 <Link to="/favorites" className="flex items-center gap-3 p-2 -mx-2 rounded-lg hover:bg-accent/10 transition-colors group">
-                    <div className="w-10 h-10 shrink-0 rounded-md bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center shadow-md transition-transform duration-300 group-hover:scale-105">
+                    <div className="w-10 h-10 shrink-0 rounded bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center shadow-md transition-transform duration-300 group-hover:scale-105">
                         <HeartIcon filled={true} className="text-white w-5 h-5" />
                     </div>
                     {isLeftOpen && (

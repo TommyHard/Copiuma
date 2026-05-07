@@ -87,6 +87,10 @@ export interface FavoriteItem {
     artistId?: string | null;
     likedAt: string;
     coverUrl?: string | null;
+    duration?: string | null;
+    albumId?: string | null;
+    albumTitle?: string | null;
+    featuredArtists?: { id: string; name: string }[];
 }
 
 export interface UploadResult {

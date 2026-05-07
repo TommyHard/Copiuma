@@ -285,9 +285,8 @@ public class TracksController : ControllerBase
     {
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-        var favorites = await _context.LikedTracks
+        var rows = await _context.LikedTracks
             .Where(lt => lt.UserId == userId)
-            .Include(lt => lt.Track)
             .OrderByDescending(lt => lt.LikedAt)
             .Select(lt => new
             {
@@ -295,9 +294,40 @@ public class TracksController : ControllerBase
                 Title = lt.Track.Title,
                 Artist = lt.Track.Artist,
                 ArtistId = lt.Track.ArtistId,
-                LikedAt = lt.LikedAt
+                Duration = lt.Track.Duration,
+                AlbumId = lt.Track.AlbumId,
+                AlbumTitle = lt.Track.Album != null ? lt.Track.Album.Title : null,
+                CoverKey = lt.Track.CoverKey ?? (lt.Track.Album != null ? lt.Track.Album.CoverKey : null),
+                LikedAt = lt.LikedAt,
+                FeaturedArtists = _context.TrackFeaturedArtists
+                    .Where(fa => fa.TrackId == lt.Track.Id)
+                    .OrderBy(fa => fa.Position)
+                    .Select(fa => new { fa.Artist!.Id, fa.Artist.Name })
+                    .ToList()
             })
             .ToListAsync(ct);
+
+        var favorites = new List<object>(rows.Count);
+        foreach (var r in rows)
+        {
+            var coverUrl = r.CoverKey is null
+                ? null
+                : await _storage.GeneratePresignedImageGetUrlAsync(r.CoverKey);
+
+            favorites.Add(new
+            {
+                r.Id,
+                r.Title,
+                r.Artist,
+                r.ArtistId,
+                r.Duration,
+                r.AlbumId,
+                r.AlbumTitle,
+                CoverUrl = coverUrl,
+                r.LikedAt,
+                r.FeaturedArtists
+            });
+        }
 
         return Ok(favorites);
     }

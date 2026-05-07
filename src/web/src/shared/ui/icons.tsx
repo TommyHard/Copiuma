@@ -108,3 +108,17 @@ export const InfoIcon = ({ className }: { className?: string }) => (
         <path d="M12 16v-4M12 8h.01" />
     </svg>
 );
+
+export const DownloadIcon = ({ className }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cn("w-4 h-4", className)}>
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 8v8" />
+        <path d="m8 12 4 4 4-4" />
+    </svg>
+);
+
+export const ClockIcon = ({ className }: { className?: string }) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={cn("w-4 h-4", className)}>
+        <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+);
