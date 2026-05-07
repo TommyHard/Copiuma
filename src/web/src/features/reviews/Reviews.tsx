@@ -75,21 +75,21 @@ function ReviewForm({
     }
 
     return (
-        <form onSubmit={onSubmit} className="space-y-2 rounded-md border border-border bg-bg-elevated p-3">
+        <form onSubmit={onSubmit} className="space-y-2 rounded border border-border bg-bg-elevated p-3">
             <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 placeholder="Что думаешь о треке?"
                 maxLength={2000}
                 rows={3}
-                className="w-full resize-y rounded-md border border-border bg-bg px-3 py-2 outline-none focus:border-accent"
+                className="w-full resize-y rounded border border-border bg-bg px-3 py-2 outline-none focus:border-accent"
             />
             <div className="flex justify-end gap-2">
                 {onCancel && (
                     <button
                         type="button"
                         onClick={onCancel}
-                        className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-bg"
+                        className="rounded border border-border px-3 py-1.5 text-sm hover:bg-bg"
                     >
                         Отмена
                     </button>
@@ -97,7 +97,7 @@ function ReviewForm({
                 <button
                     type="submit"
                     disabled={m.isPending || !text.trim()}
-                    className="rounded-md bg-accent px-3 py-1.5 text-sm text-accent-fg hover:opacity-90 disabled:opacity-50"
+                    className="rounded bg-accent px-3 py-1.5 text-sm text-accent-fg hover:opacity-90 disabled:opacity-50"
                 >
                     {m.isPending ? '…' : reviewId ? 'Сохранить' : 'Оставить отзыв'}
                 </button>
@@ -146,7 +146,7 @@ function ReviewRow({
     }
 
     return (
-        <li className="rounded-md border border-border bg-bg-elevated p-3">
+        <li className="rounded border border-border bg-bg-elevated p-3">
             <header className="mb-1 flex items-baseline justify-between gap-2 text-xs text-fg-muted">
                 <span className="truncate font-medium text-fg">
                     {review.authorName ?? review.authorId.slice(0, 8)}

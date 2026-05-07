@@ -27,8 +27,8 @@ export function FollowUserButton({ userId }: { userId: string }) {
             disabled={busy}
             className={
                 isFollowing
-                    ? 'rounded-md border border-border px-4 py-2 text-sm hover:bg-bg-elevated disabled:opacity-50'
-                    : 'rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:opacity-90 disabled:opacity-50'
+                    ? 'rounded border border-border px-4 py-2 text-sm hover:bg-bg-elevated disabled:opacity-50'
+                    : 'rounded bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:opacity-90 disabled:opacity-50'
             }
         >
             {isFollowing ? 'Отписаться' : 'Подписаться'}

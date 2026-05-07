@@ -5,7 +5,7 @@ import { hlsMasterUrl } from '@/shared/api/catalog';
 import { reportPlayEvent } from '@/shared/api/tracks';
 import { useToggleTrackLike } from '@/features/track/useToggleTrackLike';
 import { Tooltip } from '@/shared/ui/Tooltip';
-import { PlayIcon, HeartIcon, QueueIcon } from '@/shared/ui/icons';
+import { PlayIcon, HeartIcon, QueueIcon, MusicIcon } from '@/shared/ui/icons';
 import { Link } from 'react-router-dom';
 import { useUIStore } from '@/shared/store/uiStore';
 import { getTrackStatus } from '@/shared/api/catalog';
@@ -89,12 +89,6 @@ const RepeatIcon = ({ state }: { state: 'off' | 'all' | 'one' }) => {
         </div>
     );
 };
-
-const CoverPlaceholderIcon = () => (
-    <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 opacity-50">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 19.5V5.625c0-.621.504-1.125 1.125-1.125h9.75c.621 0 1.125.504 1.125 1.125v11.25m-12 3c0 1.242-1.008 2.25-2.25 2.25S5.25 20.742 5.25 19.5s1.008-2.25 2.25-2.25 2.25 1.008 2.25 2.25zm12 0c0 1.242-1.008 2.25-2.25 2.25s-2.25-1.008-2.25-2.25 1.008-2.25 2.25-2.25 2.25 1.008 2.25 2.25z" />
-    </svg>
-);
 
 const VolumeIcon = ({ volume }: { volume: number }) => {
     if (volume === 0) {
@@ -423,7 +417,7 @@ export function Player() {
             <div className="bg-transparent px-6 py-2 flex items-center justify-between gap-6 opacity-30 pointer-events-none select-none">
                 <div className="flex items-center gap-4 w-1/3 min-w-[180px] -translate-y-[5px]">
                     <div className="w-16 h-16 bg-bg-elevated rounded-md shrink-0 flex items-center justify-center">
-                        <CoverPlaceholderIcon />
+                        <MusicIcon className="opacity-50" />
                     </div>
                     <div className="flex flex-col min-w-0">
                         <span className="text-sm font-semibold truncate text-fg">Нет трека</span>
@@ -497,7 +491,7 @@ export function Player() {
                         className="w-16 h-16 bg-bg-elevated rounded-md flex items-center justify-center text-fg-muted shadow-sm bg-cover bg-center overflow-hidden"
                         style={{ backgroundImage: track.coverUrl ? `url(${track.coverUrl})` : undefined }}
                     >
-                        {!track.coverUrl && <CoverPlaceholderIcon />}
+                        {!track.coverUrl && <MusicIcon className="opacity-50" />}
                     </div>
                 </Link>
 

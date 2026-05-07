@@ -139,7 +139,7 @@ export function ArtistPage() {
                         <div className="flex items-center gap-4">
                             <FollowArtistButton
                                 artistId={artist.id}
-                                className="h-10 px-8 rounded-full font-bold uppercase tracking-widest bg-accent text-white shadow-lg hover:scale-105 transition-transform"
+                                className="h-10 px-6 rounded-md font-bold bg-accent text-white shadow-sm hover:bg-accent/90 transition-colors"
                             />
                             <ReportButton targetType="User" targetId={artist.id} />
                         </div>
@@ -199,13 +199,13 @@ export function ArtistPage() {
                                     ) : (
                                         <div className="flex h-full w-full items-center justify-center bg-accent/5">
                                             <MusicIcon className="size-32 text-accent/10" />
-                                        </div>  
+                                        </div>
                                     )}
                                 </div>
                                 <div>
                                     <h3 className="truncate font-black text-lg text-fg group-hover:text-white transition-colors">{album.title}</h3>
                                     <p className="text-sm text-fg-muted font-medium group-hover:text-white/80 transition-colors">
-                                        {album.releasedAt ? new Date(album.releasedAt).getFullYear() + ' ' + '•': ''} Альбом
+                                        {album.releasedAt ? new Date(album.releasedAt).getFullYear() + ' ' + '•' : ''} Альбом
                                     </p>
                                 </div>
                             </Link>

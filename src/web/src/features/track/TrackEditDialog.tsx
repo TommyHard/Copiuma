@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { updateTrack } from '@/shared/api/tracks';
 import { listGenres } from '@/shared/api/genres';
@@ -77,15 +78,15 @@ export function TrackEditDialog({ open, track, onClose }: Props) {
 
     if (!open) return null;
 
-    return (
+    return createPortal(
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+            className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in"
             onClick={onClose}
         >
             <form
                 onClick={(e) => e.stopPropagation()}
                 onSubmit={onSubmit}
-                className="w-full max-w-md space-y-5 rounded-lg border border-border bg-bg-elevated p-6"
+                className="w-full max-w-md space-y-5 rounded border border-border bg-bg-elevated p-6 shadow-2xl"
             >
                 <h2 className="text-xl font-semibold">Редактировать трек</h2>
 
@@ -97,7 +98,7 @@ export function TrackEditDialog({ open, track, onClose }: Props) {
                         required
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
-                        className="w-full rounded-md border border-border bg-bg px-3 py-2 outline-none focus:border-accent"
+                        className="w-full rounded border border-border bg-bg px-3 py-2 outline-none focus:border-accent transition-colors"
                     />
                 </label>
 
@@ -113,10 +114,10 @@ export function TrackEditDialog({ open, track, onClose }: Props) {
                                     type="button"
                                     onClick={() => toggleGenre(g.slug)}
                                     className={cn(
-                                        'rounded-full border px-3 py-1 text-xs transition-colors',
+                                        'rounded border px-3 py-1.5 text-xs transition-colors font-medium',
                                         selected
-                                            ? 'border-accent bg-accent/15 text-accent'
-                                            : 'border-border text-fg-muted hover:border-accent/50 hover:text-fg',
+                                            ? 'border-accent bg-accent text-white shadow-sm'
+                                            : 'border-border bg-bg-elevated text-fg hover:border-fg hover:bg-fg/5',
                                     )}
                                 >
                                     {g.displayName}
@@ -137,9 +138,9 @@ export function TrackEditDialog({ open, track, onClose }: Props) {
                     {featuredArtists.length > 0 && (
                         <div className="mb-2 flex flex-wrap gap-2">
                             {featuredArtists.map((a) => (
-                                <span key={a.id} className="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent/10 px-3 py-1 text-xs text-accent">
+                                <span key={a.id} className="inline-flex items-center gap-1 rounded border border-border bg-bg px-2 py-1 text-xs text-fg font-medium">
                                     {a.name}
-                                    <button type="button" onClick={() => setFeaturedArtists((p) => p.filter((x) => x.id !== a.id))} className="ml-0.5 text-fg-muted hover:text-danger">×</button>
+                                    <button type="button" onClick={() => setFeaturedArtists((p) => p.filter((x) => x.id !== a.id))} className="ml-1 text-fg-muted hover:text-danger transition-colors">×</button>
                                 </span>
                             ))}
                         </div>
@@ -150,7 +151,7 @@ export function TrackEditDialog({ open, track, onClose }: Props) {
                             value={featQuery}
                             onChange={(e) => setFeatQuery(e.target.value)}
                             placeholder="Поиск артиста в каталоге…"
-                            className="w-full rounded-md border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-accent"
+                            className="w-full rounded border border-border bg-bg px-3 py-2 text-sm outline-none focus:border-accent transition-colors"
                         />
                         {featSearching && <p className="mt-1 text-xs text-fg-muted">Поиск…</p>}
                         {featQuery.trim().length >= 2 && !featSearching
@@ -161,22 +162,26 @@ export function TrackEditDialog({ open, track, onClose }: Props) {
                                 </p>
                             )}
                         {featResults.length > 0 && (
-                            <ul className="absolute z-10 mt-1 w-full rounded-md border border-border bg-bg-elevated shadow-lg">
+                            <ul className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto rounded border border-border bg-bg-elevated shadow-xl">
                                 {featResults
                                     .filter((a) => a.id !== track.artistId)
                                     .filter((a) => !featuredArtists.some((x) => x.id === a.id))
                                     .map((a) => (
-                                        <li key={a.id} className="flex items-center justify-between gap-3 px-3 py-2 hover:bg-bg">
+                                        <li key={a.id} className="flex items-center justify-between gap-3 px-3 py-2 hover:bg-fg/5 transition-colors">
                                             <div className="flex min-w-0 items-center gap-2">
-                                                {a.avatarUrl && (
-                                                    <img src={a.avatarUrl} alt="" className="size-5 shrink-0 rounded-full object-cover" />
+                                                {a.avatarUrl ? (
+                                                    <img src={a.avatarUrl} alt="" className="size-6 shrink-0 rounded-full object-cover shadow-sm" />
+                                                ) : (
+                                                    <div className="size-6 shrink-0 rounded-full bg-accent/10 flex items-center justify-center text-[10px] font-bold text-accent">
+                                                        {a.name.charAt(0).toUpperCase()}
+                                                    </div>
                                                 )}
-                                                <span className="truncate text-sm">{a.name}</span>
+                                                <span className="truncate text-sm font-medium">{a.name}</span>
                                             </div>
                                             <button
                                                 type="button"
                                                 onClick={() => { setFeaturedArtists((p) => [...p, { id: a.id, name: a.name }]); setFeatQuery(''); setFeatResults([]); }}
-                                                className="rounded-md bg-accent px-2 py-1 text-xs text-accent-fg hover:opacity-90"
+                                                className="rounded bg-accent px-3 py-1 text-xs text-white font-medium hover:bg-accent/90 transition-colors shadow-sm"
                                             >
                                                 Добавить
                                             </button>
@@ -188,37 +193,38 @@ export function TrackEditDialog({ open, track, onClose }: Props) {
                 </div>
 
                 {/* Explicit */}
-                <label className="flex cursor-pointer items-center gap-3">
+                <label className="flex cursor-pointer items-center gap-3 w-fit">
                     <input
                         type="checkbox"
                         checked={isExplicit}
                         onChange={(e) => setIsExplicit(e.target.checked)}
-                        className="h-4 w-4 accent-accent"
+                        className="h-4 w-4 accent-accent cursor-pointer rounded border-border"
                     />
-                    <span className="text-sm">Explicit (18+)</span>
+                    <span className="text-sm font-medium select-none">Explicit (18+)</span>
                 </label>
 
                 {save.isError && (
-                    <p className="text-sm text-danger">Не удалось сохранить — попробуй снова.</p>
+                    <p className="text-sm font-medium text-danger bg-danger/10 p-2 rounded-md">Не удалось сохранить — попробуй снова.</p>
                 )}
 
-                <div className="flex justify-end gap-2 pt-1">
+                <div className="flex justify-end gap-3 pt-4 border-t border-border/50">
                     <button
                         type="button"
                         onClick={onClose}
-                        className="rounded-md border border-border px-4 py-2 text-sm hover:bg-bg"
+                        className="rounded bg-bg hover:bg-fg/10 px-4 py-2 text-sm font-medium text-fg transition-colors"
                     >
                         Отмена
                     </button>
                     <button
                         type="submit"
                         disabled={save.isPending || !title.trim()}
-                        className="rounded-md bg-accent px-4 py-2 text-sm text-accent-fg hover:opacity-90 disabled:opacity-50"
+                        className="rounded bg-accent hover:bg-accent/90 px-5 py-2 text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                     >
                         {save.isPending ? 'Сохраняем…' : 'Сохранить'}
                     </button>
                 </div>
             </form>
-        </div>
+        </div>,
+        document.body
     );
 }

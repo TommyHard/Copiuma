@@ -10,7 +10,7 @@ import { getPublicUserProfile } from '@/shared/api/profile';
 import { useContextMenu, ContextMenuPortal, ContextMenuItem } from '@/shared/ui/ContextMenu';
 import { PlaylistCover } from '@/features/playlists/PlaylistCover';
 import { CreatePlaylistDialog } from '@/features/playlists/CreatePlaylistDialog';
-import { HeartIcon, TrashIcon, SidebarLeftIcon, PlusIcon, SearchIcon } from '@/shared/ui/icons';
+import { HeartIcon, TrashIcon, SidebarLeftIcon, PlusIcon, SearchIcon, MusicIcon } from '@/shared/ui/icons';
 import { Tooltip } from '@/shared/ui/Tooltip';
 import { cn } from '@/shared/lib/cn';
 import type { FollowedUser, FollowedArtist, PlaylistSummary } from '@/shared/types';
@@ -135,10 +135,17 @@ export function SidebarLeft() {
 }
 
 function PlaylistSidebarItem({ playlist, compact }: { playlist: PlaylistSummary, compact: boolean }) {
+
+    const hasCover = !!playlist.coverUrl || (playlist.previewCovers && playlist.previewCovers.length > 0);
+
     return (
         <Link to={`/playlists/${playlist.id}`} className="flex items-center gap-3 mb-1 p-2 -mx-2 rounded-lg hover:bg-accent/10 transition-colors group">
-            <div className="w-10 h-10 shrink-0 transition-transform duration-300 group-hover:scale-105 shadow-md rounded-md overflow-hidden">
-                <PlaylistCover coverUrl={playlist.coverUrl} previewCovers={playlist.previewCovers} className="w-full h-full" rounded="md" />
+            <div className="w-10 h-10 shrink-0 transition-transform duration-300 group-hover:scale-105 shadow-md rounded-md overflow-hidden bg-bg-elevated flex items-center justify-center tracking-tight">
+                {hasCover ? (
+                    <PlaylistCover coverUrl={playlist.coverUrl} previewCovers={playlist.previewCovers} className="w-full h-full" rounded="md" />
+                ) : (
+                    <MusicIcon className="opacity-40" />
+                )}
             </div>
             {!compact && (
                 <div className="flex flex-col min-w-0">

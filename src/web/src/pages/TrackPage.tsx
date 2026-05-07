@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getTrack, getTrackStatus } from '@/shared/api/catalog';
@@ -15,8 +16,15 @@ import { StarRating } from '@/features/ratings/StarRating';
 import { Reviews } from '@/features/reviews/Reviews';
 import { ReportButton } from '@/features/reports/ReportButton';
 import { TrackEditDialog } from '@/features/track/TrackEditDialog';
-import { ImageUploader } from '@/features/cover/ImageUploader';
 import { useToggleOfflineForTrack } from './OfflinePage';
+import { useAverageColor } from '@/shared/hooks/useAverageColor';
+import { Tooltip } from '@/shared/ui/Tooltip';
+import {
+    MusicIcon, PlayIcon, HeartIcon, DislikeIcon,
+    DownloadIcon, CheckIcon, TrashIcon, RefreshIcon
+} from '@/shared/ui/icons';
+import { cn } from '@/shared/lib/cn';
+import { useContextMenu, ContextMenuPortal, ContextMenuItem } from '@/shared/ui/ContextMenu';
 
 export function TrackPage() {
     const { id } = useParams();
@@ -24,7 +32,13 @@ export function TrackPage() {
     const navigate = useNavigate();
     const play = usePlayTrack();
     const { user } = useAuth();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
     const [editOpen, setEditOpen] = useState(false);
+    const [deleteOpen, setDeleteOpen] = useState(false);
+    const [scrollY, setScrollY] = useState(0);
+    const pageRef = useRef<HTMLDivElement>(null);
+    const { isOpen, position, onContextMenu, close } = useContextMenu();
 
     const trackQ = useQuery({
         queryKey: ['track', id],
@@ -52,6 +66,7 @@ export function TrackPage() {
     });
 
     const like = useToggleTrackLike();
+    const coverColor = useAverageColor(trackQ.data?.coverUrl);
 
     const remove = useMutation({
         mutationFn: () => deleteTrack(id!),
@@ -72,215 +87,353 @@ export function TrackPage() {
 
     const offline = useToggleOfflineForTrack(id ?? '');
 
-    if (trackQ.isLoading) return <p className="text-fg-muted">Загружаем…</p>;
-    if (trackQ.isError || !trackQ.data) return <p className="text-danger">Трек не найден.</p>;
+    useEffect(() => {
+        const handleScroll = () => {
+            const container = pageRef.current?.parentElement;
+            setScrollY(container ? container.scrollTop : window.scrollY);
+        };
+
+        const scrollContainer = pageRef.current?.parentElement || window;
+        scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+        return () => scrollContainer.removeEventListener('scroll', handleScroll);
+    }, []);
+
+    if (trackQ.isLoading) return <div className="p-8 text-fg-muted animate-pulse">Загружаем…</div>;
+    if (trackQ.isError || !trackQ.data) return <div className="p-8 text-danger">Трек не найден.</div>;
 
     const t = trackQ.data;
     const ready = statusQ.data?.status === 'Ready';
     const isOwner = !!user && !!t.uploadedByUserId && user.id === t.uploadedByUserId;
+    const gradientBaseColor = coverColor || 'var(--accent-color, rgba(0, 0, 0, 0.5))';
 
     const genreLabel = (slug: string) =>
         genresQ.data?.find((g) => g.slug === slug)?.displayName ?? slug;
 
+    const BANNER_HEIGHT = 450;
+    const bannerScale = Math.max(1, 1.1 - (scrollY / BANNER_HEIGHT) * 0.7);
+    const colorOverlayOpacity = Math.min(1, (scrollY / BANNER_HEIGHT) * 3);
+    const isStickyVisible = scrollY > BANNER_HEIGHT;
+
     return (
-        <article className="space-y-10">
-            <header className="flex flex-wrap items-start gap-6">
-                {isOwner ? (
-                    <div className="space-y-1">
-                        <ImageUploader
-                            currentUrl={t.coverUrl ?? null}
-                            label="Обложка"
-                            onUpload={async (f) => {
-                                await uploadTrackCover(t.id, f);
-                                qc.invalidateQueries({ queryKey: ['track', id] });
-                            }}
-                            onDelete={t.hasOwnCover ? async () => {
-                                await deleteTrackCover(t.id);
-                                qc.invalidateQueries({ queryKey: ['track', id] });
-                            } : undefined}
-                        />
-                        {t.hasOwnCover ? (
-                            <p className="text-[10px] text-fg-muted">собственная обложка</p>
-                        ) : t.coverUrl ? (
-                            <p className="text-[10px] text-fg-muted">наследуется от альбома</p>
-                        ) : null}
+        <div ref={pageRef} className="relative flex flex-col min-h-full pb-32">
+
+            <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept="image/*"
+                onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                        await uploadTrackCover(t.id, file);
+                        qc.invalidateQueries({ queryKey: ['track', id] });
+                    }
+                }}
+            />
+
+            {/* STICKY HEADER */}
+            <div className="sticky top-0 z-50 w-full h-0 pointer-events-none">
+                <div
+                    className={cn(
+                        "absolute top-0 left-0 w-full h-[70px] flex items-center px-8 transition-all duration-500 pointer-events-auto",
+                        isStickyVisible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-full"
+                    )}
+                    style={{ backgroundColor: gradientBaseColor }}
+                >
+                    <div className="flex flex-col">
+                        <span className="text-lg font-black text-white leading-none">
+                            {t.title} {t.isExplicit && <span className="text-[10px] bg-white/20 px-1 rounded ml-2">E</span>}
+                        </span>
+                        <span className="text-sm text-white/80 font-medium">
+                            {t.artist}
+                        </span>
                     </div>
-                ) : (
-                    <div
-                        className="size-32 shrink-0 rounded-md border border-border bg-bg-elevated bg-cover bg-center"
-                        style={{ backgroundImage: t.coverUrl ? `url(${t.coverUrl})` : undefined }}
-                        aria-hidden
-                    />
+                </div>
+            </div>
+
+            {/* BANNER */}
+            <div className="relative h-[450px] w-full shrink-0 overflow-hidden bg-bg">
+                <div
+                    className="absolute inset-0 origin-center blur-md"
+                    style={{
+                        transform: `scale(${bannerScale})`,
+                        backgroundImage: t.coverUrl ? `url(${t.coverUrl})` : 'none',
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                    }}
+                />
+                <div
+                    className="absolute inset-0 transition-colors duration-700"
+                    style={{
+                        backgroundColor: gradientBaseColor,
+                        opacity: colorOverlayOpacity
+                    }}
+                />
+
+                {isOwner && t.hasOwnCover && (
+                    <div className="absolute top-6 left-6 z-30 px-2 py-1 rounded border border-black/50 bg-black/40">
+                        <p className="text-[14px] text-white font-bold tracking-widest">Собственная обложка</p>
+                    </div>
                 )}
 
-                <div className="min-w-0 flex-1 space-y-2">
-                    <h1 className="text-3xl font-semibold">{t.title}</h1>
-                    <div className="flex flex-wrap items-baseline gap-x-1 gap-y-1 text-sm">
-                        {t.artistId ? (
-                            <Link to={`/artists/${t.artistId}`} className="text-fg-muted hover:text-fg">
-                                {t.artist ?? '—'}
-                            </Link>
-                        ) : (
-                            <span className="text-fg-muted">{t.artist ?? '—'}</span>
-                        )}
-
-                        {t.featuredArtists && t.featuredArtists.length > 0 && (
-                            <span className="text-fg-muted">
-                                feat.{' '}
-                                {t.featuredArtists.map((fa, idx) => (
-                                    <span key={fa.id}>
-                                        {idx > 0 && ', '}
-                                        <Link
-                                            to={`/artists/${fa.id}`}
-                                            className="hover:text-fg hover:underline"
-                                        >
-                                            {fa.name}
-                                        </Link>
-                                    </span>
-                                ))}
-                            </span>
-                        )}
-
-                        {t.albumId && (
-                            <>
-                                <span className="text-fg-muted">•</span>
-                                <Link
-                                    to={`/albums/${t.albumId}`}
-                                    className="text-fg-muted hover:text-fg"
-                                    title={t.albumTitle ?? undefined}>
-                                    {t.albumTitle ?? 'альбом'}
-                                    {t.trackNumber ? ` • #${t.trackNumber}` : ''}
-                                </Link>
-                            </>
-                        )}
-                        {t.isExplicit && (
-                            <span className="rounded bg-fg/15 px-1.5 py-0.5 text-[10px] uppercase text-fg-muted">
-                                explicit
-                            </span>
-                        )}
+                <div className="absolute bottom-20 left-6 md:left-12 right-6 flex flex-col md:flex-row items-end gap-8 z-10">
+                    <div
+                        onContextMenu={isOwner ? onContextMenu : undefined}
+                        className="shrink-0 shadow-2xl rounded-lg overflow-hidden bg-bg-elevated cursor-context-menu"
+                    >
+                        <div className="size-48 md:size-64 relative group">
+                            {t.coverUrl ? (
+                                <img src={t.coverUrl} alt={t.title} className="h-full w-full object-cover" />
+                            ) : (
+                                <div className="flex h-full w-full items-center justify-center bg-accent/10 text-accent/40">
+                                    <MusicIcon className="size-20" />
+                                </div>
+                            )}
+                        </div>
                     </div>
 
-                    {t.genres && t.genres.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                            {t.genres.map((slug) => (
-                                <span
-                                    key={slug}
-                                    className="rounded-full border border-border px-4 py-0.5 text-[11px] text-fg-muted"
-                                >
-                                    {genreLabel(slug)}
-                                </span>
-                            ))}
+                    <div className="flex-1 space-y-6 text-white drop-shadow-2xl">
+                        {/* Waveform */}
+                        <div className="w-full max-w-2xl">
+                            {ready && id && (
+                                <Waveform trackId={id} className="w-full h-14 opacity-100" />
+                            )}
                         </div>
-                    )}
+
+                        <div className="space-y-1">
+                            <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest opacity-100">
+                                <span>Трек</span>
+                                {t.isExplicit && (
+                                    <>
+                                        <span>•</span>
+                                        <span className="px-1.5 py-0.5 rounded bg-white/50 border border-elevated text-[10px]">Explicit</span>
+                                    </>
+                                )}
+                            </div>
+                            <h1 className="text-5xl md:text-7xl font-black tracking-tight leading-none">
+                                {t.title}
+                            </h1>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-lg font-bold">
+                            <Link to={`/artists/${t.artistId}`} className="hover:underline">
+                                {t.artist ?? '—'}
+                            </Link>
+
+                            {t.featuredArtists && t.featuredArtists.length > 0 && (
+                                <span>
+                                    feat.{' '}
+                                    {t.featuredArtists.map((fa, idx) => (
+                                        <span key={fa.id}>
+                                            {idx > 0 && ', '}
+                                            <Link to={`/artists/${fa.id}`} className="hover:underline">
+                                                {fa.name}
+                                            </Link>
+                                        </span>
+                                    ))}
+                                </span>
+                            )}
+
+                            {t.albumId && (
+                                <>
+                                    <span>•</span>
+                                    <Link to={`/albums/${t.albumId}`} className="hover:underline">
+                                        {t.albumTitle}
+                                    </Link>
+                                </>
+                            )}
+                        </div>
+                    </div>
                 </div>
-            </header>
 
-            {ready && id && <Waveform trackId={id} className="h-24 w-full" />}
+                {/* GENRES INSIDE BANNER (BOTTOM) */}
+                {t.genres && t.genres.length > 0 && (
+                    <div className="absolute bottom-0 left-0 w-full p-6 flex flex-wrap items-center gap-2 bg-gradient-to-t from-black/40 to-transparent overflow-x-auto whitespace-nowrap scrollbar-hide">
+                        {t.genres.slice(0, t.genres.length > 5 ? 4 : 5).map((slug) => (
+                            <span key={slug} className="px-3 py-1 rounded bg-black/40 text-[10px] font-black uppercase tracking-widest text-white">
+                                {genreLabel(slug)}
+                            </span>
+                        ))}
 
-            <div className="flex flex-wrap items-start gap-3">
-                <button
-                    disabled={!ready}
-                    onClick={() =>
-                        play({
-                            id: t.id,
-                            title: t.title,
-                            artist: t.artist,
-                            duration: t.duration,
-                            uploadedAt: '',
-                            artistId: t.artistId,
-                            albumId: t.albumId,
-                            trackNumber: t.trackNumber,
-                            isExplicit: t.isExplicit,
-                            coverUrl: t.coverUrl
-                        })
-                    }
-                    className="rounded-md bg-accent px-4 py-2 font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
-                >
-                    {ready ? '▶ Играть' : 'Обрабатывается…'}
-                </button>
-
-                <button
-                    onClick={() => like.mutate({ trackId: t.id, nextLiked: !t.isLikedByMe })}
-                    disabled={like.isPending}
-                    className={`rounded-md border px-4 py-2 transition-colors disabled:opacity-50 ${t.isLikedByMe
-                        ? 'border-accent/60 bg-accent/10 text-accent hover:bg-accent/20'
-                        : 'border-border hover:bg-bg-elevated'
-                        }`}>
-                    {t.isLikedByMe ? '♥ В избранном' : '♥ В избранное'}
-                </button>
-
-                <button
-                    onClick={() => offline.cached ? offline.remove() : offline.add()}
-                    disabled={offline.busy || !ready}
-                    title={offline.cached ? 'Убрать из офлайн' : 'Скачать для офлайн-проигрывания'}
-                    className={`rounded-md border px-4 py-2 transition-colors disabled:opacity-50 ${offline.cached
-                        ? 'border-accent/60 bg-accent/10 text-accent hover:bg-accent/20'
-                        : 'border-border hover:bg-bg-elevated'
-                        }`}
-                >
-                    {offline.busy
-                        ? `⬇ ${offline.progress?.completed ?? 0}/${offline.progress?.total ?? 0}`
-                        : offline.cached ? '✓ Офлайн' : '⬇ Офлайн'}
-                </button>
-
-                {isOwner ? (
-                    <>
-                        <button
-                            onClick={() => setEditOpen(true)}
-                            className="rounded-md border border-border px-4 py-2 hover:bg-bg-elevated">
-                            Редактировать
-                        </button>
-                        <button
-                            onClick={() => {
-                                if (confirm('Удалить трек безвозвратно?')) remove.mutate();
-                            }}
-                            disabled={remove.isPending}
-                            className="rounded-md border border-danger/40 px-4 py-2 text-danger hover:bg-danger/10 disabled:opacity-50">
-                            Удалить
-                        </button>
-                    </>
-                ) : (
-                    <>
-                        <button
-                            onClick={() => dislike.mutate()}
-                            disabled={dislike.isPending || dislike.isSuccess}
-                            title="Не интересно — убрать из рекомендаций"
-                            className={`rounded-md border px-4 py-2 text-sm transition-colors disabled:opacity-50 ${dislike.isSuccess
-                                ? 'border-border text-fg-muted line-through'
-                                : 'border-border hover:border-danger/40 hover:text-danger'
-                                }`}>
-                            🚫 Не интересно
-                        </button>
-                        <ReportButton targetType="Track" targetId={t.id} />
-                    </>
+                        {t.genres.length > 5 && (
+                            <Tooltip
+                                position="top"
+                                content={
+                                    <div className="flex flex-col gap-1.5 p-1">
+                                        {t.genres.slice(4).map((slug) => (
+                                            <span key={slug} className="text-[11px] uppercase font-bold text-fg">
+                                                {genreLabel(slug)}
+                                            </span>
+                                        ))}
+                                    </div>
+                                }
+                            >
+                                <span className="px-3 py-1 rounded bg-black/40 hover:bg-black/60 transition-colors text-[10px] font-black uppercase tracking-widest text-white cursor-help">
+                                    Ещё {t.genres.length - 4}...
+                                </span>
+                            </Tooltip>
+                        )}
+                    </div>
                 )}
             </div>
 
-            {!ready && (
-                <p className="text-sm text-fg-muted">
-                    Идёт обработка (LUFS / waveform / HLS-транскод). Эта страница автоматически обновится,
-                    когда трек станет Ready.
-                </p>
-            )}
+            {/* GRADIENT BELOW BANNER */}
+            <div
+                className="absolute left-0 w-full pointer-events-none transition-colors duration-500"
+                style={{
+                    top: '450px',
+                    height: '250px',
+                    background: `linear-gradient(to bottom, ${gradientBaseColor} 0%, transparent 100%)`,
+                    opacity: 0.4
+                }}
+            />
 
-            {ready && id && (
-                <section className="space-y-3">
-                    <h2 className="text-xl font-semibold">Оценка</h2>
-                    <StarRating trackId={id} />
-                </section>
-            )}
+            <div className="px-6 md:px-12 pt-10 relative z-10 space-y-16">
 
-            {ready && id && <Reviews trackId={id} />}
+                {/* ACTION BAR */}
+                <div className="flex flex-wrap items-center gap-4">
+                    <button
+                        disabled={!ready}
+                        onClick={() => play({
+                            id: t.id, title: t.title, artist: t.artist, duration: t.duration,
+                            uploadedAt: '', artistId: t.artistId, albumId: t.albumId,
+                            trackNumber: t.trackNumber, isExplicit: t.isExplicit, coverUrl: t.coverUrl
+                        })}
+                        className="h-14 px-5 rounded font-black uppercase tracking-widest bg-accent text-white shadow-xl hover:scale-105 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-3"
+                    >
+                        {ready ? <><PlayIcon className="size-6" /> Играть</> : <><RefreshIcon className="size-6 animate-spin" /> Обработка… </>}
+                    </button>
 
-            {similarQ.data && similarQ.data.length > 0 && (
-                <section className="space-y-3">
-                    <h2 className="text-xl font-semibold">Похожие</h2>
-                    <ul className="divide-y divide-border rounded-md border border-border">
-                        {similarQ.data.map((s) => (
-                            <TrackRow key={s.id} track={s} />
-                        ))}
-                    </ul>
-                </section>
+                    <Tooltip content={t.isLikedByMe ? "Убрать из избранного" : "В избранное"} position="top">
+                        <button
+                            onClick={() => like.mutate({ trackId: t.id, nextLiked: !t.isLikedByMe })}
+                            disabled={like.isPending}
+                            className={cn(
+                                "size-14 flex items-center justify-center rounded transition-all hover:scale-105 shadow-sm",
+                                t.isLikedByMe ? "bg-accent text-white hover:bg-accent/90" : "bg-bg-elevated text-fg hover:bg-fg/10"
+                            )}
+                        >
+                            <HeartIcon filled className={cn("size-7", t.isLikedByMe ? "" : "opacity-80")} />
+                        </button>
+                    </Tooltip>
+
+                    <Tooltip content={offline.cached ? "Удалить из офлайна" : "Сохранить в офлайн"} position="top">
+                        <button
+                            onClick={() => offline.cached ? offline.remove() : offline.add()}
+                            disabled={offline.busy || !ready}
+                            className={cn(
+                                "h-14 px-6 rounded-md font-bold transition-all flex items-center gap-2",
+                                offline.cached ? "bg-accent text-white hover:bg-accent/90" : "bg-bg-elevated text-fg hover:bg-fg/10"
+                            )}
+                        >
+                            {offline.busy ? <RefreshIcon className="size-5 animate-spin" /> : offline.cached ? <CheckIcon className="size-5" /> : <DownloadIcon className="size-5" />}
+                            {offline.busy ? 'Загрузка...' : offline.cached ? 'Офлайн' : 'Офлайн'}
+                        </button>
+                    </Tooltip>
+
+                    <div className="flex-1" />
+
+                    {isOwner ? (
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setEditOpen(true)}
+                                className="h-10 px-6 rounded bg-accent tracking-tight font-bold hover:scale-105 active:scale-95 transition-all"
+                            >
+                                Редактировать
+                            </button>
+                            <button
+                                onClick={() => setDeleteOpen(true)}
+                                disabled={remove.isPending}
+                                className="h-10 px-4 rounded bg-danger tracking-tight font-bold hover:bg-danger/60 transition-colors flex items-center gap-2"
+                            >
+                                <TrashIcon className="size-4" /> Удалить
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => dislike.mutate()}
+                                disabled={dislike.isPending || dislike.isSuccess}
+                                className={cn(
+                                    "h-10 px-6 rounded bg-accent font-bold tracking-tight hover:scale-105 active:scale-95 transition-all flex items-center gap-2",
+                                    dislike.isSuccess ? "opacity-50 line-through" : "hover:border-black/40"
+                                )}
+                            >
+                                <DislikeIcon className="size-4" /> Не интересно
+                            </button>
+                            <ReportButton targetType="Track" targetId={t.id} />
+                        </div>
+                    )}
+                </div>
+
+                <div className="grid grid-cols-1 gap-16">
+                    <div className="space-y-16">
+                        {ready && id && (
+                            <section className="space-y-6">
+                                <h2 className="text-3xl font-black tracking-tight flex items-center gap-3">
+                                    Оценка
+                                </h2>
+
+                                <div className="bg-bg-elevated border border-border rounded-2xl p-8 shadow-sm flex flex-col items-center justify-center gap-4 text-center max-w-2xl">
+                                    <div className="space-y-2">
+                                        <h3 className="text-xl font-bold text-fg">Оцените трек</h3>
+                                        <p className="text-sm text-fg-muted max-w-sm mx-auto">
+                                            Ваша оценка помогает нам точнее подбирать музыку для вас и других слушателей.
+                                        </p>
+                                    </div>
+                                    <div className="bg-bg p-4 rounded-xl border border-border shadow-inner mt-2">
+                                        <StarRating trackId={id} />
+                                    </div>
+                                </div>
+                            </section>
+                        )}
+
+                        {ready && id && (
+                            <section className="space-y-6">
+                                <Reviews trackId={id} />
+                            </section>
+                        )}
+                    </div>
+
+                    <section className="space-y-6 pt-10 border-t border-border">
+                        <h2 className="text-3xl font-black tracking-tight">Похожие треки</h2>
+                        {similarQ.data && similarQ.data.length > 0 ? (
+                            <div className="rounded border border-border bg-bg-elevated/20 backdrop-blur-sm overflow-hidden">
+                                {similarQ.data.map((s) => (
+                                    <TrackRow key={s.id} track={s} />
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-fg-muted italic">Похожих треков пока нет</p>
+                        )}
+                    </section>
+                </div>
+            </div>
+
+            {isOwner && (
+                <ContextMenuPortal isOpen={isOpen} position={position}>
+                    <ContextMenuItem
+                        icon={<DownloadIcon className="size-4" />}
+                        onClick={() => fileInputRef.current?.click()}
+                    >
+                        Загрузить обложку
+                    </ContextMenuItem>
+                    {t.hasOwnCover && (
+                        <ContextMenuItem
+                            danger
+                            icon={<TrashIcon className="size-4" />}
+                            onClick={async () => {
+                                if (confirm('Удалить собственную обложку?')) {
+                                    await deleteTrackCover(t.id);
+                                    qc.invalidateQueries({ queryKey: ['track', id] });
+                                    close();
+                                }
+                            }}
+                        >
+                            Убрать обложку
+                        </ContextMenuItem>
+                    )}
+                </ContextMenuPortal>
             )}
 
             {isOwner && (
@@ -290,6 +443,57 @@ export function TrackPage() {
                     onClose={() => setEditOpen(false)}
                 />
             )}
-        </article>
+
+            {isOwner && (
+                <ConfirmDeleteDialog
+                    open={deleteOpen}
+                    onClose={() => setDeleteOpen(false)}
+                    onConfirm={() => remove.mutate()}
+                    isPending={remove.isPending}
+                />
+            )}
+        </div>
+    );
+}
+
+function ConfirmDeleteDialog({
+    open,
+    onClose,
+    onConfirm,
+    isPending
+}: {
+    open: boolean;
+    onClose: () => void;
+    onConfirm: () => void;
+    isPending: boolean;
+}) {
+    if (!open) return null;
+
+    return createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+            <div className="bg-bg-elevated border border-border rounded-xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-4">
+                <h2 className="text-xl font-bold text-fg">Удалить трек?</h2>
+                <p className="text-fg-muted">Вы уверены, что хотите безвозвратно удалить этот трек? Это действие нельзя отменить.</p>
+
+                <div className="flex justify-end gap-3 mt-4">
+                    <button
+                        onClick={onClose}
+                        disabled={isPending}
+                        className="px-4 py-2 rounded-md bg-bg hover:bg-fg/10 text-fg font-medium transition-colors"
+                    >
+                        Отмена
+                    </button>
+                    <button
+                        onClick={onConfirm}
+                        disabled={isPending}
+                        className="px-4 py-2 rounded-md bg-danger hover:bg-danger/90 text-white font-medium transition-colors flex items-center gap-2"
+                    >
+                        {isPending && <RefreshIcon className="size-4 animate-spin" />}
+                        Удалить
+                    </button>
+                </div>
+            </div>
+        </div>,
+        document.body
     );
 }

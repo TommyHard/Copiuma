@@ -34,8 +34,8 @@ export function FollowArtistButton({ artistId, className }: FollowArtistButtonPr
     const busy = follow.isPending || unfollow.isPending || followed.isLoading;
 
     const baseClasses = isFollowing
-        ? 'rounded-md border border-border bg-transparent px-4 py-2 text-sm font-medium text-black dark:text-white hover:border-fg/40 hover:bg-bg-elevated disabled:opacity-50 transition-colors'
-        : 'rounded-md bg-accent px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90 disabled:opacity-50 transition-colors';
+        ? 'h-10 px-6 rounded bg-bg-elevated text-fg font-bold shadow-sm hover:bg-danger hover:text-white transition-colors flex items-center justify-center disabled:opacity-50'
+        : 'h-10 px-6 rounded bg-accent text-white font-bold shadow-sm hover:bg-accent/90 transition-colors flex items-center justify-center disabled:opacity-50';
 
     return (
         <button

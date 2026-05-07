@@ -40,7 +40,7 @@ export function SidebarRight() {
                     <Tooltip content={isRightOpen ? "Свернуть" : "Развернуть"} position="left">
                         <button
                             onClick={() => setRightOpen(!isRightOpen)}
-                            className="flex items-center gap-3 text-fg-muted hover:text-fg transition-colors min-w-0"
+                            className="flex items-center gap-3 tracking-tight hover:text-fg transition-colors min-w-0"
                         >
                             <SidebarRightIcon className={cn("shrink-0 transition-transform", !isRightOpen && "rotate-180")} />
                             {isRightOpen && (
@@ -58,7 +58,7 @@ export function SidebarRight() {
                                     onClick={() => setRightTab(rightTab === 'friends' ? 'now-playing' : 'friends')}
                                     className={cn(
                                         "p-1.5 rounded-md transition-colors border shadow-sm",
-                                        rightTab === 'friends' ? "bg-accent text-accent-fg border-accent" : "bg-bg border-border text-fg-muted hover:text-fg"
+                                        rightTab === 'friends' ? "bg-accent text-accent-fg border-accent" : "bg-bg border-border tracking-tight hover:text-fg"
                                     )}
                                 >
                                     <UsersIcon className="w-4 h-4" />
@@ -91,7 +91,7 @@ function QueueView() {
     const removeFromQueue = usePlayer(s => s.removeFromQueue);
     const playQueueStore = usePlayer(s => s.playQueue);
 
-    if (queue.length === 0) return <div className="text-center text-fg-muted mt-10"><MusicIcon className="mx-auto mb-2" /> Очередь пуста</div>;
+    if (queue.length === 0) return <div className="text-center tracking-tight mt-10"><MusicIcon className="mx-auto mb-2" /> Очередь пуста</div>;
 
     const currentTrack = queue[index];
     const upcoming = queue.map((t, i) => ({ track: t, originalIndex: i })).slice(index + 1);
@@ -102,10 +102,15 @@ function QueueView() {
                 <div className="space-y-3">
                     <h3 className="text-sm font-semibold text-fg">Сейчас играет</h3>
                     <div className="rounded-md border border-border bg-bg-elevated p-3 flex items-center gap-3">
-                        <div className="w-12 h-12 rounded bg-cover bg-center shadow-sm" style={{ backgroundImage: currentTrack.coverUrl ? `url(${currentTrack.coverUrl})` : undefined }} />
+                        <div
+                            className="w-12 h-12 rounded bg-bg-elevated flex items-center justify-center tracking-tight shadow-sm bg-cover bg-center overflow-hidden"
+                            style={{ backgroundImage: currentTrack.coverUrl ? `url(${currentTrack.coverUrl})` : undefined }}
+                        >
+                            {!currentTrack.coverUrl && <MusicIcon className="w-5 h-5 opacity-40" />}
+                        </div>
                         <div className="min-w-0 flex-1">
                             <div className="text-sm font-medium truncate">{currentTrack.title}</div>
-                            <div className="text-xs text-fg-muted truncate">{currentTrack.artist || 'Неизвестный'}</div>
+                            <div className="text-xs tracking-tight truncate">{currentTrack.artist || 'Неизвестный'}</div>
                         </div>
                     </div>
                 </div>
@@ -139,20 +144,27 @@ function NowPlayingView({ onOpenQueue }: { onOpenQueue: () => void }) {
     const qc = useQueryClient();
     const { user } = useAuth();
 
-    if (!currentTrack) return <div className="text-center text-fg-muted mt-10">Ничего не играет</div>;
+    if (!currentTrack) return <div className="text-center tracking-tight mt-10">Ничего не играет</div>;
 
     const a = artistQ.data;
     const isFollowed = followedQ.data?.some(fa => fa.artistId === artistId);
     const isLiked = currentTrack.isLikedByMe ?? false;
 
+    const isOwner = !!user && !!a && (a.ownerUserId === user.id || a.createdByUserId === user.id);
+
     return (
         <div className="space-y-6">
-            <div className="w-full aspect-square rounded-xl bg-cover bg-center shadow-md bg-bg-elevated" style={{ backgroundImage: currentTrack.coverUrl ? `url(${currentTrack.coverUrl})` : undefined }} />
+            <div
+                className="w-full aspect-square rounded-xl bg-bg-elevated flex items-center justify-center tracking-tight shadow-md bg-cover bg-center overflow-hidden"
+                style={{ backgroundImage: currentTrack.coverUrl ? `url(${currentTrack.coverUrl})` : undefined }}
+            >
+                {!currentTrack.coverUrl && <MusicIcon className="opacity-50" />}
+            </div>
 
             <div className="flex items-center justify-between gap-3 min-w-0">
                 <div className="flex flex-col min-w-0">
                     <Link to={`/tracks/${currentTrack.id}`} className="text-2xl font-bold truncate hover:underline">{currentTrack.title}</Link>
-                    <div className="text-fg-muted truncate mt-1">
+                    <div className="tracking-tight truncate mt-1">
                         {artistId ? (
                             <Link to={`/artists/${artistId}`} className="hover:underline hover:text-fg transition-colors">{currentTrack.artist}</Link>
                         ) : currentTrack.artist}
@@ -190,12 +202,15 @@ function NowPlayingView({ onOpenQueue }: { onOpenQueue: () => void }) {
                     <div className="p-4 space-y-3 min-w-0">
                         <Link to={`/artists/${a.id}`} className="text-lg font-bold hover:underline block truncate">{a.name}</Link>
                         <div className="flex justify-between items-center gap-2">
-                            <span className="text-xs text-fg-muted font-medium truncate">{a.monthlyListeners?.toLocaleString()} слушателей</span>
-                            <button onClick={() => isFollowed ? unfollowArtist(a.id) : followArtist(a.id)} className={cn("px-5 py-1.5 shrink-0 rounded-full text-xs font-bold transition-all", isFollowed ? "border border-border text-fg hover:bg-bg" : "bg-fg text-bg hover:opacity-80")}>
-                                {isFollowed ? 'Отписаться' : 'Подписаться'}
-                            </button>
+                            <span className="text-xs tracking-tight font-medium truncate">{a.monthlyListeners?.toLocaleString()} слушателей</span>
+                            {/* Скрыть кнопку, если пользователь владелец */}
+                            {!isOwner && (
+                                <button onClick={() => isFollowed ? unfollowArtist(a.id) : followArtist(a.id)} className={cn("px-5 py-1.5 shrink-0 rounded-full text-xs font-bold transition-all", isFollowed ? "border border-border text-fg hover:bg-bg" : "bg-fg text-bg hover:opacity-80")}>
+                                    {isFollowed ? 'Отписаться' : 'Подписаться'}
+                                </button>
+                            )}
                         </div>
-                        {a.bio && <p className="text-xs text-fg-muted line-clamp-3 leading-relaxed whitespace-pre-wrap">{a.bio}</p>}
+                        {a.bio && <p className="text-xs tracking-tight line-clamp-3 leading-relaxed whitespace-pre-wrap">{a.bio}</p>}
                     </div>
                 </div>
             )}
@@ -221,7 +236,7 @@ function FriendsFeedList({ items }: { items: FriendFeedItem[] }) {
     const nameMap: Record<string, string> = {};
     for (const u of namesQ.data ?? []) nameMap[u.id] = u.displayName;
 
-    if (items.length === 0) return <p className="text-center text-fg-muted mt-10 text-sm">Нет активности друзей</p>;
+    if (items.length === 0) return <p className="text-center tracking-tight mt-10 text-sm">Нет активности друзей</p>;
 
     return (
         <div className="space-y-4">
@@ -229,7 +244,7 @@ function FriendsFeedList({ items }: { items: FriendFeedItem[] }) {
                 <div key={`${item.userId}-${i}`} className="overflow-hidden rounded-md border border-border">
                     <div className="bg-bg px-3 py-1.5 text-[11px] flex justify-between">
                         <Link to={`/users/${item.userId}`} className="font-bold hover:underline">{nameMap[item.userId] || '...'}</Link>
-                        <span className="text-fg-muted">{new Date(item.lastPlayedAt).toLocaleDateString('ru')}</span>
+                        <span className="tracking-tight">{new Date(item.lastPlayedAt).toLocaleDateString('ru')}</span>
                     </div>
                     <ul className="bg-bg-elevated"><TrackRow track={item.track} /></ul>
                 </div>

@@ -56,7 +56,7 @@ function drawWaveform(canvas: HTMLCanvasElement, peaks: number[]) {
     const barCore = barWidth - barGap;
 
     const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '124 92 255';
-    ctx.fillStyle = `rgb(${accent})`;
+    ctx.fillStyle = `rgba(255, 255, 255, 0.8)`;
 
     for (let i = 0; i < barCount; i++) {
         const slice = peaks.slice(Math.floor(i * step), Math.floor((i + 1) * step));

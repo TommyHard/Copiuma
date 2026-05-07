@@ -17,18 +17,18 @@ export function PlaylistsPage() {
                 <p className="text-sm text-fg-muted mt-1">Открывайте новые подборки от других пользователей.</p>
             </header>
 
-            {pub.isLoading && <p className="text-fg-muted">Загружаем…</p>}
+            {pub.isLoading && <p className="tracking-tight">Загружаем…</p>}
             {pub.isError && <p className="text-danger">Не удалось загрузить плейлисты.</p>}
 
             {pub.data && pub.data.length === 0 ? (
-                <p className="text-fg-muted">Никто еще не опубликовал плейлисты.</p>
+                <p className="tracking-tight">Никто еще не опубликовал плейлисты.</p>
             ) : (
                 <ul className="grid grid-cols-2 gap-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                     {pub.data?.map((p) => (
                         <li key={p.id}>
                             <Link
                                 to={`/playlists/${p.id}`}
-                                className="block space-y-3 rounded-xl border border-border bg-bg-elevated p-4 hover:bg-bg-elevated/70 transition-all hover:scale-[1.02]"
+                                className="block space-y-3 rounded border border-border p-4 hover:bg-accent/30 transition-all hover:scale-[1.05]"
                             >
                                 <PlaylistCover
                                     coverUrl={p.coverUrl}
