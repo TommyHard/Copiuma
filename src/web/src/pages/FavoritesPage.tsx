@@ -61,6 +61,9 @@ export function FavoritesPage() {
     const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
     const [sortMenuOpen, setSortMenuOpen] = useState(false);
 
+    const [isSticky, setIsSticky] = useState(false);
+    const sentinelRef = useRef<HTMLDivElement>(null);
+
     const [activeResizer, setActiveResizer] = useState<number | null>(null);
     const [isManuallyResized, setIsManuallyResized] = useState(false);
 
@@ -220,6 +223,26 @@ export function FavoritesPage() {
         if (!isOpen) setPlaylistSearch('');
     }, [isOpen]);
 
+    useEffect(() => {
+        const sentinel = sentinelRef.current;
+        const scrollContainer = document.getElementById('main-scroll-container');
+        if (!sentinel || !scrollContainer) return;
+
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                setIsSticky(!entry.isIntersecting);
+            },
+            {
+                root: scrollContainer,
+                threshold: 0,
+                rootMargin: '-1px 0px 0px 0px'
+            }
+        );
+
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, []);
+
     const qPlaylists = useQuery({
         queryKey: ['playlists'],
         queryFn: listPlaylists,
@@ -333,9 +356,18 @@ export function FavoritesPage() {
                     </div>
                 </div>
 
+                {/* STICKY HEADER */ }
                 <div ref={tableContainerRef} className="w-full mt-4">
+
+                    <div ref={sentinelRef} className="w-full h-px pointer-events-none -mb-px" />
+
                     <div
-                        className="group sticky top-0 z-40 grid gap-4 px-4 py-2 border-b border-accent/15 text-md font-bold tracking-tight uppercase tracking-wider w-full"
+                        className={cn(
+                            "group sticky top-0 z-40 grid gap-4 px-4 py-2 border-b text-md font-bold tracking-tight uppercase tracking-wider w-full transition-all duration-300",
+                            isSticky
+                                ? "bg-bg-elevated border-border shadow-md backdrop-blur-md"
+                                : "bg-transparent border-accent/15"
+                        )}
                         style={{ gridTemplateColumns }}
                     >
                         <div className="text-center">#</div>

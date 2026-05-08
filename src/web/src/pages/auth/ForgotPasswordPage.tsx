@@ -112,7 +112,7 @@ export function ForgotPasswordPage() {
             <div className="flex flex-col items-center gap-6 text-sm pt-6">
                 <Link to="/auth/login" className="group text-fg-muted">
                     Вспомнили пароль?{' '}
-                    <span className="underline font-medium text-white group-hover:text-accent transition-colors">
+                    <span className="underline font-medium tracking-tight group-hover:text-accent transition-colors">
                         ВЕРНУТЬСЯ
                     </span>
                 </Link>

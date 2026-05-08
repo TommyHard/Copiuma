@@ -7,6 +7,7 @@ export interface MeResponse {
     role: UserRole;
     emailVerified: boolean;
     createdAt: string;
+    avatarUrl?: string | null;
 }
 
 export interface LoginResponse {

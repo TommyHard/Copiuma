@@ -50,22 +50,6 @@ export function SidebarRight() {
                             )}
                         </button>
                     </Tooltip>
-
-                    {isRightOpen && (
-                        <div className="flex gap-1 shrink-0 ml-2">
-                            <Tooltip content="Активность друзей" position="bottom">
-                                <button
-                                    onClick={() => setRightTab(rightTab === 'friends' ? 'now-playing' : 'friends')}
-                                    className={cn(
-                                        "p-1.5 rounded-md transition-colors border shadow-sm",
-                                        rightTab === 'friends' ? "bg-accent text-accent-fg border-accent" : "bg-bg border-border tracking-tight hover:text-fg"
-                                    )}
-                                >
-                                    <UsersIcon className="w-4 h-4" />
-                                </button>
-                            </Tooltip>
-                        </div>
-                    )}
                 </div>
 
                 <div className={cn(

@@ -184,11 +184,11 @@ export function LoginPage() {
             <div className="flex flex-col items-center gap-6 text-sm pt-2">
                 <Link to="/auth/register" className="group text-fg-muted">
                     У вас нет аккаунта?{' '}
-                    <span className="underline font-medium text-white group-hover:text-accent">
+                    <span className="underline font-medium tracking-tight group-hover:text-accent">
                         ЗАРЕГИСТРИРУЙТЕСЬ
                     </span>
                 </Link>
-                <Link to="/auth/forgot-password" className="text-white hover:text-accent hover:underline font-medium mt-4">
+                <Link to="/auth/forgot-password" className="tracking-tight hover:text-accent hover:underline font-medium mt-4">
                     СБРОС ПАРОЛЯ
                 </Link>
             </div>

@@ -9,9 +9,10 @@ import { cn } from '@/shared/lib/cn';
 interface FollowArtistButtonProps {
     artistId: string;
     className?: string;
+    disabled?: boolean;
 }
 
-export function FollowArtistButton({ artistId, className }: FollowArtistButtonProps) {
+export function FollowArtistButton({ artistId, className, disabled }: FollowArtistButtonProps) {
     const qc = useQueryClient();
 
     const followed = useQuery({
@@ -40,7 +41,7 @@ export function FollowArtistButton({ artistId, className }: FollowArtistButtonPr
     return (
         <button
             onClick={() => (isFollowing ? unfollow.mutate() : follow.mutate())}
-            disabled={busy}
+            disabled={busy || disabled}
             className={cn(baseClasses, className)}
         >
             {isFollowing ? 'Отписаться' : 'Подписаться'}

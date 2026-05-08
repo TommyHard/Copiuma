@@ -1,26 +1,25 @@
-import { setTheme, useTheme } from './useTheme';
+import { useTheme } from './useTheme';
+import { SunIcon, MoonIcon } from '@/shared/ui/icons';
 
-/**
- * Минимальный 2-state toggle: light / dark
- */
 export function ThemeToggle() {
-    const { theme } = useTheme();
+    const { theme, setTheme } = useTheme();
 
-    function next() {
+    function toggle() {
         setTheme(theme === 'light' ? 'dark' : 'light');
     }
 
-    const label = theme === 'light' ? 'Светлая' : 'Тёмная';
-    const icon = theme === 'light' ? '☀' : '☾';
+    const isLight = theme === 'light';
+    const Icon = isLight ? SunIcon : MoonIcon;
 
     return (
         <button
-            onClick={next}
-            title={`Тема: ${label}`}
-            className="flex h-9 items-center gap-1 rounded border border-border px-2 text-xs hover:bg-bg-elevated"
+            onClick={toggle}
+            title={isLight ? 'Включить тёмную тему' : 'Включить светлую тему'}
+            aria-label="Переключить тему"
+
+            className="inline-flex size-8 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-accent/20 hover:text-fg"
         >
-            <span aria-hidden>{icon}</span>
-            <span className="hidden sm:inline">{label}</span>
+            <Icon className="h-5 w-5" aria-hidden="true" />
         </button>
     );
 }

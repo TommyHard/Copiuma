@@ -5,7 +5,6 @@ import { RequireAuth } from '@/features/auth/RequireAuth';
 import { RequireVerified } from '@/features/auth/RequireVerified';
 import { RequireRole } from '@/features/auth/RequireRole';
 import { HomePage } from '@/pages/HomePage';
-import { MePage } from '@/pages/MePage';
 import { CatalogPage } from '@/pages/CatalogPage';
 import { TrackPage } from '@/pages/TrackPage';
 import { SearchPage } from '@/pages/SearchPage';
@@ -76,7 +75,6 @@ export const router = createBrowserRouter([
                     { path: 'playlists/:id', element: <PlaylistPage /> },
                     { path: 'rooms', element: <RoomsLandingPage /> },
                     { path: 'rooms/:id', element: <RoomPage /> },
-                    { path: 'me', element: <MePage /> },
                     { path: 'users/:id', element: <UserProfilePage /> },
                     { path: 'friends', element: <FriendsPage /> },
                     { path: 'settings', element: <SettingsPage /> },

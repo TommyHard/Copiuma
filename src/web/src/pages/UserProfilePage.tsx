@@ -152,7 +152,7 @@ export function UserProfilePage() {
                                             <div className="font-semibold text-fg text-base truncate">
                                                 {a.name}
                                             </div>
-                                            <div className="text-sm text-fg-muted mt-0.5">Artist</div>
+                                            <div className="text-sm text-fg-muted mt-0.5">Артист</div>
                                         </div>
                                     </Link>
                                 ))}

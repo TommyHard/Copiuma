@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru" class="light">
+<html lang="ru">
 <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -11,6 +11,20 @@
     <meta name="apple-mobile-web-app-title" content="Copiuma" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
     <title>Copiuma</title>
+
+    <script>
+        (function () {
+            try {
+                var theme = localStorage.getItem('copiuma.theme');
+                if (theme !== 'light' && theme !== 'dark') {
+                    theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                }
+
+                document.documentElement.dataset.theme = theme;
+
+            } catch (e) { }
+        })();
+    </script>
 </head>
 <body class="bg-bg text-fg antialiased">
     <div id="root"></div>

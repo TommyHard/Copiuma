@@ -67,7 +67,7 @@ export function ReportButton({
             <button
                 onClick={() => setIsOpen(true)}
                 className={cn(
-                    "h-10 px-6 rounded bg-accent tracking-tight font-bold hover:scale-105 active:scale-95 transition-all flex items-center justify-center",
+                    "h-10 px-6 rounded bg-danger/80 text-white font-bold hover:scale-105 active:scale-95 transition-all flex items-center justify-center",
                     className
                 )}
             >

@@ -64,7 +64,7 @@ export function SidebarLeft() {
                     <Tooltip content="Создать плейлист" position="bottom">
                         <button
                             onClick={() => setCreateOpen(true)}
-                            className="flex items-center gap-1.5 px-2 py-1 shrink-0 rounded-md hover:bg-fg/10 text-fg-muted hover:text-fg transition-colors ml-2"
+                            className="flex items-center gap-1.5 px-2 py-1 shrink-0 rounded hover:bg-accent/20 text-fg-muted hover:text-fg transition-colors ml-2"
                         >
                             <PlusIcon className="w-4 h-4" />
                             <span className="text-xs font-medium whitespace-nowrap">Создать</span>
@@ -112,7 +112,7 @@ export function SidebarLeft() {
                 {/* PUBLIC PLAYLIST'S */}
                 <div className="space-y-1">
                     <Link to="/playlists" className="flex items-center gap-3 p-2 -mx-2 rounded-lg hover:bg-accent/10 transition-colors group">
-                        <div className="w-10 h-10 shrink-0 rounded-md bg-gradient-to-br from-cyan-400 to-teal-600 flex items-center justify-center shadow-md transition-transform duration-300 group-hover:scale-105">
+                        <div className="w-10 h-10 shrink-0 rounded-md bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center shadow-md transition-transform duration-300 group-hover:scale-105">
                             <SearchIcon className="w-5 h-5 text-white" />
                         </div>
                         {isLeftOpen && (

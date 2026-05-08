@@ -88,12 +88,23 @@ export function TrackPage() {
     const offline = useToggleOfflineForTrack(id ?? '');
 
     useEffect(() => {
+        const scrollContainer = document.getElementById('main-scroll-container');
+        if (!scrollContainer) return;
+
+        let ticking = false;
+
         const handleScroll = () => {
-            const container = pageRef.current?.parentElement;
-            setScrollY(container ? container.scrollTop : window.scrollY);
+            if (!ticking) {
+                window.requestAnimationFrame(() => {
+                    setScrollY(scrollContainer.scrollTop);
+                    ticking = false;
+                });
+                ticking = true;
+            }
         };
 
-        const scrollContainer = pageRef.current?.parentElement || window;
+        handleScroll();
+
         scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
         return () => scrollContainer.removeEventListener('scroll', handleScroll);
     }, []);
@@ -152,7 +163,7 @@ export function TrackPage() {
             </div>
 
             {/* BANNER */}
-            <div className="relative h-[450px] w-full shrink-0 overflow-hidden bg-bg">
+            <div className="relative h-[450px] w-full shrink-0 overflow-hidden bg-bg border-b border-black">
                 <div
                     className="absolute inset-0 origin-center blur-md"
                     style={{

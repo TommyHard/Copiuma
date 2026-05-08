@@ -175,14 +175,25 @@ function ArtistSlider({ artists }: { artists: import('@/shared/types').ArtistSum
                     <ArrowRightIcon className="rotate-180" />
                 </button>
             )}
-            <ul ref={scrollRef} onScroll={handleScroll} className="flex gap-4 overflow-x-auto scroll-smooth py-2 snap-x snap-mandatory [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <ul ref={scrollRef} onScroll={handleScroll} className="flex gap-4 overflow-x-auto scroll-smooth pb-6 pt-2 snap-x snap-mandatory [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                 {artists.map((a, i) => (
-                    <li key={`artist-${a.id}-${i}`} className="snap-start shrink-0 w-28 sm:w-32 md:w-36">
-                        <Link to={`/artists/${a.id}`} className="block space-y-2 rounded-md border border-border bg-bg p-3 hover:bg-bg/70 hover:underline transition-colors">
-                            <div className="aspect-square w-full rounded-full bg-bg-elevated bg-cover bg-center flex items-center justify-center text-xl font-bold text-fg-muted mx-auto" style={{ backgroundImage: a.avatarUrl ? `url('${a.avatarUrl}')` : undefined }}>
-                                {!a.avatarUrl && a.name ? a.name.charAt(0).toUpperCase() : null}
+                    <li key={`artist-${a.id}-${i}`} className="snap-start shrink-0">
+                        <Link
+                            to={`/artists/${a.id}`}
+                            className="flex flex-col gap-4 w-[180px] p-4 rounded-xl hover:bg-fg/5 transition-all duration-200 group"
+                        >
+                            <div
+                                className="w-full aspect-square rounded-full bg-bg-elevated shadow-md flex items-center justify-center text-5xl font-bold text-fg-muted overflow-hidden relative bg-cover bg-center border border-border/50 group-hover:shadow-xl transition-shadow"
+                                style={{ backgroundImage: a.avatarUrl ? `url('${a.avatarUrl}')` : undefined }}
+                            >
+                                {!a.avatarUrl && a.name && <span>{a.name.charAt(0).toUpperCase()}</span>}
                             </div>
-                            <div className="truncate text-center text-xs font-medium">{a.name}</div>
+                            <div className="w-full text-left">
+                                <div className="font-semibold text-fg text-base truncate">
+                                    {a.name}
+                                </div>
+                                <div className="text-sm text-fg-muted mt-0.5">Артист</div>
+                            </div>
                         </Link>
                     </li>
                 ))}

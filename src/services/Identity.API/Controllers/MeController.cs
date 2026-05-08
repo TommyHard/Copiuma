@@ -26,8 +26,17 @@ public class MeController : ControllerBase
         var u = await _db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == UserId, ct);
         if (u is null) return NotFound();
 
+        string? avatarUrl = u.AvatarKey != null ? $"/images/{u.AvatarKey}" : null;
+
         return Ok(new MeResponse(
-            u.Id, u.Email, u.DisplayName, u.Role, u.EmailVerifiedAt is not null, u.CreatedAt));
+            u.Id, 
+            u.Email, 
+            u.DisplayName, 
+            u.Role, 
+            u.EmailVerifiedAt is not null, 
+            u.CreatedAt,
+            avatarUrl
+            ));
     }
 
     [HttpPost("become-artist")]

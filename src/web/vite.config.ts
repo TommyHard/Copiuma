@@ -28,6 +28,11 @@ export default defineConfig({
                 changeOrigin: true,
                 rewrite: (p) => p.replace(/^\/identity/, ''),
             },
+            '/images': {
+                target: 'http://127.0.0.1:7161',
+                changeOrigin: true,
+                secure: false
+            }
         },
     },
 });

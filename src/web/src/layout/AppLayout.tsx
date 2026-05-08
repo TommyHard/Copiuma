@@ -8,6 +8,7 @@ import { SidebarLeft } from './SidebarLeft';
 import { SidebarRight } from './SidebarRight';
 import { ResizeHandle } from './ResizeHandle';
 import { useUIStore } from '@/shared/store/uiStore';
+import * as ScrollArea from '@radix-ui/react-scroll-area';
 
 export function AppLayout() {
     useNotificationHub();
@@ -26,7 +27,7 @@ export function AppLayout() {
             if (isLeftOpen) setLeftOpen(false);
         } else {
             if (!isLeftOpen) setLeftOpen(true);
-            // Максимальная ширина
+            // РњР°РєСЃРёРјР°Р»СЊРЅР°СЏ С€РёСЂРёРЅР°
             const maxWidth = window.innerWidth * 0.2;
             setLeftWidth(Math.min(maxWidth, Math.max(MIN_EXPAND_WIDTH, newWidth)));
         }
@@ -37,7 +38,7 @@ export function AppLayout() {
             if (isRightOpen) setRightOpen(false);
         } else {
             if (!isRightOpen) setRightOpen(true);
-            // Максимальная ширина
+            // РњР°РєСЃРёРјР°Р»СЊРЅР°СЏ С€РёСЂРёРЅР°
             const maxWidth = window.innerWidth * 0.25;
             setRightWidth(Math.min(maxWidth, Math.max(MIN_EXPAND_WIDTH, newWidth)));
         }
@@ -67,9 +68,21 @@ export function AppLayout() {
                 <main className="relative flex-1 flex flex-col min-w-[350px] rounded-xl bg-bg-elevated border border-border shadow-sm overflow-hidden">
 
                     {/* DYNAMIC PAGE INJECTION */}
-                    <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-fg-muted/50">
-                        <Outlet />
-                    </div>
+                    <ScrollArea.Root className="flex-1 overflow-hidden">
+                        <ScrollArea.Viewport
+                            id="main-scroll-container"
+                            className="w-full h-full [&>div]:!block"
+                        >
+                            <Outlet />
+                        </ScrollArea.Viewport>
+
+                        <ScrollArea.Scrollbar
+                            className="flex select-none touch-none p-0.5 bg-transparent transition-colors hover:bg-fg-muted/10 w-2.5 z-50"
+                            orientation="vertical"
+                        >
+                            <ScrollArea.Thumb className="flex-1 bg-border rounded-md relative before:content-[''] before:absolute before:top-1/2 before:left-1/2 before:-translate-x-1/2 before:-translate-y-1/2 before:w-full before:h-full before:min-w-[44px] before:min-h-[44px]" />
+                        </ScrollArea.Scrollbar>
+                    </ScrollArea.Root>
                 </main>
 
                 {isRightOpen && (

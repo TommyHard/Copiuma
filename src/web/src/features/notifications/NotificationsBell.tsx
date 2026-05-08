@@ -6,7 +6,7 @@ import { cn } from '@/shared/lib/cn';
 import { BellIcon } from '@/shared/ui/icons';
 
 /**
- * Уведомления(колокольчик) в header. Цифра обновляется:
+ * Уведомления(bell) в header. Обновляется:
  *  - запросом раз в минуту (refetchInterval)
  *  - SignalR-событием
  */
@@ -24,10 +24,10 @@ export function NotificationsBell() {
         <Tooltip position="bottom" content="Уведомления">
             <Link
                 to="/notifications"
-                className="relative inline-flex size-9 items-center justify-center mt-1 -translate-x-[-5px] rounded-md hover:bg-bg-elevated transition-colors text-fg-muted hover:text-fg"
+                className="relative inline-flex items-center justify-center p-1.5 rounded-full hover:bg-accent/20 transition-colors text-fg-muted hover:text-fg"
                 aria-label={`Уведомления${n > 0 ? ', есть новые' : ''}`}
             >
-                <BellIcon />
+                <BellIcon className="size-5" />
 
                 {n > 0 && (
                     <span className="absolute right-2 top-0.5 flex size-2 rounded-full bg-accent ring-2 ring-bg" />

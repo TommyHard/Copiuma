@@ -17,7 +17,8 @@ public record SessionResponse(
     DateTime CreatedAt,
     DateTime? LastUsedAt,
     DateTime ExpiryDate,
-    bool IsCurrent);
+    bool IsCurrent
+    );
 
 public record BecomeArtistRequest(string? StageName);
 
@@ -27,7 +28,9 @@ public record MeResponse(
     string? DisplayName,
     UserRole Role,
     bool EmailVerified,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string? AvatarUrl
+    );
 
 
 public record DeviceLabelHint(string? DeviceLabel);
