@@ -16,6 +16,7 @@ import { useAuth } from '@/features/auth/useAuth';
 import { ImageUploader } from '@/features/cover/ImageUploader';
 import { cn } from '@/shared/lib/cn';
 import type { AlbumSummary } from '@/shared/types';
+import { useAlertStore } from '@/shared/store/alertStore';
 
 export function AlbumPage() {
     const { id } = useParams();
@@ -24,6 +25,8 @@ export function AlbumPage() {
     const { user } = useAuth();
     const playQueue = usePlayer((s) => s.playQueue);
     const [editOpen, setEditOpen] = useState(false);
+
+    const showAlert = useAlertStore((s) => s.showAlert);
 
     const album = useQuery({
         queryKey: ['album', id],
@@ -146,7 +149,7 @@ export function AlbumPage() {
                                         if (!tracks.data || tracks.data.length === 0) {
                                             if (confirm('Удалить пустой альбом?')) remove.mutate();
                                         } else {
-                                            alert('Сначала открепите все треки от альбома.');
+                                            showAlert('Сначала открепите все треки от альбома.', 'Ошибка удаления');
                                         }
                                     }}
                                     disabled={remove.isPending}

@@ -9,6 +9,7 @@ import { SidebarRight } from './SidebarRight';
 import { ResizeHandle } from './ResizeHandle';
 import { useUIStore } from '@/shared/store/uiStore';
 import * as ScrollArea from '@radix-ui/react-scroll-area';
+import { AlertDialog } from '@/shared/ui/AlertDialog';
 
 export function AppLayout() {
     useNotificationHub();
@@ -99,6 +100,7 @@ export function AppLayout() {
             </div>
 
             <ToastContainer />
+            <AlertDialog />
             <div className="z-50 w-full shrink-0">
                 <Player />
             </div>

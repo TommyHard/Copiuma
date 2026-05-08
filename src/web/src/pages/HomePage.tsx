@@ -10,6 +10,7 @@ import { usePlayer } from '@/features/player/store';
 import { ArrowRightIcon } from '@/shared/ui/icons';
 import type { TrackListItem } from '@/shared/types';
 import { cn } from '@/shared/lib/cn';
+import { useAlertStore } from '@/shared/store/alertStore';
 
 const scrollbarClasses = "[&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-fg-muted/50";
 const scrollableListClasses = cn("max-h-[400px] overflow-y-auto overflow-x-hidden rounded-md border border-border", scrollbarClasses);
@@ -20,6 +21,8 @@ export function HomePage() {
     const popular = useQuery({ queryKey: ['popular'], queryFn: () => popularTracks(15) });
     const forYou = useQuery({ queryKey: ['for-you'], queryFn: () => forYouTracks(15) });
     const artists = useQuery({ queryKey: ['trending-artists'], queryFn: () => trendingArtists(8) });
+
+    const showAlert = useAlertStore((s) => s.showAlert);
 
     const popularEmpty = !popular.isLoading && (!popular.data || popular.data.length === 0);
     const catalog = useQuery({
@@ -44,7 +47,7 @@ export function HomePage() {
         try {
             const st = await getTrackStatus(playerTracks[0].id);
             if (st.status !== 'Ready') {
-                alert('Трек обрабатывается. Подождите...');
+                showAlert('Трек обрабатывается. Подождите...', 'Ошибка воспроизведения');
                 return;
             }
             playQueueStore(playerTracks as any, 0);

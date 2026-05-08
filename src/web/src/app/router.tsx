@@ -5,7 +5,6 @@ import { RequireAuth } from '@/features/auth/RequireAuth';
 import { RequireVerified } from '@/features/auth/RequireVerified';
 import { RequireRole } from '@/features/auth/RequireRole';
 import { HomePage } from '@/pages/HomePage';
-import { CatalogPage } from '@/pages/CatalogPage';
 import { TrackPage } from '@/pages/TrackPage';
 import { SearchPage } from '@/pages/SearchPage';
 import { FavoritesPage } from '@/pages/FavoritesPage';
@@ -19,7 +18,6 @@ import { PlaylistPage } from '@/pages/PlaylistPage';
 import { RoomsLandingPage } from '@/pages/RoomsLandingPage';
 import { RoomPage } from '@/pages/RoomPage';
 import { HistoryPage } from '@/pages/HistoryPage';
-import { FriendsPage } from '@/pages/FriendsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { RegisterPage } from '@/pages/auth/RegisterPage';
@@ -62,7 +60,6 @@ export const router = createBrowserRouter([
                     </RequireVerified>
                 ),
                 children: [
-                    { path: 'catalog', element: <CatalogPage /> },
                     { path: 'tracks/:id', element: <TrackPage /> },
                     { path: 'artists/:id', element: <ArtistPage /> },
                     { path: 'albums/:id', element: <AlbumPage /> },
@@ -76,7 +73,6 @@ export const router = createBrowserRouter([
                     { path: 'rooms', element: <RoomsLandingPage /> },
                     { path: 'rooms/:id', element: <RoomPage /> },
                     { path: 'users/:id', element: <UserProfilePage /> },
-                    { path: 'friends', element: <FriendsPage /> },
                     { path: 'settings', element: <SettingsPage /> },
                     { path: 'artist/settings', element: <ArtistSettingsPage /> },
                     {

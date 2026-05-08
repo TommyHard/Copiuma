@@ -6,19 +6,9 @@ import { useRoomStore } from '@/features/rooms/roomStore';
 import { clearLastRoom, rememberRoom } from '@/features/rooms/lastRoom';
 import { useAuth } from '@/features/auth/useAuth';
 import { getTrack } from '@/shared/api/catalog';
+import { cn } from '@/shared/lib/cn';
+import { InfoIcon, MusicIcon } from '@/shared/ui/icons';
 
-/**
- * Страница DJ-комнаты. URL: /rooms/{id}?dj=1
- *
- * UX:
- *  - Покажи список участников и текущий трек
- *  - Если ты DJ — обычный плеер в шапке/внизу управляет всем (room-hook слушает
- *    изменения player и шлёт SendPlay/Pause/Seek). Доп. показываем,
- *    что ты DJ
- * 
- *  - Если ты listener — плеер всё ещё работает, но любые твои клики на нём будут
- *    инвалидированы следующим heartbeat DJ
- */
 export function RoomPage() {
     const { id } = useParams();
     const [params] = useSearchParams();
@@ -27,14 +17,20 @@ export function RoomPage() {
     const navigate = useNavigate();
 
     if (!id) {
-        return <p className="text-danger">Не указан roomId.</p>;
+        return (
+            <div className="p-8 text-center">
+                <p className="text-danger font-medium rounded bg-danger/10 py-3 border border-danger/20 inline-block px-6">
+                    Не указан roomId.
+                </p>
+            </div>
+        );
     }
 
     return (
         <RoomPageInner
             roomId={id}
             requestDj={requestDj}
-            userName={user?.displayName ?? user?.email ?? 'me'}
+            userName={user?.displayName ?? user?.email ?? 'Гость'}
             onLeave={() => {
                 clearLastRoom();
                 navigate('/rooms');
@@ -56,7 +52,6 @@ function RoomPageInner({
 }) {
     useRoom(roomId, requestDj);
 
-    // Запоминаем комнату — чтобы можно было вернуться после случайного ухода
     useEffect(() => {
         rememberRoom(roomId, requestDj);
     }, [roomId, requestDj]);
@@ -69,7 +64,7 @@ function RoomPageInner({
     const [copied, setCopied] = useState(false);
     useEffect(() => {
         if (!copied) return;
-        const t = setTimeout(() => setCopied(false), 1500);
+        const t = setTimeout(() => setCopied(false), 2000);
         return () => clearTimeout(t);
     }, [copied]);
 
@@ -79,25 +74,39 @@ function RoomPageInner({
     }
 
     return (
-        <article className="space-y-8">
-            <header className="flex flex-wrap items-end gap-6">
-                <div className="space-y-1">
-                    <p className="text-xs uppercase tracking-wide text-fg-muted">DJ-комната</p>
-                    <h1 className="text-3xl font-semibold">{roomId}</h1>
-                    <p className="text-sm text-fg-muted">
-                        {isDj ? 'Ты DJ — управляешь плеером.' : 'Слушаешь — пульт у DJ.'}
-                    </p>
+        <article className="p-6 md:p-8 space-y-8 max-w-5xl mx-auto">
+
+            {/* Header */}
+            <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-border">
+                <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                        <span className="inline-flex items-center justify-center px-2.5 py-1 rounded bg-accent/10 text-xs font-bold text-accent uppercase tracking-widest border border-accent/20">
+                            DJ-комната
+                        </span>
+                        {isDj ? (
+                            <span className="text-xs font-medium text-success bg-success/10 px-2 py-1 rounded border border-success/20">Вы управляете плеером</span>
+                        ) : (
+                            <span className="text-xs font-medium text-fg-muted bg-bg px-2 py-1 rounded border border-border">Слушатель (пульт у DJ)</span>
+                        )}
+                    </div>
+                    <h1 className="text-4xl font-bold tracking-tight text-fg">{roomId}</h1>
                 </div>
-                <div className="ml-auto flex items-center gap-2">
+
+                <div className="flex items-center gap-3 w-full md:w-auto">
                     <button
                         onClick={copyLink}
-                        className="rounded-md border border-border px-3 py-2 text-sm hover:bg-bg-elevated"
+                        className={cn(
+                            "flex-1 md:flex-none rounded border px-4 py-2.5 text-sm font-medium transition-all",
+                            copied
+                                ? "bg-success/10 border-success/40 text-success"
+                                : "border-border bg-bg-elevated hover:border-accent hover:text-accent shadow-sm"
+                        )}
                     >
-                        {copied ? 'Скопировано' : 'Скопировать ссылку'}
+                        {copied ? 'Ссылка скопирована!' : 'Копировать ссылку'}
                     </button>
                     <button
                         onClick={onLeave}
-                        className="rounded-md border border-danger/40 px-3 py-2 text-sm text-danger hover:bg-danger/10"
+                        className="rounded border border-danger/30 bg-danger/5 px-4 py-2.5 text-sm font-medium text-danger hover:bg-danger hover:text-white transition-colors"
                     >
                         Выйти
                     </button>
@@ -105,51 +114,89 @@ function RoomPageInner({
             </header>
 
             {rejected && !isDj && (
-                <div className="rounded-md border border-danger/40 bg-danger/10 p-3 text-sm text-danger">
-                    DJ-слот занят ({rejected}). Ты слушаешь.
+                <div className="rounded border border-danger/40 bg-danger/10 p-4 text-sm text-danger flex items-center gap-3 shadow-sm">
+                    <InfoIcon className="w-6 h-6 shrink-0" />
+                    <div>
+                        <strong className="font-semibold block">Внимание</strong>
+                        <span>DJ-слот уже занят ({rejected}). Вы подключены как слушатель.</span>
+                    </div>
                 </div>
             )}
 
-            <section className="space-y-3">
-                <h2 className="text-xl font-semibold">Сейчас играет</h2>
-                {current ? (
-                    <NowPlayingCard
-                        trackId={current.trackId}
-                        fallbackTitle={current.title}
-                        fallbackArtist={current.artist}
-                        isPlaying={current.isPlaying}
-                        position={current.position}
-                    />
-                ) : (
-                    <p className="text-fg-muted">
-                        DJ ещё ничего не запустил. {isDj && 'Нажми ▶ на любом треке в каталоге — он стартует у всех.'}
-                    </p>
-                )}
-            </section>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* PLAYER */}
+                <section className="lg:col-span-2 space-y-4">
+                    <h2 className="text-xl font-bold tracking-tight text-fg">Сейчас играет</h2>
+                    {current ? (
+                        <NowPlayingCard
+                            trackId={current.trackId}
+                            fallbackTitle={current.title}
+                            fallbackArtist={current.artist}
+                            isPlaying={current.isPlaying}
+                            position={current.position}
+                        />
+                    ) : (
+                        <div className="rounded border border-dashed border-border bg-bg/50 p-10 text-center flex flex-col items-center justify-center">
+                            <div className="w-16 h-16 rounded-full bg-bg-elevated flex items-center justify-center mb-4 shadow-sm border border-border">
+                                <MusicIcon className="w-8 h-8 text-fg-muted" />
+                            </div>
+                            <h3 className="text-lg font-medium text-fg">Тишина...</h3>
+                            <p className="mt-2 text-sm text-fg-muted max-w-md">
+                                DJ ещё ничего не запустил. {isDj && 'Включите любой трек в каталоге, и он синхронно заиграет у всех участников.'}
+                            </p>
+                        </div>
+                    )}
 
-            <section className="space-y-3">
-                <h2 className="text-xl font-semibold">Участники ({participants.length})</h2>
-                {participants.length === 0 && <p className="text-fg-muted">Кроме тебя пока никого.</p>}
-                {participants.length > 0 && (
-                    <ul className="divide-y divide-border rounded-md border border-border">
+                    {!isDj && (
+                        <p className="text-[11px] text-fg-muted uppercase tracking-wider mt-4 text-center lg:text-left">
+                            В режиме слушателя ваши изменения позиции/паузы локально применяются, но через секунду перезаписываются сигналом DJ
+                        </p>
+                    )}
+                </section>
+
+                {/* CURRENT USERS */}
+                <section className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-xl font-bold tracking-tight text-fg">Участники</h2>
+                        <span className="bg-bg-elevated border border-border rounded-full px-2.5 py-0.5 text-xs font-bold">
+                            {participants.length}
+                        </span>
+                    </div>
+
+                    <ul className="flex flex-col gap-2">
                         {participants.map((p) => (
-                            <li key={p.userId} className="flex items-center justify-between p-3 text-sm">
-                                <span className="truncate font-medium">{p.userName}</span>
-                                {p.isDj && (
-                                    <span className="rounded bg-accent/20 px-2 py-0.5 text-xs text-accent">DJ</span>
-                                )}
+                            <li
+                                key={p.userId}
+                                className="flex items-center gap-3 p-3 rounded border border-border bg-bg-elevated shadow-sm hover:border-accent/40 transition-colors group"
+                            >
+                                <Link
+                                    to={`/users/${p.userId}`}
+                                    className="shrink-0 transition-transform group-hover:scale-105"
+                                >
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-accent/20 to-bg flex items-center justify-center text-lg font-bold text-accent border border-accent/10">
+                                        {p.userName.charAt(0).toUpperCase()}
+                                    </div>
+                                </Link>
+
+                                <div className="flex-1 min-w-0 flex items-center justify-between">
+                                    <Link
+                                        to={`/users/${p.userId}`}
+                                        className="truncate font-medium text-sm hover:text-accent hover:underline transition-colors"
+                                    >
+                                        {p.userName}
+                                    </Link>
+                                    {p.isDj && (
+                                        <span className="rounded bg-accent/20 px-2 py-0.5 text-[10px] font-bold text-accent uppercase tracking-widest ml-2 shrink-0">
+                                            DJ
+                                        </span>
+                                    )}
+                                </div>
                             </li>
                         ))}
                     </ul>
-                )}
-            </section>
+                </section>
+            </div>
 
-            {!isDj && (
-                <p className="text-xs text-fg-muted">
-                    В режиме listener ваши изменения позиции/паузы локально применяются, но через секунду
-                    перезаписываются heartbeat DJ'я
-                </p>
-            )}
         </article>
     );
 }
@@ -167,7 +214,6 @@ function NowPlayingCard({
     isPlaying: boolean;
     position: number;
 }) {
-    // Подтягиваем полные данные трека (cover, artistId, feat. артисты)
     const trackQ = useQuery({
         queryKey: ['track', trackId],
         queryFn: () => getTrack(trackId),
@@ -183,55 +229,69 @@ function NowPlayingCard({
     const featured = t?.featuredArtists ?? [];
 
     return (
-        <div className="flex items-start gap-4 rounded-md border border-border bg-bg-elevated p-4">
+        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 rounded border border-border bg-bg-elevated p-6 shadow-sm">
             <div
-                className="size-24 shrink-0 rounded-md border border-border bg-bg bg-cover bg-center"
+                className="w-40 h-40 shrink-0 rounded border border-border bg-bg flex items-center justify-center shadow-md bg-cover bg-center"
                 style={{ backgroundImage: coverUrl ? `url(${coverUrl})` : undefined }}
                 aria-hidden
-            />
+            >
+                {!coverUrl && <MusicIcon className="w-12 h-12 text-fg-muted opacity-30" />}
+            </div>
 
-            <div className="min-w-0 flex-1 space-y-1">
-                <Link
-                    to={`/tracks/${trackId}`}
-                    className="block truncate text-lg font-medium hover:underline"
-                    title={title}
-                >
-                    {title}
-                </Link>
+            <div className="min-w-0 flex-1 space-y-4 text-center sm:text-left w-full">
+                <div>
+                    <Link
+                        to={`/tracks/${trackId}`}
+                        className="block truncate text-2xl font-bold tracking-tight hover:underline hover:text-accent transition-colors"
+                        title={title}
+                    >
+                        {title}
+                    </Link>
 
-                <div className="flex flex-wrap items-baseline gap-x-2 text-sm text-fg-muted">
-                    {artistId ? (
-                        <Link
-                            to={`/artists/${artistId}`}
-                            className="hover:text-fg hover:underline"
-                        >
-                            {artist ?? '—'}
-                        </Link>
-                    ) : (
-                        <span>{artist ?? '—'}</span>
-                    )}
+                    <div className="mt-1 flex flex-wrap items-baseline justify-center sm:justify-start gap-x-2 text-base text-fg-muted font-medium">
+                        {artistId ? (
+                            <Link
+                                to={`/artists/${artistId}`}
+                                className="hover:text-fg hover:underline transition-colors"
+                            >
+                                {artist ?? '—'}
+                            </Link>
+                        ) : (
+                            <span>{artist ?? '—'}</span>
+                        )}
 
-                    {featured.length > 0 && (
-                        <span>
-                            feat.{' '}
-                            {featured.map((fa, idx) => (
-                                <span key={fa.id}>
-                                    {idx > 0 && ', '}
-                                    <Link
-                                        to={`/artists/${fa.id}`}
-                                        className="hover:text-fg hover:underline"
-                                    >
-                                        {fa.name}
-                                    </Link>
-                                </span>
-                            ))}
-                        </span>
-                    )}
+                        {featured.length > 0 && (
+                            <span className="text-sm">
+                                feat.{' '}
+                                {featured.map((fa, idx) => (
+                                    <span key={fa.id}>
+                                        {idx > 0 && ', '}
+                                        <Link
+                                            to={`/artists/${fa.id}`}
+                                            className="hover:text-fg hover:underline transition-colors"
+                                        >
+                                            {fa.name}
+                                        </Link>
+                                    </span>
+                                ))}
+                            </span>
+                        )}
+                    </div>
                 </div>
 
-                <div className="pt-1 text-xs text-fg-muted">
-                    {isPlaying ? '▶ воспроизводится' : '⏸ на паузе'} •{' '}
-                    {formatPosition(position)}
+                <div className="inline-flex items-center gap-3 bg-bg px-4 py-2 rounded border border-border">
+                    <span className="relative flex h-3 w-3">
+                        {isPlaying && (
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
+                        )}
+                        <span className={cn("relative inline-flex rounded-full h-3 w-3", isPlaying ? "bg-accent" : "bg-fg-muted")}></span>
+                    </span>
+                    <span className="text-sm font-medium text-fg uppercase tracking-wider">
+                        {isPlaying ? 'Воспроизводится' : 'На паузе'}
+                    </span>
+                    <span className="text-sm font-mono text-fg-muted border-l border-border pl-3">
+                        {formatPosition(position)}
+                    </span>
                 </div>
             </div>
         </div>

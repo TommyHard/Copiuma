@@ -1,12 +1,22 @@
+import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/useAuth';
 import { cn } from '@/shared/lib/cn';
-import { NotificationsBell } from '@/features/notifications/NotificationsBell';
 import { ThemeToggle } from '@/features/theme/ThemeToggle';
 import { useUIStore } from '@/shared/store/uiStore';
 import { useContextMenu, ContextMenuPortal, ContextMenuItem, ContextMenuSeparator } from '@/shared/ui/ContextMenu';
 import { Tooltip } from '@/shared/ui/Tooltip';
-import { UsersIcon, UserIcon, ClockIcon, UploadIcon, SettingsIcon, LogOutIcon } from '@/shared/ui/icons';
+import {
+    UsersIcon,
+    UserIcon,
+    ClockIcon,
+    UploadIcon,
+    SettingsIcon,
+    LogOutIcon,
+    SearchIcon,
+    CatalogIcon
+} from '@/shared/ui/icons';
+import { NotificationsBell } from '../features/notifications/NotificationsBell';
 
 const ARTIST_PLUS = new Set(['Artist', 'Moderator', 'Admin', 1, 2, 3]);
 
@@ -24,10 +34,21 @@ const ROLE_LABELS: Record<string | number, string> = {
 export function Header() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
+    const [searchValue, setSearchValue] = useState('');
 
     const { rightTab, setRightTab, isRightOpen, setRightOpen } = useUIStore();
-
     const { isOpen, position, onContextMenu, close } = useContextMenu();
+
+    const handleSearchEnter = () => {
+        if (!searchValue.trim()) return;
+        navigate(`/search?q=${encodeURIComponent(searchValue.trim())}`);
+        setSearchValue('');
+    };
+
+    const goToCatalog = () => {
+        setSearchValue('');
+        navigate('/search', { state: { scrollToCatalog: true } });
+    };
 
     async function onLogout() {
         close();
@@ -42,19 +63,38 @@ export function Header() {
 
     return (
         <header className="shrink-0 z-10 rounded-xl border border-border bg-bg-elevated px-5 flex h-14 items-center gap-6 shadow-sm">
-            <Link to="/" className="flex items-center gap-2 font-semibold tracking-tight">
+            <Link to="/" className="flex items-center gap-2 font-semibold tracking-tight shrink-0">
                 <div className="size-6 rounded-md bg-accent" aria-hidden />
                 Copiuma
             </Link>
 
-            <nav className="hidden items-center gap-4 text-sm md:flex">
+            <nav className="hidden lg:flex items-center gap-4 text-sm">
                 <NavItem to="/">Главная</NavItem>
-                <NavItem to="/catalog">Каталог</NavItem>
-                <NavItem to="/search">Поиск</NavItem>
-                <NavItem to="/offline">Офлайн</NavItem>
-                <NavItem to="/friends">Друзья</NavItem>
-                <NavItem to="/rooms">DJ-комнаты</NavItem>
             </nav>
+
+            {/* SEARCH */}
+            <div className="flex-1 max-w-md hidden md:flex items-center bg-bg rounded-lg border border-border px-3 py-1.5 focus-within:border-accent/50 group transition-all">
+                <SearchIcon className="w-4 h-4 text-fg-muted group-focus-within:text-accent transition-colors" />
+                <input
+                    type="text"
+                    placeholder="Поиск..."
+                    className="flex-1 bg-transparent outline-none border-none text-xs px-2 text-fg"
+                    value={searchValue}
+                    onChange={(e) => setSearchValue(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearchEnter()}
+                />
+
+                <div className="w-px h-4 bg-border mx-2" />
+
+                <Tooltip content="Каталог" position="bottom">
+                    <button
+                        onClick={goToCatalog}
+                        className="p-1 text-fg-muted hover:text-accent transition-colors shrink-0"
+                    >
+                        <CatalogIcon className="w-4 h-4" />
+                    </button>
+                </Tooltip>
+            </div>
 
             <div className="ml-auto flex items-center gap-2 text-sm">
                 <ThemeToggle />
@@ -62,7 +102,6 @@ export function Header() {
 
                 {user && (
                     <>
-                        {/* Кнопка "Активность друзей" */}
                         <Tooltip content="Активность друзей" position="bottom">
                             <button
                                 onClick={() => {
@@ -80,7 +119,6 @@ export function Header() {
                             </button>
                         </Tooltip>
 
-                        {/* Кнопка AVATAR */}
                         <button
                             onClick={onContextMenu}
                             className="relative flex items-center justify-center w-9 h-9 ml-1 rounded-full bg-bg border-2 border-accent hover:opacity-80 transition-opacity overflow-hidden shadow-[0_0_10px_rgba(202,162,230,0.1)]"
@@ -110,12 +148,6 @@ export function Header() {
                                             {ROLE_LABELS[user.role] ?? user.role}
                                         </span>
                                     </div>
-                                )}
-
-                                {!user.emailVerified && (
-                                    <span className="mt-2 rounded bg-danger/20 px-2 py-0.5 text-[10px] text-danger text-center">
-                                        email не подтверждён
-                                    </span>
                                 )}
                             </div>
 

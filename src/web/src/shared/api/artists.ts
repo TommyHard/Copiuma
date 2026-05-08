@@ -87,6 +87,13 @@ export async function listArtistTracks(artistId: string): Promise<TrackListItem[
     return Array.isArray(r.data) ? r.data.map(normalizeArtistTrack) : [];
 }
 
+export async function searchAlbums(q: string): Promise<AlbumSummary[]> {
+    if (q.trim().length < 2) return [];
+    const r = await api.get<any>('/albums/search', { params: { q, take: 10 } });
+    const items = Array.isArray(r.data) ? r.data : (r.data?.items ?? []);
+    return items.map(normalizeAlbumSummary);
+}
+
 /**
  * Треки, где артист отмечен как feat. (не основной исполнитель)
  */

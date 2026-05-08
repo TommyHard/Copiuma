@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { getTrackStatus } from '@/shared/api/catalog';
 import { isTrackCachedOffline } from '@/features/offline/offlineCache';
 import { usePlayer, type PlayerTrack } from './store';
+import { useAlertStore } from '@/shared/store/alertStore';
 
 function isNetworkError(err: unknown): boolean {
     const e = err as any;
@@ -14,13 +15,17 @@ function isNetworkError(err: unknown): boolean {
 
 export function usePlayTrack() {
     const playTrack = usePlayer((s) => s.playTrack);
+    const showAlert = useAlertStore((s) => s.showAlert);
 
     return useCallback(
         async (track: Omit<PlayerTrack, 'hlsReady'>) => {
             try {
                 const st = await getTrackStatus(track.id);
                 if (st.status !== 'Ready') {
-                    alert(`Трек ещё обрабатывается (status=${st.status}). Попробуй позже.`);
+                    showAlert(
+                        `Трек ещё обрабатывается (status=${st.status}). Попробуй позже.`,
+                        'Трек недоступен'
+                    );
                     return;
                 }
                 playTrack({ ...track, hlsReady: true });
@@ -31,12 +36,12 @@ export function usePlayTrack() {
                     return;
                 }
                 if (isNetworkError(err)) {
-                    alert('Нет сети, и этот трек не скачан в офлайн.');
+                    showAlert('Нет сети, и этот трек не скачан в офлайн.', 'Ошибка сети');
                 } else {
-                    alert('Не получилось получить статус трека.');
+                    showAlert('Не получилось получить статус трека.', 'Ошибка воспроизведения');
                 }
             }
         },
-        [playTrack],
+        [playTrack, showAlert],
     );
 }

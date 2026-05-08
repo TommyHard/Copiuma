@@ -10,7 +10,7 @@ import { getPublicUserProfile } from '@/shared/api/profile';
 import { useContextMenu, ContextMenuPortal, ContextMenuItem } from '@/shared/ui/ContextMenu';
 import { PlaylistCover } from '@/features/playlists/PlaylistCover';
 import { CreatePlaylistDialog } from '@/features/playlists/CreatePlaylistDialog';
-import { HeartIcon, TrashIcon, SidebarLeftIcon, PlusIcon, SearchIcon, MusicIcon } from '@/shared/ui/icons';
+import { HeartIcon, TrashIcon, SidebarLeftIcon, PlusIcon, SearchIcon, MusicIcon, DjRoomsIcon, OfflineIcon } from '@/shared/ui/icons';
 import { Tooltip } from '@/shared/ui/Tooltip';
 import { cn } from '@/shared/lib/cn';
 import type { FollowedUser, FollowedArtist, PlaylistSummary } from '@/shared/types';
@@ -88,6 +88,36 @@ export function SidebarLeft() {
                             <span className="text-[15px] font-semibold text-fg tracking-tight truncate group-hover:text-accent transition-colors">Избранное</span>
                             <span className="text-[12px] text-fg-muted truncate">
                                 {favoritesQ.data?.length ?? 0} {pluralTracks(favoritesQ.data?.length ?? 0)}
+                            </span>
+                        </div>
+                    )}
+                </Link>
+
+                {/* DJ-КОМНАТЫ */}
+                <Link to="/rooms" className="flex items-center gap-3 p-2 -mx-2 rounded-lg hover:bg-accent/10 transition-colors group">
+                    <div className="w-10 h-10 shrink-0 rounded bg-gradient-to-br from-fuchsia-500 to-rose-500 flex items-center justify-center shadow-md transition-transform duration-300 group-hover:scale-105">
+                        <DjRoomsIcon className="text-white w-5 h-5" />
+                    </div>
+                    {isLeftOpen && (
+                        <div className="flex flex-col min-w-0">
+                            <span className="text-[15px] font-semibold text-fg tracking-tight truncate group-hover:text-accent transition-colors">DJ-комнаты</span>
+                            <span className="text-[12px] text-fg-muted truncate">
+                                Совместное прослушивание
+                            </span>
+                        </div>
+                    )}
+                </Link>
+
+                {/* ОФЛАЙН */}
+                <Link to="/offline" className="flex items-center gap-3 p-2 -mx-2 rounded-lg hover:bg-accent/10 transition-colors group">
+                    <div className="w-10 h-10 shrink-0 rounded bg-gradient-to-br from-teal-400 to-emerald-500 flex items-center justify-center shadow-md transition-transform duration-300 group-hover:scale-105">
+                        <OfflineIcon className="text-white w-5 h-5" />
+                    </div>
+                    {isLeftOpen && (
+                        <div className="flex flex-col min-w-0">
+                            <span className="text-[15px] font-semibold text-fg tracking-tight truncate group-hover:text-accent transition-colors">Офлайн</span>
+                            <span className="text-[12px] text-fg-muted truncate">
+                                Скачанные треки
                             </span>
                         </div>
                     )}
