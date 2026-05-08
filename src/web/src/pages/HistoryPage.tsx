@@ -1,213 +1,174 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from '@tanstack/react-query';
 import { clearHistory, recentArtists, recentTracks, rawHistory } from '@/shared/api/history';
-import { usePlayTrack } from '@/features/player/usePlayTrack';
-import { cn } from '@/shared/lib/cn';
 import type { RawPlayEvent } from '@/shared/types';
+import { TrackRow } from './track-row';
+import { ChevronDownIcon, TrashIcon } from '@/shared/ui/icons';
+import { ArtistSlider } from '@/shared/ui/ArtistSlider';
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 
-type Tab = 'tracks' | 'artists' | 'raw';
+const PAGE_SIZE = 20;
 
 export function HistoryPage() {
-    const [tab, setTab] = useState<Tab>('tracks');
     const qc = useQueryClient();
-    const play = usePlayTrack();
-
-    const tracks = useQuery({
-        queryKey: ['history-tracks'],
-        queryFn: () => recentTracks(50),
-        enabled: tab === 'tracks',
-    });
+    const [isConfirmOpen, setConfirmOpen] = useState(false);
 
     const artists = useQuery({
         queryKey: ['history-artists'],
         queryFn: () => recentArtists(30),
-        enabled: tab === 'artists',
     });
 
-    const raw = useQuery({
-        queryKey: ['history-raw'],
-        queryFn: () => rawHistory(200, 90),
-        enabled: tab === 'raw',
+    const tracksQ = useInfiniteQuery({
+        queryKey: ['history-tracks-infinite'],
+        queryFn: ({ pageParam = 1 }) => recentTracks(pageParam, PAGE_SIZE),
+        getNextPageParam: (lastPage, allPages) =>
+            lastPage.length === PAGE_SIZE ? allPages.length + 1 : undefined,
+        initialPageParam: 1,
+    });
+
+    const rawQ = useInfiniteQuery({
+        queryKey: ['history-raw-infinite'],
+        queryFn: ({ pageParam = 1 }) => rawHistory(pageParam, PAGE_SIZE),
+        getNextPageParam: (lastPage, allPages) =>
+            lastPage.length === PAGE_SIZE ? allPages.length + 1 : undefined,
+        initialPageParam: 1,
     });
 
     const clear = useMutation({
         mutationFn: clearHistory,
         onSuccess: () => {
-            qc.invalidateQueries({ queryKey: ['history-tracks'] });
             qc.invalidateQueries({ queryKey: ['history-artists'] });
-            qc.invalidateQueries({ queryKey: ['history-raw'] });
+            qc.invalidateQueries({ queryKey: ['history-tracks-infinite'] });
+            qc.invalidateQueries({ queryKey: ['history-raw-infinite'] });
+            setConfirmOpen(false);
         },
     });
 
+    const exportJsonData = () => {
+        const allData = rawQ.data?.pages.flat() || [];
+        exportJson(allData);
+    };
+
     return (
-        <section className="space-y-6">
-            <header className="flex items-center justify-between">
-                <h1 className="text-2xl font-semibold">История</h1>
+        <div className="p-6 md:p-8 max-w-5xl mx-auto space-y-16">
+            <header className="flex items-center justify-between border-b border-border pb-4">
+                <h1 className="text-4xl font-bold tracking-tight text-fg">История</h1>
                 <button
-                    onClick={() => {
-                        if (confirm('Очистить всю историю?')) clear.mutate();
-                    }}
+                    onClick={() => setConfirmOpen(true)}
                     disabled={clear.isPending}
-                    className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-bg-elevated disabled:opacity-50"
+                    className="flex items-center gap-2 rounded border border-border bg-bg px-4 py-2 text-sm font-medium hover:border-danger/50 hover:bg-danger/10 hover:text-danger transition-all disabled:opacity-50 shadow-sm"
                 >
+                    <TrashIcon className="size-4" />
                     Очистить
                 </button>
             </header>
 
-            <div className="flex gap-4 border-b border-border text-sm">
-                <TabBtn active={tab === 'tracks'} onClick={() => setTab('tracks')}>
-                    Треки
-                </TabBtn>
-                <TabBtn active={tab === 'artists'} onClick={() => setTab('artists')}>
-                    Артисты
-                </TabBtn>
-                <TabBtn active={tab === 'raw'} onClick={() => setTab('raw')}>
-                    Raw
-                </TabBtn>
-            </div>
-
-            {tab === 'tracks' && (
-                <>
-                    {tracks.isLoading && <p className="text-fg-muted">Загружаем…</p>}
-                    {tracks.data && tracks.data.length === 0 && (
-                        <p className="text-fg-muted">Ещё ничего не слушал.</p>
-                    )}
-                    {tracks.data && tracks.data.length > 0 && (
-                        <ul className="divide-y divide-border rounded-md border border-border">
-                            {tracks.data.map((t) => (
-                                <li key={t.trackId} className="flex items-center gap-3 px-4 py-3">
-                                    <button
-                                        onClick={() =>
-                                            play({
-                                                id: t.trackId,
-                                                title: t.title,
-                                                artist: t.artist,
-                                                duration: null,
-                                                uploadedAt: '',
-                                                artistId: t.artistId,
-                                                albumId: null,
-                                                trackNumber: null,
-                                                isExplicit: false,
-                                                coverUrl: t.coverUrl
-                                            })
-                                        }
-                                        className="flex size-9 items-center justify-center rounded-full bg-accent text-accent-fg hover:opacity-90"
-                                        title="Играть">
-                                        ▶
-                                    </button>
-                                    <div className="min-w-0 flex-1">
-                                        <Link
-                                            to={`/tracks/${t.trackId}`}
-                                            className="block truncate font-medium hover:underline">
-                                            {t.title}
-                                        </Link>
-                                        <div className="truncate text-xs text-fg-muted">
-                                            {t.artistId ? (
-                                                <Link to={`/artists/${t.artistId}`} className="hover:text-fg hover:underline">
-                                                    {t.artist ?? 'Неизвестный исполнитель'}
-                                                </Link>
-                                            ) : (
-                                                t.artist ?? 'Неизвестный исполнитель'
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="text-right text-xs text-fg-muted">
-                                        <div>×{t.playCount}</div>
-                                        <div>{relTime(t.lastPlayedAt)}</div>
-                                    </div>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                </>
+            {/* АРТИСТЫ */}
+            {artists.data && artists.data.length > 0 && (
+                <section className="space-y-4">
+                    <h2 className="text-2xl font-bold tracking-tight text-fg">Недавно артисты</h2>
+                    <ArtistSlider artists={artists.data as any} />
+                </section>
             )}
 
-            {tab === 'raw' && (
-                <>
-                    {raw.isLoading && <p className="text-fg-muted">Загружаем…</p>}
-                    {raw.data && raw.data.length === 0 && (
-                        <p className="text-fg-muted">Нет событий за последние 90 дней.</p>
-                    )}
-                    {raw.data && raw.data.length > 0 && (
-                        <>
-                            <div className="flex justify-end">
+            {/* ТРЕКИ */}
+            <section className="space-y-4">
+                <h2 className="text-2xl font-bold tracking-tight text-fg">Треки</h2>
+
+                {tracksQ.data?.pages[0].length === 0 ? (
+                    <p className="text-fg-muted">Ещё ничего не слушал.</p>
+                ) : (
+                    <>
+                        <div className="rounded border border-border bg-bg-elevated overflow-hidden shadow-sm">
+                            {tracksQ.data?.pages.map((page, i) => (
+                                <ul key={i}>
+                                    {page.map((t, idx) => (
+                                        <TrackRow
+                                            key={`${t.trackId}-${idx}`}
+                                            track={{ ...t, id: t.trackId } as any}
+                                            number={i * PAGE_SIZE + idx + 1}
+                                        />
+                                    ))}
+                                </ul>
+                            ))}
+                        </div>
+
+                        {tracksQ.hasNextPage && (
+                            <div className="flex justify-center pt-4">
                                 <button
-                                    onClick={() => exportJson(raw.data!)}
-                                    className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-bg-elevated"
+                                    onClick={() => tracksQ.fetchNextPage()}
+                                    disabled={tracksQ.isFetchingNextPage}
+                                    className="flex items-center gap-2 rounded bg-accent/10 px-8 py-3 text-sm font-bold text-accent border border-accent/20 hover:bg-accent/20 transition-all disabled:opacity-50 shadow-sm"
                                 >
-                                    ↓ Экспорт JSON
+                                    {tracksQ.isFetchingNextPage ? 'Загрузка...' : 'Показать еще'}
+                                    <ChevronDownIcon className="size-4" />
                                 </button>
                             </div>
-                            <ul className="divide-y divide-border rounded-md border border-border">
-                                {raw.data.map((e, i) => (
-                                    <li key={i} className="flex items-center gap-3 px-4 py-3 text-sm">
-                                        <div className="min-w-0 flex-1">
-                                            <div className="truncate font-medium">{e.title}</div>
-                                            <div className="truncate text-xs text-fg-muted">{e.artist ?? '—'}</div>
-                                        </div>
-                                        <div className="shrink-0 text-right text-xs text-fg-muted">
-                                            <div>{Math.round(e.playedMs / 1000)}с{e.completed ? ' ✓' : ''}</div>
-                                            <div>{relTime(e.startedAt)}</div>
-                                            {e.source && <div className="italic">{e.source}</div>}
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        </>
-                    )}
-                </>
-            )}
+                        )}
+                    </>
+                )}
+            </section>
 
-            {tab === 'artists' && (
-                <>
-                    {artists.isLoading && <p className="text-fg-muted">Загружаем…</p>}
-                    {artists.data && artists.data.length === 0 && (
-                        <p className="text-fg-muted">Ещё никого не слушал.</p>
-                    )}
-                    {artists.data && artists.data.length > 0 && (
-                        <ul className="divide-y divide-border rounded-md border border-border">
-                            {artists.data.map((a) => (
-                                <li key={a.artistId} className="flex items-center gap-3 px-4 py-3">
-                                    <Link
-                                        to={`/artists/${a.artistId}`}
-                                        className="min-w-0 flex-1 truncate font-medium hover:underline"
-                                    >
-                                        {a.name}
-                                    </Link>
-                                    <div className="text-right text-xs text-fg-muted">
-                                        <div>×{a.playCount}</div>
-                                        <div>{relTime(a.lastPlayedAt)}</div>
-                                    </div>
-                                </li>
+            {/* RAW */}
+            <section className="space-y-4 pt-8">
+                <div className="flex items-center justify-between">
+                    <h2 className="text-2xl font-bold tracking-tight text-fg">События (Raw)</h2>
+                    <button onClick={exportJsonData} className="text-sm font-medium text-accent hover:underline transition-all">
+                        ↓ Экспорт JSON
+                    </button>
+                </div>
+
+                {rawQ.data?.pages[0].length === 0 ? (
+                    <p className="text-fg-muted">Нет событий за последнее время.</p>
+                ) : (
+                    <>
+                        <div className="rounded border border-border bg-bg-elevated overflow-hidden shadow-sm">
+                            {rawQ.data?.pages.map((page, i) => (
+                                <ul key={i} className="divide-y divide-border/50">
+                                    {page.map((e, idx) => (
+                                        <li key={idx} className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-accent/5 transition-colors group">
+                                            <div className="min-w-0 flex-1">
+                                                <div className="truncate font-medium group-hover:text-accent transition-colors">{e.title}</div>
+                                                <div className="truncate text-xs text-fg-muted">{e.artist ?? '—'}</div>
+                                            </div>
+                                            <div className="shrink-0 text-right text-xs text-fg-muted">
+                                                <div>{Math.round(e.playedMs / 1000)}с{e.completed ? ' ✓' : ''}</div>
+                                                <div>{relTime(e.startedAt)}</div>
+                                                {e.source && <div className="italic">{e.source}</div>}
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
                             ))}
-                        </ul>
-                    )}
-                </>
-            )}
-        </section>
-    );
-}
+                        </div>
 
-function TabBtn({
-    active,
-    onClick,
-    children,
-}: {
-    active: boolean;
-    onClick: () => void;
-    children: React.ReactNode;
-}) {
-    return (
-        <button
-            onClick={onClick}
-            className={cn(
-                '-mb-px border-b-2 px-3 py-2 text-fg-muted hover:text-fg',
-                active ? 'border-accent text-fg' : 'border-transparent',
-            )}
-        >
-            {children}
-        </button>
+                        {rawQ.hasNextPage && (
+                            <div className="flex justify-center pt-4">
+                                <button
+                                    onClick={() => rawQ.fetchNextPage()}
+                                    disabled={rawQ.isFetchingNextPage}
+                                    className="flex items-center gap-2 rounded bg-accent/10 px-8 py-3 text-sm font-bold text-accent border border-accent/20 hover:bg-accent/20 transition-all disabled:opacity-50 shadow-sm"
+                                >
+                                    {rawQ.isFetchingNextPage ? 'Загрузка...' : 'Показать еще'}
+                                    <ChevronDownIcon className="size-4" />
+                                </button>
+                            </div>
+                        )}
+                    </>
+                )}
+            </section>
+
+            {/* ОКНО ПОДТВЕРЖДЕНИЯ */}
+            <ConfirmDialog
+                isOpen={isConfirmOpen}
+                title="Очистить историю?"
+                message="Вы уверены, что хотите удалить всю историю прослушиваний? Это действие нельзя отменить."
+                confirmText="Очистить"
+                danger={true}
+                onConfirm={() => clear.mutate()}
+                onCancel={() => setConfirmOpen(false)}
+            />
+        </div>
     );
 }
 

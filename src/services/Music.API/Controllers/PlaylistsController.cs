@@ -538,6 +538,23 @@ public class PlaylistsController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Возвращает ID плейлистов текущего пользователя, в которых уже лежит указанный трек
+    /// Используется в контекстных меню "Добавить в плейлист", чтобы подсветить, где трек уже есть
+    /// </summary>
+    [HttpGet("containing/{trackId:guid}")]
+    public async Task<IActionResult> GetPlaylistsContainingTrack(Guid trackId, CancellationToken ct = default)
+    {
+        var ids = await _context.PlaylistMembers
+            .Where(pm => pm.UserId == UserId)
+            .Where(pm => _context.PlaylistTracks.Any(pt => pt.PlaylistId == pm.PlaylistId && pt.TrackId == trackId))
+            .Select(pm => pm.PlaylistId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        return Ok(ids);
+    }
+
     private Task<bool> PlaylistExists(Guid id) => _context.Playlists.AnyAsync(p => p.Id == id);
 
     private Task<bool> IsCallerInRole(Guid playlistId, PlaylistRole role) =>

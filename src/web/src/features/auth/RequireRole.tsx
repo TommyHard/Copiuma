@@ -10,8 +10,8 @@ const ORDER: Record<UserRole, number> = {
 };
 
 /**
- * Guard по роли: проверяет «не ниже чем указанная»
- * Используется внутри RequireAuth + RequireVerified.
+ * Guard по роли: проверяет "не ниже чем указанная"
+ * Используется внутри RequireAuth + RequireVerified
  *
  * Если у пользователя роль ниже - показываем плейсхолдер
  */

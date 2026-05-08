@@ -10,7 +10,8 @@ import { getPublicUserProfile } from '@/shared/api/profile';
 import { useContextMenu, ContextMenuPortal, ContextMenuItem } from '@/shared/ui/ContextMenu';
 import { PlaylistCover } from '@/features/playlists/PlaylistCover';
 import { CreatePlaylistDialog } from '@/features/playlists/CreatePlaylistDialog';
-import { HeartIcon, TrashIcon, SidebarLeftIcon, PlusIcon, SearchIcon, MusicIcon, DjRoomsIcon, OfflineIcon } from '@/shared/ui/icons';
+import { NowPlayingFromBadge } from '@/features/player/NowPlayingBadge';
+import { HeartIcon, TrashIcon, SidebarLeftIcon, PlusIcon, SearchIcon, MusicIcon, DjRoomsIcon, OfflineIcon, HistoryIcon } from '@/shared/ui/icons';
 import { Tooltip } from '@/shared/ui/Tooltip';
 import { cn } from '@/shared/lib/cn';
 import type { FollowedUser, FollowedArtist, PlaylistSummary } from '@/shared/types';
@@ -84,13 +85,14 @@ export function SidebarLeft() {
                         <HeartIcon filled={true} className="text-white w-5 h-5" />
                     </div>
                     {isLeftOpen && (
-                        <div className="flex flex-col min-w-0">
+                        <div className="flex flex-col min-w-0 flex-1">
                             <span className="text-[15px] font-semibold text-fg tracking-tight truncate group-hover:text-accent transition-colors">Избранное</span>
                             <span className="text-[12px] text-fg-muted truncate">
                                 {favoritesQ.data?.length ?? 0} {pluralTracks(favoritesQ.data?.length ?? 0)}
                             </span>
                         </div>
                     )}
+                    <NowPlayingFromBadge target={{ type: 'favorites' }} className="shrink-0" />
                 </Link>
 
                 {/* DJ-КОМНАТЫ */}
@@ -118,6 +120,21 @@ export function SidebarLeft() {
                             <span className="text-[15px] font-semibold text-fg tracking-tight truncate group-hover:text-accent transition-colors">Офлайн</span>
                             <span className="text-[12px] text-fg-muted truncate">
                                 Скачанные треки
+                            </span>
+                        </div>
+                    )}
+                </Link>
+
+                {/* ИСТОРИЯ */}
+                <Link to="/history" className="flex items-center gap-3 p-2 -mx-2 rounded-lg hover:bg-accent/10 transition-colors group">
+                    <div className="w-10 h-10 shrink-0 rounded bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-md transition-transform duration-300 group-hover:scale-105">
+                        <HistoryIcon className="text-white w-5 h-5" />
+                    </div>
+                    {isLeftOpen && (
+                        <div className="flex flex-col min-w-0">
+                            <span className="text-[15px] font-semibold text-fg tracking-tight truncate group-hover:text-accent transition-colors">История</span>
+                            <span className="text-[12px] text-fg-muted truncate">
+                                Недавно прослушанное
                             </span>
                         </div>
                     )}
@@ -178,11 +195,12 @@ function PlaylistSidebarItem({ playlist, compact }: { playlist: PlaylistSummary,
                 )}
             </div>
             {!compact && (
-                <div className="flex flex-col min-w-0">
+                <div className="flex flex-col min-w-0 flex-1">
                     <span className="text-[15px] font-semibold text-fg tracking-tight truncate group-hover:text-accent group-hover:underline transition-colors">{playlist.title}</span>
                     <span className="text-[12px] text-fg-muted truncate">Плейлист • {playlist.ownerName || 'Автор'}</span>
                 </div>
             )}
+            <NowPlayingFromBadge target={{ type: 'playlist', id: playlist.id }} className="shrink-0" />
         </Link>
     );
 }
@@ -222,10 +240,11 @@ function ArtistSidebarItem({ artist, compact }: { artist: FollowedArtist, compac
         <>
             <Link to={`/artists/${artist.artistId}`} onContextMenu={contextMenu.onContextMenu} className="flex items-center gap-3 mb-1 p-2 -mx-2 rounded-lg hover:bg-accent/10 transition-colors group">
                 <div className="w-10 h-10 shrink-0 rounded-full bg-bg-elevated bg-cover bg-center flex items-center justify-center shadow-md transition-transform duration-300 group-hover:scale-105 text-lg font-bold text-fg-muted" style={{ backgroundImage: avatarUrl ? `url('${avatarUrl}')` : undefined }}>{!avatarUrl && artist.name ? artist.name.charAt(0).toUpperCase() : null}</div>
-                {!compact && <div className="flex flex-col min-w-0">
+                {!compact && <div className="flex flex-col min-w-0 flex-1">
                     <span className="text-[15px] font-semibold text-fg tracking-tight truncate group-hover:text-accent group-hover:underline transition-colors">{artist.name}</span>
                     <span className="text-[12px] text-fg-muted truncate">Артист • {new Date(artist.followedAt).toLocaleDateString('ru-RU')}</span>
                 </div>}
+                <NowPlayingFromBadge target={{ type: 'artist', id: artist.artistId }} className="shrink-0" />
             </Link>
             <ContextMenuPortal isOpen={contextMenu.isOpen} position={contextMenu.position}>
                 <ContextMenuItem danger icon={<TrashIcon className="w-4 h-4" />} onClick={() => { unfollow.mutate(); contextMenu.close(); }}>Отписаться</ContextMenuItem>

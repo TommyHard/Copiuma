@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/features/auth/useAuth';
 import { cn } from '@/shared/lib/cn';
 import { ThemeToggle } from '@/features/theme/ThemeToggle';
 import { useUIStore } from '@/shared/store/uiStore';
 import { useContextMenu, ContextMenuPortal, ContextMenuItem, ContextMenuSeparator } from '@/shared/ui/ContextMenu';
 import { Tooltip } from '@/shared/ui/Tooltip';
+import { getPublicUserProfile } from '@/shared/api/profile';
 import {
     UsersIcon,
     UserIcon,
@@ -16,7 +18,7 @@ import {
     SearchIcon,
     CatalogIcon
 } from '@/shared/ui/icons';
-import { NotificationsBell } from '../features/notifications/NotificationsBell';
+import { NotificationsBell } from '@/features/notifications/NotificationsBell';
 
 const ARTIST_PLUS = new Set(['Artist', 'Moderator', 'Admin', 1, 2, 3]);
 
@@ -38,6 +40,14 @@ export function Header() {
 
     const { rightTab, setRightTab, isRightOpen, setRightOpen } = useUIStore();
     const { isOpen, position, onContextMenu, close } = useContextMenu();
+
+    const profileQ = useQuery({
+        queryKey: ['user-profile', user?.id],
+        queryFn: () => getPublicUserProfile(user!.id),
+        enabled: !!user?.id,
+        staleTime: 5 * 60 * 1000,
+    });
+    const avatarUrl = user?.avatarUrl ?? profileQ.data?.avatarUrl ?? null;
 
     const handleSearchEnter = () => {
         if (!searchValue.trim()) return;
@@ -130,9 +140,9 @@ export function Header() {
                             onClick={onContextMenu}
                             className="relative flex items-center justify-center w-9 h-9 ml-1 rounded-full bg-bg border-2 border-accent hover:opacity-80 transition-opacity overflow-hidden shadow-[0_0_10px_rgba(202,162,230,0.1)]"
                         >
-                            {user.avatarUrl ? (
+                            {avatarUrl ? (
                                 <img
-                                    src={user.avatarUrl}
+                                    src={avatarUrl}
                                     alt={user.displayName ?? "Аватар"}
                                     className="w-full h-full object-cover"
                                 />

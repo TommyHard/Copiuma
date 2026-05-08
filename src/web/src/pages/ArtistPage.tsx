@@ -10,6 +10,7 @@ import { FollowArtistButton } from '@/features/follows/FollowArtistButton';
 import { ReportButton } from '@/features/reports/ReportButton';
 import { useAverageColor } from '@/shared/hooks/useAverageColor';
 import { MusicIcon } from '@/shared/ui/icons';
+import { NowPlayingFromBadge } from '@/features/player/NowPlayingBadge';
 import { cn } from '@/shared/lib/cn';
 
 export function ArtistPage() {
@@ -127,8 +128,9 @@ export function ArtistPage() {
                     )}>
                         {artist.name}
                     </h1>
-                    <div className="mt-5 mx-2 text-white/80 drop-shadow-md text-[1.1rem] flex items-center gap-3">
+                    <div className="mt-5 mx-2 text-white/80 drop-shadow-md text-[1.1rem] flex items-center gap-3 pointer-events-auto">
                         <span>{artist.followers?.toLocaleString() || 0} слушателей</span>
+                        <NowPlayingFromBadge target={{ type: 'artist', id: artist.id }} label className="text-white" />
                         {isBlocked && (
                             <span className="px-3 py-0.5 bg-danger rounded text-xs font-bold tracking-widest text-white">
                                 Заблокирован

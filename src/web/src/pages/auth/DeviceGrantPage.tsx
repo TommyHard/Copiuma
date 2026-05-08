@@ -11,7 +11,7 @@ import { extractError, btnPrimaryClass } from './LoginPage';
  *   client_id, redirect_uri, code_challenge, code_challenge_method, state
  *
  * Если юзер не залогинен — редирект на /auth/login с возвратом сюда после успеха
- * Если залогинен и подтверждён — кнопка «Разрешить»; на клик POST
+ * Если залогинен и подтверждён — кнопка "Разрешить"; на клик POST
  */
 export function DeviceGrantPage() {
     const { status, user } = useAuth();

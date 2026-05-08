@@ -17,6 +17,10 @@ const TRACK_LIST_QUERY_PREFIXES: readonly (readonly unknown[])[] = [
     ['album-tracks'],
     ['playlist'],
     ['search'],
+    ['history-tracks'],
+    ['history-tracks-infinite'],
+    ['history-raw'],
+    ['history-raw-infinite'],
 ];
 
 const INVALIDATE_PREFIXES: readonly (readonly unknown[])[] = [
@@ -40,7 +44,7 @@ function patchLikedInCaches(
     nextValue: boolean,
 ): void {
     for (const prefix of TRACK_LIST_QUERY_PREFIXES) {
-        qc.setQueriesData<AnyTrackList>({ queryKey: prefix as unknown[] }, (old) => {
+        qc.setQueriesData<AnyTrackList>({ queryKey: prefix as unknown[] }, (old: unknown) => {
             if (old == null) return old;
             const matched = matchAndPatch(old, trackId, nextValue);
             return matched.changed ? matched.value : old;
@@ -66,6 +70,12 @@ function matchAndPatch(
     if (Array.isArray(data)) {
         let changed = false;
         const next = data.map((item) => {
+            if (Array.isArray(item)) {
+                const inner = matchAndPatch(item, trackId, nextValue);
+                if (inner.changed) changed = true;
+                return inner.value;
+            }
+
             if (!item || typeof item !== 'object') return item;
             const obj = item as Record<string, unknown>;
 
@@ -79,21 +89,19 @@ function matchAndPatch(
                 return obj;
             }
 
-            // FavoriteItem[] Ч состав списка
-            // ≈сли стало unliked Ч убираем; если liked Ч кэш всЄ равно
-            // обновитс€ при invalidate (новый объект с правильным likedAt)
+            // FavoriteItem[]
             if (obj.id === trackId && !('isLikedByMe' in obj) && 'likedAt' in obj && !nextValue) {
                 changed = true;
                 return null;
             }
 
-            // ќбычный TrackListItem
+            // ќбычный TrackListItem (HistoryRaw, HistoryTracks, Catalog и т.д.)
             if (obj.id === trackId && obj.isLikedByMe !== nextValue) {
                 changed = true;
                 return { ...obj, isLikedByMe: nextValue };
             }
 
-            // PlaylistTrack Ч там trackId
+            // PlaylistTrack и HistoryTrackItem
             if (obj.trackId === trackId && obj.isLikedByMe !== nextValue) {
                 changed = true;
                 return { ...obj, isLikedByMe: nextValue };
@@ -163,7 +171,7 @@ export function useToggleTrackLike() {
 
             patchLikedInCaches(qc, trackId, nextLiked);
 
-            qc.setQueryData<unknown>(detailKey, (old) => {
+            qc.setQueryData<unknown>(detailKey, (old: unknown) => {
                 if (!old || typeof old !== 'object') return old;
                 const o = old as Record<string, unknown>;
                 if (o.isLikedByMe === nextLiked) return old;

@@ -3,11 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { listFavorites } from '@/shared/api/tracks';
 import { getPublicUserProfile } from '@/shared/api/profile';
-import { listPlaylists, addTrack } from '@/shared/api/playlists';
+import { listPlaylists, addTrack, getPlaylistsContainingTrack } from '@/shared/api/playlists';
 import { usePlayTrack } from '@/features/player/usePlayTrack';
 import { useToggleTrackLike } from '@/features/track/useToggleTrackLike';
 import { useAuth } from '@/features/auth/useAuth';
-import { HeartIcon, SearchIcon, PlayIcon, MusicIcon, ArrowRightIcon, PlusIcon, DownloadIcon, ClockIcon } from '@/shared/ui/icons';
+import { HeartIcon, SearchIcon, PlayIcon, MusicIcon, ArrowRightIcon, PlusIcon, DownloadIcon, ClockIcon, CheckIcon } from '@/shared/ui/icons';
 import { cn } from '@/shared/lib/cn';
 import { Tooltip } from '@/shared/ui/Tooltip';
 import { useContextMenu, ContextMenuPortal, ContextMenuItem, ContextMenuSub, ContextMenuSeparator } from '@/shared/ui/ContextMenu';
@@ -46,6 +46,23 @@ function formatDuration(d: string | null | undefined): string {
     const ss = parseInt(m[3], 10);
     if (h > 0) return `${h}:${mm.toString().padStart(2, '0')}:${ss.toString().padStart(2, '0')}`;
     return `${mm}:${ss.toString().padStart(2, '0')}`;
+}
+
+function toPlayerTrack(f: any) {
+    return {
+        id: f.id,
+        title: f.title,
+        artist: f.artist,
+        artistId: f.artistId ?? null,
+        duration: f.duration ?? null,
+        uploadedAt: '',
+        albumId: f.albumId ?? null,
+        trackNumber: null,
+        isExplicit: false,
+        coverUrl: f.coverUrl ?? null,
+        isLikedByMe: true,
+        featuredArtists: f.featuredArtists ?? [],
+    };
 }
 
 export function FavoritesPage() {
@@ -250,10 +267,19 @@ export function FavoritesPage() {
         staleTime: 60_000,
     });
 
+    const qContaining = useQuery({
+        queryKey: ['playlists-containing', contextTrack?.id],
+        queryFn: () => getPlaylistsContainingTrack(contextTrack!.id),
+        enabled: isOpen && !!contextTrack?.id,
+        staleTime: 30_000,
+    });
+    const containingSet = new Set(qContaining.data ?? []);
+
     const addTrackToPlaylist = useMutation({
         mutationFn: (playlistId: string) => addTrack(playlistId, contextTrack!.id),
         onSuccess: (_, playlistId) => {
             qc.invalidateQueries({ queryKey: ['playlist', playlistId] });
+            qc.invalidateQueries({ queryKey: ['playlists-containing', contextTrack?.id] });
             close();
         },
     });
@@ -274,7 +300,9 @@ export function FavoritesPage() {
                 </div>
 
                 <div className="relative z-10 flex flex-col gap-2">
-                    <span className="text-xs md:text-sm font-bold uppercase tracking-widest text-white/90">Плейлист</span>
+                    <span className="text-xs md:text-sm font-bold uppercase tracking-widest text-white/90 flex items-center gap-3">
+                        Плейлист
+                    </span>
                     <h1 className="text-5xl md:text-8xl font-black text-white tracking-tight drop-shadow-lg">Избранное</h1>
                     <div className="flex items-center gap-1 mt-5 text-sm text-white font-medium">
                         <div className="size-6 rounded-full bg-accent flex items-center justify-center shrink-0 overflow-hidden">
@@ -356,7 +384,7 @@ export function FavoritesPage() {
                     </div>
                 </div>
 
-                {/* STICKY HEADER */ }
+                {/* STICKY HEADER */}
                 <div ref={tableContainerRef} className="w-full mt-4">
 
                     <div ref={sentinelRef} className="w-full h-px pointer-events-none -mb-px" />
@@ -438,13 +466,25 @@ export function FavoritesPage() {
                                 <div
                                     key={f.id}
                                     onContextMenu={(e) => handleTrackContextMenu(e, f)}
-                                    className="group grid gap-4 px-4 py-2.5 items-center hover:bg-accent/25 rounded-md transition-colors text-sm w-full"
+                                    className={cn(
+                                        "group grid gap-4 px-4 py-2.5 items-center hover:bg-accent/25 rounded-md transition-colors text-sm w-full"
+                                    )}
                                     style={{ gridTemplateColumns }}
                                 >
                                     <div className="text-center text-fg-muted flex justify-center">
                                         <span className="group-hover:hidden tabular-nums">{i + 1}</span>
                                         <Tooltip content={`Играть ${f.title} от ${fullArtistText}`}>
-                                            <button className="hidden group-hover:flex items-center justify-center w-full" onClick={() => play(f as any)}>
+                                            <button
+                                                className="hidden group-hover:flex items-center justify-center w-full"
+                                                onClick={() => play(
+                                                    f as any,
+                                                    {
+                                                        queue: processedTracks.map(toPlayerTrack),
+                                                        startIndex: i,
+                                                        context: { type: 'favorites' },
+                                                    }
+                                                )}
+                                            >
                                                 <PlayIcon className="size-4 text-fg" />
                                             </button>
                                         </Tooltip>
@@ -534,15 +574,19 @@ export function FavoritesPage() {
                                     <p className="px-3 py-2 text-xs text-fg-muted">Ничего не найдено</p>
                                 )}
 
-                                {filteredPlaylists.map((p) => (
-                                    <ContextMenuItem
-                                        key={p.id}
-                                        disabled={addTrackToPlaylist.isPending}
-                                        onClick={() => addTrackToPlaylist.mutate(p.id)}
-                                    >
-                                        {p.title}
-                                    </ContextMenuItem>
-                                ))}
+                                {filteredPlaylists.map((p) => {
+                                    const already = containingSet.has(p.id);
+                                    return (
+                                        <ContextMenuItem
+                                            key={p.id}
+                                            disabled={addTrackToPlaylist.isPending || already}
+                                            onClick={() => !already && addTrackToPlaylist.mutate(p.id)}
+                                            icon={already ? <CheckIcon className="w-3.5 h-3.5 text-accent" /> : undefined}
+                                        >
+                                            {already ? `${p.title} • уже добавлен` : p.title}
+                                        </ContextMenuItem>
+                                    );
+                                })}
                             </div>
                         </ContextMenuSub>
 

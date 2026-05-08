@@ -147,7 +147,7 @@ function AuditRow({ log, nameMap }: { log: PlaylistAudit; nameMap: Record<string
 
     const actionText = useMemo(() => {
         if (log.entityType === 'PlaylistTrack') {
-            const trackName = log.trackTitle ? <span className="font-medium text-fg italic">«{log.trackTitle}»</span> : 'трек';
+            const trackName = log.trackTitle ? <span className="font-medium text-fg italic">"{log.trackTitle}"</span> : 'трек';
             if (log.changeKind === 0) return <span>добавил {trackName}</span>;
             if (log.changeKind === 2) return <span>удалил {trackName}</span>;
             if (log.changeKind === 1) return <span>изменил позицию для {trackName}</span>;

@@ -324,7 +324,7 @@ export function PlaylistPage() {
                 <h2 className="text-xl font-semibold">Треки</h2>
                 {tracks.length === 0 && (
                     <p className="text-fg-muted">
-                        Пусто. Добавь треки кнопкой «＋» в любом списке.
+                        Пусто. Добавь треки кнопкой "＋" в любом списке.
                     </p>
                 )}
                 {tracks.length > 0 && (

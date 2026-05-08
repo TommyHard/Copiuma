@@ -338,7 +338,7 @@ public class TracksController : ControllerBase
         if (string.IsNullOrWhiteSpace(q))
             return BadRequest("Поисковой запрос не может быть пустым.");
 
-        var tracks = await _moderation.ApplyVisibilityFilter(_context.Tracks, UserId)
+        var raw = await _moderation.ApplyVisibilityFilter(_context.Tracks, UserId)
             .Where(t => t.SearchVector!.Matches(EF.Functions.WebSearchToTsQuery("russian", q)))
             .Select(t => new {
                 t.Id,
@@ -350,6 +350,8 @@ public class TracksController : ControllerBase
                 t.AlbumId,
                 t.TrackNumber,
                 t.IsExplicit,
+                t.CoverKey,
+                AlbumCoverKey = t.Album != null ? t.Album.CoverKey : null,
                 IsLikedByMe = _context.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == UserId),
                 FeaturedArtists = _context.TrackFeaturedArtists
                     .Where(fa => fa.TrackId == t.Id)
@@ -359,6 +361,28 @@ public class TracksController : ControllerBase
             })
             .Take(20)
             .ToListAsync();
+
+        var tracks = new List<object>(raw.Count);
+        foreach (var t in raw)
+        {
+            var key = t.CoverKey ?? t.AlbumCoverKey;
+            var url = key != null ? await _storage.GeneratePresignedImageGetUrlAsync(key) : null;
+            tracks.Add(new
+            {
+                t.Id,
+                t.Title,
+                t.Artist,
+                t.Duration,
+                t.UploadedAt,
+                t.ArtistId,
+                t.AlbumId,
+                t.TrackNumber,
+                t.IsExplicit,
+                CoverUrl = url,
+                t.IsLikedByMe,
+                t.FeaturedArtists
+            });
+        }
 
         return Ok(tracks);
     }

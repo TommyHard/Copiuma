@@ -453,7 +453,7 @@ function DislikesList() {
         onSuccess: () => qc.invalidateQueries({ queryKey: ['dislikes'] }),
     });
 
-    if (!dislikesQ.data?.length) return <p className="text-xs text-fg-muted">Нет отметок «Не интересно».</p>;
+    if (!dislikesQ.data?.length) return <p className="text-xs text-fg-muted">Нет отметок "Не интересно".</p>;
 
     return (
         <div className="space-y-2">

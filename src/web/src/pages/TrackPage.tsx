@@ -305,11 +305,14 @@ export function TrackPage() {
                 <div className="flex flex-wrap items-center gap-4">
                     <button
                         disabled={!ready}
-                        onClick={() => play({
-                            id: t.id, title: t.title, artist: t.artist, duration: t.duration,
-                            uploadedAt: '', artistId: t.artistId, albumId: t.albumId,
-                            trackNumber: t.trackNumber, isExplicit: t.isExplicit, coverUrl: t.coverUrl
-                        })}
+                        onClick={() => play(
+                            {
+                                id: t.id, title: t.title, artist: t.artist, duration: t.duration,
+                                uploadedAt: '', artistId: t.artistId, albumId: t.albumId,
+                                trackNumber: t.trackNumber, isExplicit: t.isExplicit, coverUrl: t.coverUrl
+                            },
+                            { context: { type: 'track' } }
+                        )}
                         className="h-14 px-5 rounded font-black uppercase tracking-widest bg-accent text-white shadow-xl hover:scale-105 active:scale-95 transition-all disabled:opacity-50 flex items-center gap-3"
                     >
                         {ready ? <><PlayIcon className="size-6" /> Играть</> : <><RefreshIcon className="size-6 animate-spin" /> Обработка… </>}

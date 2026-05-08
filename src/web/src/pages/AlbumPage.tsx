@@ -12,6 +12,7 @@ import {
 import { listGenres } from '@/shared/api/genres';
 import { TrackRow } from './track-row';
 import { usePlayer } from '@/features/player/store';
+import { NowPlayingFromBadge } from '@/features/player/NowPlayingBadge';
 import { useAuth } from '@/features/auth/useAuth';
 import { ImageUploader } from '@/features/cover/ImageUploader';
 import { cn } from '@/shared/lib/cn';
@@ -84,7 +85,10 @@ export function AlbumPage() {
 
                 <div className="min-w-0 flex-1 space-y-2">
                     <p className="text-xs uppercase tracking-wide text-fg-muted">Альбом</p>
-                    <h1 className="truncate text-3xl font-semibold">{a.title}</h1>
+                    <div className="flex items-center gap-3">
+                        <h1 className="truncate text-3xl font-semibold">{a.title}</h1>
+                        {id && <NowPlayingFromBadge target={{ type: 'album', id }} label />}
+                    </div>
 
                     {a.artistId && (
                         <Link to={`/artists/${a.artistId}`} className="text-sm text-fg-muted hover:text-fg">
@@ -130,7 +134,7 @@ export function AlbumPage() {
                     <div className="flex flex-wrap gap-2 pt-2">
                         {tracks.data && tracks.data.length > 0 && (
                             <button
-                                onClick={() => playQueue(tracks.data!, 0)}
+                                onClick={() => playQueue(tracks.data!, 0, { type: 'album', id: id! })}
                                 className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:opacity-90"
                             >
                                 ▶ Играть альбом

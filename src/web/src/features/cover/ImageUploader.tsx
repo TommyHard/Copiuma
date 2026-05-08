@@ -42,7 +42,7 @@ export function ImageUploader({
             return;
         }
         if (!ALLOWED.includes(f.type)) {
-            setError(`Тип «${f.type}» не разрешён (jpg/png/webp/gif).`);
+            setError(`Тип "${f.type}" не разрешён (jpg/png/webp/gif).`);
             return;
         }
         upload.mutate(f);

@@ -31,7 +31,7 @@ public record FeedItem(
 public record TopArtistItem(
     Guid ArtistId,
     string Name,
-    string? AvatarKey,
+    string? AvatarUrl,
     int PlayCount,
     DateTime LastPlayedAt);
 

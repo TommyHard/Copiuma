@@ -6,10 +6,10 @@ import { usePlayTrack } from '@/features/player/usePlayTrack';
 import { usePlayer } from '@/features/player/store';
 import { useToggleTrackLike } from '@/features/track/useToggleTrackLike';
 import { dislikeTrack, undoDislikeTrack } from '@/shared/api/dislikes';
-import { addTrack, listPlaylists } from '@/shared/api/playlists';
+import { addTrack, listPlaylists, getPlaylistsContainingTrack } from '@/shared/api/playlists';
 import { Tooltip } from '@/shared/ui/Tooltip';
 import { useContextMenu, ContextMenuPortal, ContextMenuItem, ContextMenuSub, ContextMenuSeparator } from '@/shared/ui/ContextMenu';
-import { PlayIcon, HeartIcon, PlusIcon, DislikeIcon, SearchIcon, TrashIcon } from '@/shared/ui/icons';
+import { PlayIcon, HeartIcon, PlusIcon, DislikeIcon, SearchIcon, TrashIcon, CheckIcon } from '@/shared/ui/icons';
 import { cn } from '@/shared/lib/cn';
 
 export function TrackRow({ track, number, onPlay, onRemoveFromQueue }: { track: TrackListItem; number?: number; onPlay?: () => void; onRemoveFromQueue?: () => void; }) {
@@ -46,10 +46,19 @@ export function TrackRow({ track, number, onPlay, onRemoveFromQueue }: { track: 
         staleTime: 60_000,
     });
 
+    const qContaining = useQuery({
+        queryKey: ['playlists-containing', track.id],
+        queryFn: () => getPlaylistsContainingTrack(track.id),
+        enabled: contextMenu.isOpen,
+        staleTime: 30_000,
+    });
+    const containingSet = new Set(qContaining.data ?? []);
+
     const addTrackToPlaylist = useMutation({
         mutationFn: (playlistId: string) => addTrack(playlistId, track.id),
         onSuccess: (_, playlistId) => {
             qc.invalidateQueries({ queryKey: ['playlist', playlistId] });
+            qc.invalidateQueries({ queryKey: ['playlists-containing', track.id] });
             contextMenu.close();
         },
     });
@@ -173,15 +182,19 @@ export function TrackRow({ track, number, onPlay, onRemoveFromQueue }: { track: 
                             <p className="px-3 py-2 text-xs text-fg-muted">Ничего не найдено</p>
                         )}
 
-                        {filteredPlaylists.map((p) => (
-                            <ContextMenuItem
-                                key={p.id}
-                                disabled={addTrackToPlaylist.isPending}
-                                onClick={() => addTrackToPlaylist.mutate(p.id)}
-                            >
-                                {p.title}
-                            </ContextMenuItem>
-                        ))}
+                        {filteredPlaylists.map((p) => {
+                            const already = containingSet.has(p.id);
+                            return (
+                                <ContextMenuItem
+                                    key={p.id}
+                                    disabled={addTrackToPlaylist.isPending || already}
+                                    onClick={() => !already && addTrackToPlaylist.mutate(p.id)}
+                                    icon={already ? <CheckIcon className="w-3.5 h-3.5 text-accent" /> : undefined}
+                                >
+                                    {already ? `${p.title} • уже добавлен` : p.title}
+                                </ContextMenuItem>
+                            );
+                        })}
                     </div>
                 </ContextMenuSub>
 

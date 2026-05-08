@@ -72,6 +72,15 @@ export async function removeTrack(playlistId: string, trackId: string): Promise<
     await api.delete(`/playlists/${playlistId}/tracks/${trackId}`);
 }
 
+/**
+ * Возвращает ID плейлистов, в которых уже лежит данный трек
+ * Используется для отметки в меню "Добавить в плейлист"
+ */
+export async function getPlaylistsContainingTrack(trackId: string): Promise<string[]> {
+    const r = await api.get<string[]>(`/playlists/containing/${trackId}`);
+    return Array.isArray(r.data) ? r.data : [];
+}
+
 export async function invite(
     playlistId: string,
     inviteeId: string,

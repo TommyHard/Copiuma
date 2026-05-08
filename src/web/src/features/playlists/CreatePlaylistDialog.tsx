@@ -100,7 +100,7 @@ export function CreatePlaylistDialog({
                     <button
                         type="submit"
                         disabled={m.isPending || !title.trim()}
-                        className="rounded-full bg-accent px-5 py-2 text-sm font-bold text-accent-fg hover:opacity-90 disabled:opacity-50"
+                        className="rounded bg-accent px-5 py-2 text-sm font-bold text-accent-fg hover:opacity-90 disabled:opacity-50"
                     >
                         {m.isPending ? 'Создаём…' : 'Создать'}
                     </button>

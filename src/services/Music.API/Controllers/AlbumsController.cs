@@ -84,8 +84,11 @@ public class AlbumsController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(q))
         {
-            query = query.Where(a => a.SearchVector!
-                .Matches(EF.Functions.WebSearchToTsQuery("russian", q)));
+            // Поиск по названию альбома ИЛИ по имени артиста
+            var pattern = $"%{q.Trim()}%";
+            query = query.Where(a =>
+                a.SearchVector!.Matches(EF.Functions.WebSearchToTsQuery("russian", q))
+                || (a.Artist != null && EF.Functions.ILike(a.Artist.Name, pattern)));
         }
 
         var total = await query.CountAsync();

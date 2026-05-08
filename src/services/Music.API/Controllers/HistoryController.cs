@@ -8,9 +8,6 @@ using System.Security.Claims;
 
 namespace Music.API.Controllers;
 
-/// <summary>
-/// "Недавно прослушанное" - экран History
-/// </summary>
 [ApiController]
 [Authorize]
 [Route("[controller]")]
@@ -18,27 +15,26 @@ public class HistoryController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly ModerationService _mod;
+    private readonly FileStorageService _storage;
 
-    public HistoryController(AppDbContext db, ModerationService mod)
+    public HistoryController(AppDbContext db, ModerationService mod, FileStorageService storage)
     {
         _db = db;
         _mod = mod;
+        _storage = storage;
     }
 
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-    /// <summary>
-    /// Последние уникальные прослушанные треки
-    /// </summary>
-    /// <param name="take">Сколько строк (1-100, по умолчанию 50)</param>
-    /// <param name="sinceDays">Окно истории в днях (1-365, по умолчанию 30)</param>
     [HttpGet("tracks")]
     public async Task<IActionResult> GetTrackHistory(
-        [FromQuery] int take = 50,
+        [FromQuery] int page = 1,
+        [FromQuery] int limit = 20,
         [FromQuery] int sinceDays = 30,
         CancellationToken ct = default)
     {
-        take = Math.Clamp(take, 1, 100);
+        page = Math.Max(1, page);
+        limit = Math.Clamp(limit, 1, 100);
         sinceDays = Math.Clamp(sinceDays, 1, 365);
         var since = DateTime.UtcNow.AddDays(-sinceDays);
 
@@ -52,14 +48,15 @@ public class HistoryController : ControllerBase
                 PlayCount = g.Count()
             })
             .OrderByDescending(x => x.LastPlayedAt)
-            .Take(take)
+            .Skip((page - 1) * limit)
+            .Take(limit)
             .ToListAsync(ct);
 
-        if (aggregated.Count == 0)
-            return Ok(Array.Empty<HistoryTrackItem>());
+        if (aggregated.Count == 0) return Ok(Array.Empty<HistoryTrackItem>());
 
         var trackIds = aggregated.Select(x => x.TrackId).ToList();
-        var tracks = await _mod.ApplyVisibilityFilter(_db.Tracks, UserId)
+
+        var tracksData = await _mod.ApplyVisibilityFilter(_db.Tracks, UserId)
             .Where(t => trackIds.Contains(t.Id))
             .Select(t => new
             {
@@ -68,118 +65,137 @@ public class HistoryController : ControllerBase
                 t.Artist,
                 t.ArtistId,
                 t.AlbumId,
-                t.Duration
+                t.Duration,
+                t.CoverKey,
+                AlbumCoverKey = t.Album != null ? t.Album.CoverKey : null,
+                IsLikedByMe = _db.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == UserId),
+                FeaturedArtists = _db.TrackFeaturedArtists
+                    .Where(fa => fa.TrackId == t.Id)
+                    .OrderBy(fa => fa.Position)
+                    .Select(fa => new HistoryFeaturedArtist(fa.Artist!.Id, fa.Artist.Name))
+                    .ToList()
             })
             .ToDictionaryAsync(x => x.Id, ct);
 
-        var result = aggregated
-            .Where(a => tracks.ContainsKey(a.TrackId))
-            .Select(a =>
+        var result = new List<HistoryTrackItem>();
+        foreach (var a in aggregated)
+        {
+            if (tracksData.TryGetValue(a.TrackId, out var t))
             {
-                var t = tracks[a.TrackId];
-                return new HistoryTrackItem(
-                    a.TrackId,
-                    t.Title,
-                    t.Artist,
-                    t.ArtistId,
-                    t.AlbumId,
-                    t.Duration,
-                    a.LastPlayedAt,
-                    a.PlayCount);
-            })
-            .ToList();
+                var key = t.CoverKey ?? t.AlbumCoverKey;
+                var coverUrl = key != null ? await _storage.GeneratePresignedImageGetUrlAsync(key) : null;
+
+                result.Add(new HistoryTrackItem(
+                    a.TrackId, t.Title, t.Artist, t.ArtistId, t.AlbumId, t.Duration,
+                    a.LastPlayedAt, a.PlayCount, coverUrl, t.FeaturedArtists, t.IsLikedByMe));
+            }
+        }
 
         return Ok(result);
     }
 
-    /// <summary>
-    /// Лента прослушиваний — без дедупликации
-    /// </summary>
     [HttpGet("tracks/raw")]
     public async Task<IActionResult> GetRawHistory(
-        [FromQuery] int take = 100,
+        [FromQuery] int page = 1,
+        [FromQuery] int limit = 20,
         [FromQuery] int sinceDays = 30,
         CancellationToken ct = default)
     {
-        take = Math.Clamp(take, 1, 500);
+        page = Math.Max(1, page);
+        limit = Math.Clamp(limit, 1, 100);
         sinceDays = Math.Clamp(sinceDays, 1, 365);
         var since = DateTime.UtcNow.AddDays(-sinceDays);
 
-        var visibleTracks = _mod.ApplyVisibilityFilter(_db.Tracks, UserId);
-
-        var events = await _db.PlayEvents
+        var latestPlays = await _db.PlayEvents
             .Where(p => p.UserId == UserId && p.StartedAt >= since)
-            .Where(p => visibleTracks.Any(t => t.Id == p.TrackId))
+            .Where(p => p.StartedAt == _db.PlayEvents
+                .Where(sub => sub.UserId == UserId && sub.TrackId == p.TrackId)
+                .Max(sub => sub.StartedAt))
             .OrderByDescending(p => p.StartedAt)
-            .Take(take)
+            .Skip((page - 1) * limit)
+            .Take(limit)
             .Select(p => new
             {
                 p.TrackId,
                 p.StartedAt,
                 p.PlayedMs,
                 p.Completed,
-                p.Source,
-                Title = p.Track!.Title,
-                Artist = p.Track!.Artist,
-                Duration = p.Track!.Duration
+                p.Source
             })
             .ToListAsync(ct);
 
-        return Ok(events);
+        if (latestPlays.Count == 0) return Ok(Array.Empty<object>());
+
+        var trackIds = latestPlays.Select(p => p.TrackId).Distinct().ToList();
+
+        var tracksInfo = await _mod.ApplyVisibilityFilter(_db.Tracks, UserId)
+            .Where(t => trackIds.Contains(t.Id))
+            .Select(t => new {
+                t.Id,
+                t.Title,
+                t.Artist,
+                t.Duration,
+                IsLikedByMe = _db.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == UserId),
+                FeaturedArtists = _db.TrackFeaturedArtists
+                    .Where(fa => fa.TrackId == t.Id)
+                    .OrderBy(fa => fa.Position)
+                    .Select(fa => new { fa.Artist!.Id, fa.Artist.Name })
+                    .ToList()
+            })
+            .ToDictionaryAsync(x => x.Id, ct);
+
+        var result = latestPlays
+            .Where(p => tracksInfo.ContainsKey(p.TrackId))
+            .Select(p =>
+            {
+                var t = tracksInfo[p.TrackId];
+                return new
+                {
+                    p.TrackId,
+                    p.StartedAt,
+                    p.PlayedMs,
+                    p.Completed,
+                    p.Source,
+                    Title = t.Title,
+                    Artist = t.Artist,
+                    Duration = t.Duration,
+                    IsLikedByMe = t.IsLikedByMe,
+                    FeaturedArtists = t.FeaturedArtists
+                };
+            });
+
+        return Ok(result);
     }
 
-    /// <summary>
-    /// Топ артистов пользователя за окно.
-    /// Score — число прослушиваний треков этого артиста
-    /// </summary>
     [HttpGet("artists")]
     public async Task<IActionResult> GetTopArtists(
-        [FromQuery] int take = 20,
-        [FromQuery] int sinceDays = 30,
+        [FromQuery] int limit = 30,
         CancellationToken ct = default)
     {
-        take = Math.Clamp(take, 1, 100);
-        sinceDays = Math.Clamp(sinceDays, 1, 365);
-        var since = DateTime.UtcNow.AddDays(-sinceDays);
+        limit = Math.Clamp(limit, 1, 100);
+        var since = DateTime.UtcNow.AddDays(-30);
 
         var aggregated = await _db.PlayEvents
             .Where(p => p.UserId == UserId && p.StartedAt >= since && p.Track!.ArtistId != null)
             .Where(p => !_db.UserBlockedArtists.Any(b => b.UserId == UserId && b.ArtistId == p.Track!.ArtistId))
             .GroupBy(p => p.Track!.ArtistId!.Value)
-            .Select(g => new
-            {
-                ArtistId = g.Key,
-                PlayCount = g.Count(),
-                LastPlayedAt = g.Max(x => x.StartedAt)
-            })
+            .Select(g => new { ArtistId = g.Key, PlayCount = g.Count(), LastPlayedAt = g.Max(x => x.StartedAt) })
             .OrderByDescending(x => x.PlayCount)
-            .ThenByDescending(x => x.LastPlayedAt)
-            .Take(take)
+            .Take(limit)
             .ToListAsync(ct);
 
-        if (aggregated.Count == 0)
-            return Ok(Array.Empty<TopArtistItem>());
-
         var ids = aggregated.Select(x => x.ArtistId).ToList();
-        var artists = await _db.Artists
-            .Where(a => ids.Contains(a.Id))
-            .Select(a => new { a.Id, a.Name, a.AvatarKey })
-            .ToDictionaryAsync(x => x.Id, ct);
+        var artists = await _db.Artists.Where(a => ids.Contains(a.Id)).ToDictionaryAsync(x => x.Id, ct);
 
-        var result = aggregated
-            .Where(a => artists.ContainsKey(a.ArtistId))
-            .Select(a =>
+        var result = new List<TopArtistItem>();
+        foreach (var a in aggregated)
+        {
+            if (artists.TryGetValue(a.ArtistId, out var meta))
             {
-                var meta = artists[a.ArtistId];
-                return new TopArtistItem(
-                    a.ArtistId,
-                    meta.Name,
-                    meta.AvatarKey,
-                    a.PlayCount,
-                    a.LastPlayedAt);
-            })
-            .ToList();
-
+                var avatarUrl = meta.AvatarKey != null ? await _storage.GeneratePresignedImageGetUrlAsync(meta.AvatarKey) : null;
+                result.Add(new TopArtistItem(a.ArtistId, meta.Name, avatarUrl, a.PlayCount, a.LastPlayedAt));
+            }
+        }
         return Ok(result);
     }
 

@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { RoomParticipant } from '@/shared/types';
 
 /**
- * Состояние «текущей комнаты» — живёт пока на странице /rooms/:id
+ * Состояние "текущей комнаты"
  */
 
 export interface CurrentTrackInRoom {

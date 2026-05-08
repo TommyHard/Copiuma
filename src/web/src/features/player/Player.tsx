@@ -10,6 +10,9 @@ import { Link } from 'react-router-dom';
 import { useUIStore } from '@/shared/store/uiStore';
 import { getTrackStatus } from '@/shared/api/catalog';
 import { cn } from '@/shared/lib/cn';
+import { SleepTimerButton } from './SleepTimerButton';
+import { EqualizerButton } from './EqualizerButton';
+import { ensureEqualizerGraph, applyEqualizer } from './equalizerAudio';
 
 interface PlaySession {
     trackId: string;
@@ -93,32 +96,34 @@ const RepeatIcon = ({ state }: { state: 'off' | 'all' | 'one' }) => {
 const VolumeIcon = ({ volume }: { volume: number }) => {
     if (volume === 0) {
         return (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                <line x1="23" y1="9" x2="17" y2="15" />
-                <line x1="17" y1="9" x2="23" y2="15" />
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1, 11 L1, 13 Q 1, 14, 2, 14.5 L11, 19.5 Q 12, 20, 12, 18 L12, 6 Q 12, 4, 11, 4.5 L2, 9.5 Q 1, 10, 1, 11 Z" />
+                <path d="M15 10 L19 14 M19 10 L15 14" />
             </svg>
         );
     }
     if (volume < 0.33) {
         return (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1, 11 L1, 13 Q 1, 14, 2, 14.5 L11, 19.5 Q 12, 20, 12, 18 L12, 6 Q 12, 4, 11, 4.5 L2, 9.5 Q 1, 10, 1, 11 Z" />
+                <path d="M14.6 10.5 A 3 3 0 0 1 14.6 13.5" />
             </svg>
         );
     }
     if (volume < 0.66) {
         return (
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1, 11 L1, 13 Q 1, 14, 2, 14.5 L11, 19.5 Q 12, 20, 12, 18 L12, 6 Q 12, 4, 11, 4.5 L2, 9.5 Q 1, 10, 1, 11 Z" />
+                <path d="M15 8 A 5 5 0 0 1 15 16" />
             </svg>
+
         );
     }
     return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1, 11 L1, 13 Q 1, 14, 2, 14.5 L11, 19.5 Q 12, 20, 12, 18 L12, 6 Q 12, 4, 11, 4.5 L2, 9.5 Q 1, 10, 1, 11 Z" />
+            <path d="M14.6 9 A 4 4 0 0 1 14.6 15" />
+            <path d="M17.3 6 A 8 8 0 0 1 17.3 18" />
         </svg>
     );
 };
@@ -268,6 +273,14 @@ export function Player() {
     const setVolume = usePlayer((s) => s.setVolume);
     const toggleMute = usePlayer((s) => s.toggleMute);
 
+    const isShuffle = usePlayer((s) => s.isShuffle);
+    const repeatState = usePlayer((s) => s.repeat);
+    const toggleShuffle = usePlayer((s) => s.toggleShuffle);
+    const cycleRepeat = usePlayer((s) => s.cycleRepeat);
+
+    // sleep timer
+    const sleepTimer = usePlayer((s) => s.sleepTimer);
+
     const likeApi = useToggleTrackLike();
 
     const { isRightOpen, rightTab, setRightTab, setRightOpen } = useUIStore();
@@ -283,8 +296,6 @@ export function Player() {
         }
     };
 
-    const [repeatState, setRepeatState] = useState<'off' | 'all' | 'one'>('off');
-    const [isShuffle, setIsShuffle] = useState(false);
     const [showRemaining, setShowRemaining] = useState(false);
     const [isLiked, setIsLiked] = useState(false);
 
@@ -292,9 +303,7 @@ export function Player() {
         setIsLiked(track?.isLikedByMe ?? false);
     }, [track?.id, track?.isLikedByMe]);
 
-    const handleRepeatClick = () => {
-        setRepeatState(prev => prev === 'off' ? 'all' : prev === 'all' ? 'one' : 'off');
-    };
+    const handleRepeatClick = () => cycleRepeat();
 
     const handleLikeClick = () => {
         if (!track) return;
@@ -336,6 +345,20 @@ export function Player() {
         };
     }, []);
 
+    // Sleep timer (mode = 'timer'): пауза в указанный момент
+    useEffect(() => {
+        if (!sleepTimer || sleepTimer.mode !== 'timer' || !sleepTimer.deadlineMs) return;
+        const remaining = sleepTimer.deadlineMs - Date.now();
+        if (remaining <= 0) {
+            usePlayer.setState({ isPlaying: false, sleepTimer: null });
+            return;
+        }
+        const t = setTimeout(() => {
+            usePlayer.setState({ isPlaying: false, sleepTimer: null });
+        }, remaining);
+        return () => clearTimeout(t);
+    }, [sleepTimer?.mode, sleepTimer?.deadlineMs]);
+
     useEffect(() => {
         if (!audioRef.current) return;
         if (!hlsRef.current) hlsRef.current = new HlsAudio(audioRef.current);
@@ -372,12 +395,33 @@ export function Player() {
     useEffect(() => {
         const a = audioRef.current;
         if (!a || !track) return;
-        if (isPlaying) {
-            void a.play().catch(() => {
-                usePlayer.setState({ isPlaying: false });
-            });
-        } else {
+
+        if (!isPlaying) {
             a.pause();
+            return;
+        }
+
+        const tryPlay = () => {
+            void a.play().catch(() => {
+                const onCanPlay = () => {
+                    a.removeEventListener('canplay', onCanPlay);
+                    void a.play().catch(() => {
+                        usePlayer.setState({ isPlaying: false });
+                    });
+                };
+                a.addEventListener('canplay', onCanPlay, { once: true });
+            });
+        };
+
+        if (a.readyState >= 2) {
+            tryPlay();
+        } else {
+            const onCanPlay = () => {
+                a.removeEventListener('canplay', onCanPlay);
+                tryPlay();
+            };
+            a.addEventListener('canplay', onCanPlay, { once: true });
+            return () => a.removeEventListener('canplay', onCanPlay);
         }
     }, [isPlaying, track?.id]);
 
@@ -387,6 +431,19 @@ export function Player() {
         a.volume = volume;
         a.muted = muted;
     }, [volume, muted]);
+
+    // Эквалайзер
+    const equalizer = usePlayer((s) => s.equalizer);
+    useEffect(() => {
+        const a = audioRef.current;
+        if (!a) return;
+        if (!equalizer.enabled) {
+            applyEqualizer(equalizer);
+            return;
+        }
+        ensureEqualizerGraph(a);
+        applyEqualizer(equalizer);
+    }, [equalizer]);
 
     useEffect(() => {
         if (!seekRequest || !audioRef.current) return;
@@ -546,7 +603,7 @@ export function Player() {
                 <div className="flex items-center gap-6 mb-1 -translate-y-[8px]">
                     <Tooltip content={isShuffle ? 'Случайный порядок включен' : 'Случайный порядок выключен'}>
                         <button
-                            onClick={() => setIsShuffle(!isShuffle)}
+                            onClick={toggleShuffle}
                             className={`relative transition-transform duration-200 hover:scale-105 active:scale-100 ${isShuffle ? 'text-accent' : 'text-fg-muted hover:text-fg'}`}
                         >
                             <ShuffleIcon active={isShuffle} />
@@ -614,6 +671,12 @@ export function Player() {
 
             {/* ПРАВАЯ ЧАСТЬ: Volume */}
             <div className="flex items-center justify-end gap-2 w-1/3 min-w-[150px] pr-[25px] -translate-y-[5px]">
+
+                {/* Эквалайзер */}
+                <EqualizerButton />
+
+                {/* Таймер сна */}
+                <SleepTimerButton />
 
                 <Tooltip content="Очередь">
                     <button
