@@ -62,41 +62,48 @@ export function Header() {
     };
 
     return (
-        <header className="shrink-0 z-10 rounded-xl border border-border bg-bg-elevated px-5 flex h-14 items-center gap-6 shadow-sm">
-            <Link to="/" className="flex items-center gap-2 font-semibold tracking-tight shrink-0">
-                <div className="size-6 rounded-md bg-accent" aria-hidden />
-                Copiuma
-            </Link>
+        <header className="shrink-0 z-10 rounded-xl border border-border bg-bg-elevated px-5 flex h-14 items-center shadow-sm">
 
-            <nav className="hidden lg:flex items-center gap-4 text-sm">
-                <NavItem to="/">Главная</NavItem>
-            </nav>
+            {/* LOGO, NAVIGATION */}
+            <div className="flex-1 flex items-center gap-6">
+                <Link to="/" className="flex items-center gap-2 font-semibold tracking-tight shrink-0">
+                    <div className="size-6 rounded-md bg-accent" aria-hidden />
+                    Copiuma
+                </Link>
 
-            {/* SEARCH */}
-            <div className="flex-1 max-w-md hidden md:flex items-center bg-bg rounded-lg border border-border px-3 py-1.5 focus-within:border-accent/50 group transition-all">
-                <SearchIcon className="w-4 h-4 text-fg-muted group-focus-within:text-accent transition-colors" />
-                <input
-                    type="text"
-                    placeholder="Поиск..."
-                    className="flex-1 bg-transparent outline-none border-none text-xs px-2 text-fg"
-                    value={searchValue}
-                    onChange={(e) => setSearchValue(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSearchEnter()}
-                />
-
-                <div className="w-px h-4 bg-border mx-2" />
-
-                <Tooltip content="Каталог" position="bottom">
-                    <button
-                        onClick={goToCatalog}
-                        className="p-1 text-fg-muted hover:text-accent transition-colors shrink-0"
-                    >
-                        <CatalogIcon className="w-4 h-4" />
-                    </button>
-                </Tooltip>
+                <nav className="hidden lg:flex items-center gap-4 text-sm">
+                    <NavItem to="/">Главная</NavItem>
+                </nav>
             </div>
 
-            <div className="ml-auto flex items-center gap-2 text-sm">
+            {/* SEARCH */}
+            <div className="flex-1 hidden md:flex justify-center">
+                <div className="w-full max-w-md flex items-center bg-bg rounded-lg border border-border px-3 py-1.5 focus-within:border-accent/50 group transition-all">
+                    <SearchIcon className="w-4 h-4 text-fg-muted group-focus-within:text-accent transition-colors" />
+                    <input
+                        type="text"
+                        placeholder="Поиск..."
+                        className="flex-1 bg-transparent outline-none border-none text-xs px-2 text-fg"
+                        value={searchValue}
+                        onChange={(e) => setSearchValue(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSearchEnter()}
+                    />
+
+                    <div className="w-px h-4 bg-border mx-2" />
+
+                    <Tooltip content="Каталог" position="bottom">
+                        <button
+                            onClick={goToCatalog}
+                            className="p-1 text-fg-muted hover:text-accent transition-colors shrink-0"
+                        >
+                            <CatalogIcon className="w-4 h-4" />
+                        </button>
+                    </Tooltip>
+                </div>
+            </div>
+
+            {/* THEMES, BELL, FRIEND'S ACTIVITY, PROFILE */}
+            <div className="flex-1 flex items-center justify-end gap-2 text-sm">
                 <ThemeToggle />
                 {user && <NotificationsBell />}
 
