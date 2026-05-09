@@ -1,19 +1,14 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect} from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getProfile, updateProfile, changePassword } from '@/shared/api/profile';
 import { listGenres } from '@/shared/api/genres';
 import { listBlockedArtists, unblockArtist } from '@/shared/api/blocks';
 import { listDislikes, undoDislikeTrack, undoDislikeArtist } from '@/shared/api/dislikes';
-import { listSessions, revokeSession, revokeAllOtherSessions } from '@/shared/api/sessions';
+import { listSessions, revokeSession } from '@/shared/api/sessions';
 import { becomeArtist } from '@/shared/api/me';
 import { useAuth } from '@/features/auth/useAuth';
 import { cn } from '@/shared/lib/cn';
-
-const LANGUAGES = [
-    { value: 'ru', label: 'Русский' },
-    { value: 'en', label: 'English' },
-];
 
 const ROLE_LABELS: Record<string | number, string> = {
     'Artist': 'Артист',

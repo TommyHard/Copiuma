@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { listFavorites } from '@/shared/api/tracks';
 import { getPublicUserProfile } from '@/shared/api/profile';
 import { listPlaylists, addTrack, getPlaylistsContainingTrack } from '@/shared/api/playlists';
@@ -69,7 +69,6 @@ export function FavoritesPage() {
     const { user } = useAuth();
     const play = usePlayTrack();
     const unlike = useToggleTrackLike();
-    const navigate = useNavigate();
     const qc = useQueryClient();
 
     const [searchQuery, setSearchQuery] = useState('');

@@ -2,7 +2,6 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { unreadCount } from '@/shared/api/notifications';
 import { Tooltip } from '@/shared/ui/Tooltip';
-import { cn } from '@/shared/lib/cn';
 import { BellIcon } from '@/shared/ui/icons';
 import { useAuth } from '@/features/auth/useAuth';
 

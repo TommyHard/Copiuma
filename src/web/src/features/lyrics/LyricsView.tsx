@@ -5,7 +5,7 @@ import { currentTrackSelector, usePlayer } from '@/features/player/store';
 import { useUIStore } from '@/shared/store/uiStore';
 import { getLyrics } from '@/shared/api/lyrics';
 import { parseLrc, findActiveLineIndex, type LyricLine } from './parseLrc';
-import { LyricsIcon, MusicIcon, PlusIcon } from '@/shared/ui/icons';
+import { MusicIcon, PlusIcon } from '@/shared/ui/icons';
 import { cn } from '@/shared/lib/cn';
 
 export function LyricsView() {

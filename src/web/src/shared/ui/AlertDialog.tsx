@@ -1,5 +1,4 @@
 import { useAlertStore } from '@/shared/store/alertStore';
-import { cn } from '@/shared/lib/cn';
 
 export function AlertDialog() {
     const { isOpen, message, title, closeAlert } = useAlertStore();

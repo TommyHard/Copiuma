@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { useMutation } from '@tanstack/react-query';
 import { createReport } from '@/shared/api/reports';
 import type { ReportTargetType } from '@/shared/types';
-import { cn } from '@/shared/lib/cn';
 
 const REASONS: { value: string; label: string }[] = [
     { value: 'copyright', label: 'Нарушение авторских прав' },

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { getFriendsFeed, followArtist, unfollowArtist, listFollowedArtists } from '@/shared/api/follows';
 import { batchUsers } from '@/shared/api/users';
 import { getArtist } from '@/shared/api/artists';
@@ -8,7 +8,7 @@ import { useUIStore } from '@/shared/store/uiStore';
 import { usePlayer } from '@/features/player/store';
 import { useAuth } from '@/features/auth/useAuth';
 import { Tooltip } from '@/shared/ui/Tooltip';
-import { UsersIcon, SidebarRightIcon, MusicIcon } from '@/shared/ui/icons';
+import { SidebarRightIcon, MusicIcon } from '@/shared/ui/icons';
 import { LikeButton } from '@/features/player/Player';
 import { useToggleTrackLike } from '@/features/track/useToggleTrackLike';
 import { cn } from '@/shared/lib/cn';
@@ -147,7 +147,6 @@ function NowPlayingView({ onOpenQueue }: { onOpenQueue: () => void }) {
     const followedQ = useQuery({ queryKey: ['followed-artists'], queryFn: listFollowedArtists });
     const likeApi = useToggleTrackLike();
     const updateTrackState = usePlayer(s => s.updateTrackState);
-    const qc = useQueryClient();
     const { user } = useAuth();
 
     if (!currentTrack) return <div className="text-center tracking-tight mt-10">Ничего не играет</div>;

@@ -1,5 +1,4 @@
 import { useCallback, useRef } from 'react';
-import { useUIStore } from '@/shared/store/uiStore';
 
 export function ResizeHandle({
     width,
