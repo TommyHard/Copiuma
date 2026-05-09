@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useRef, useEffect, useMemo, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -14,10 +14,16 @@ import { TrackRow } from './track-row';
 import { usePlayer } from '@/features/player/store';
 import { NowPlayingFromBadge } from '@/features/player/NowPlayingBadge';
 import { useAuth } from '@/features/auth/useAuth';
-import { ImageUploader } from '@/features/cover/ImageUploader';
 import { cn } from '@/shared/lib/cn';
-import type { AlbumSummary } from '@/shared/types';
+import type { AlbumSummary, TrackListItem } from '@/shared/types';
 import { useAlertStore } from '@/shared/store/alertStore';
+import { Tooltip } from '@/shared/ui/Tooltip';
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
+import {
+    PlayIcon, ClockIcon, MusicIcon, CheckIcon,
+    TrashIcon, MoreHorizontalIcon, PencilIcon,
+    SettingsIcon, DownloadIcon, PlusIcon, UserIcon
+} from '@/shared/ui/icons';
 
 export function AlbumPage() {
     const { id } = useParams();
@@ -25,23 +31,37 @@ export function AlbumPage() {
     const navigate = useNavigate();
     const { user } = useAuth();
     const playQueue = usePlayer((s) => s.playQueue);
-    const [editOpen, setEditOpen] = useState(false);
-
     const showAlert = useAlertStore((s) => s.showAlert);
 
-    const album = useQuery({
+    const [editOpen, setEditOpen] = useState(false);
+    const [optionsMenuOpen, setOptionsMenuOpen] = useState(false);
+    const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
+    const [isConfirmDeleteCoverOpen, setIsConfirmDeleteCoverOpen] = useState(false);
+
+    const optionsMenuRef = useRef<HTMLDivElement>(null);
+    const optionsMenuBtnRef = useRef<HTMLButtonElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const sentinelRef = useRef<HTMLDivElement>(null);
+    const tableContainerRef = useRef<HTMLDivElement>(null);
+
+    const [isSticky, setIsSticky] = useState(false);
+    const [colWidths, setColWidths] = useState([400, 180]);
+    const [activeResizer, setActiveResizer] = useState<number | null>(null);
+    const [isManuallyResized, setIsManuallyResized] = useState(false);
+
+    const albumQ = useQuery({
         queryKey: ['album', id],
         queryFn: () => getAlbum(id!),
         enabled: !!id,
     });
 
-    const tracks = useQuery({
+    const tracksQ = useQuery({
         queryKey: ['album-tracks', id],
         queryFn: () => listAlbumTracks(id!),
         enabled: !!id,
     });
 
-    const remove = useMutation({
+    const removeAlbum = useMutation({
         mutationFn: () => deleteAlbum(id!),
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ['album', id] });
@@ -49,138 +69,276 @@ export function AlbumPage() {
         },
     });
 
-    if (album.isLoading) return <p className="text-fg-muted">Загружаем…</p>;
-    if (album.isError || !album.data) return <p className="text-danger">Альбом не найден.</p>;
+    useEffect(() => {
+        if (!optionsMenuOpen) return;
+        const handler = (e: MouseEvent) => {
+            const target = e.target as Node;
+            if (optionsMenuRef.current?.contains(target) || optionsMenuBtnRef.current?.contains(target)) return;
+            setOptionsMenuOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [optionsMenuOpen]);
 
-    const a = album.data;
+    useEffect(() => {
+        const sentinel = sentinelRef.current;
+        const scrollContainer = document.getElementById('main-scroll-container');
+        if (!sentinel || !scrollContainer) return;
+
+        const observer = new IntersectionObserver(
+            ([entry]) => setIsSticky(!entry.isIntersecting),
+            { root: scrollContainer, threshold: 0, rootMargin: '-1px 0px 0px 0px' }
+        );
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, []);
+
+    if (albumQ.isLoading) return <div className="p-8 animate-pulse text-fg-muted">Загружаем…</div>;
+    if (albumQ.isError || !albumQ.data) return <p className="text-danger p-6">Альбом не найден.</p>;
+
+    const a = albumQ.data;
     const isOwner = !!user && !!a.ownerUserId && user.id === a.ownerUserId;
+    const tracks = tracksQ.data || [];
+
+    const handlePlayAll = () => {
+        if (tracks.length > 0) {
+            playQueue(tracks, 0, { type: 'album', id: id! });
+        }
+    };
+
+    const handleResizeMouseDown = (index: number, e: React.MouseEvent) => {
+        e.preventDefault();
+        setIsManuallyResized(true);
+        setActiveResizer(index);
+        const startX = e.clientX;
+        const startWidth = colWidths[index];
+        const onMouseMove = (moveEvent: MouseEvent) => {
+            const delta = moveEvent.clientX - startX;
+            setColWidths(prev => {
+                const newWidths = [...prev];
+                newWidths[index] = Math.max(150, startWidth + delta);
+                return newWidths;
+            });
+        };
+        const onMouseUp = () => {
+            setActiveResizer(null);
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        };
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    };
+
+    const gridTemplateColumns = `48px ${colWidths[0]}px minmax(120px, 1fr) 80px`;
 
     return (
-        <article className="space-y-8">
-            <header className="flex flex-wrap items-end gap-6">
-                {isOwner ? (
-                    <ImageUploader
-                        currentUrl={a.coverUrl}
-                        label="Обложка"
-                        onUpload={async (f) => {
-                            const updated = await uploadAlbumCover(a.id, f);
-                            qc.setQueryData(['album', a.id], (prev: AlbumSummary | undefined) =>
-                                prev ? { ...prev, coverUrl: updated.coverUrl } : prev);
-                            qc.invalidateQueries({ queryKey: ['album', a.id] });
-                            qc.invalidateQueries({ queryKey: ['album-tracks', a.id] });
-                        }}
-                        onDelete={async () => {
-                            await deleteAlbumCover(a.id);
-                            qc.invalidateQueries({ queryKey: ['album', a.id] });
-                            qc.invalidateQueries({ queryKey: ['album-tracks', a.id] });
-                        }}
-                    />
-                ) : (
-                    <div
-                        className="size-48 shrink-0 rounded-md border border-border bg-bg-elevated bg-cover bg-center"
-                        style={{ backgroundImage: a.coverUrl ? `url(${a.coverUrl})` : undefined }}
-                        aria-hidden
-                    />
-                )}
+        <article className="relative flex flex-col min-h-full pb-32">
+            <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept="image/*"
+                onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                        await uploadAlbumCover(a.id, file);
+                        qc.invalidateQueries({ queryKey: ['album', a.id] });
+                        setOptionsMenuOpen(false);
+                    }
+                }}
+            />
 
-                <div className="min-w-0 flex-1 space-y-2">
-                    <p className="text-xs uppercase tracking-wide text-fg-muted">Альбом</p>
-                    <div className="flex items-center gap-3">
-                        <h1 className="truncate text-3xl font-semibold">{a.title}</h1>
+            {/* BANNER */}
+            <div className="relative w-full shrink-0 flex flex-col md:flex-row items-start md:items-end px-6 md:px-10 py-10 gap-6 overflow-hidden bg-bg-elevated border-b border-border">
+                <div className="absolute inset-0 bg-gradient-to-t from-bg-accent/50 to-bg-transparent pointer-events-none" />
+
+                <div
+                    className="size-48 md:size-56 shrink-0 shadow-2xl rounded ring-1 ring-border relative z-10 bg-cover bg-center bg-no-repeat"
+                    style={{ backgroundImage: a.coverUrl ? `url(${a.coverUrl})` : undefined }}
+                >
+                    {!a.coverUrl && <div className="size-full flex items-center justify-center bg-bg-elevated"><MusicIcon className="size-12 text-fg-muted/20" /></div>}
+                </div>
+
+                <div className="relative z-10 flex flex-col gap-3 min-w-0 flex-1">
+                    <span className="text-xs font-bold uppercase tracking-widest text-fg-muted flex items-center gap-2">
+                        Альбом
+                    </span>
+                    <div className="flex items-center gap-4">
+                        <h1 className="text-4xl md:text-6xl font-black text-fg tracking-tight truncate">{a.title}</h1>
                         {id && <NowPlayingFromBadge target={{ type: 'album', id }} label />}
                     </div>
 
-                    {a.artistId && (
-                        <Link to={`/artists/${a.artistId}`} className="text-sm text-fg-muted hover:text-fg">
-                            {a.artistName ?? 'артист'}
-                        </Link>
-                    )}
-
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-fg-muted">
-                        {a.releasedAt && (
-                            <span title="Дата релиза">
-                                Релиз {formatDateRu(a.releasedAt)}
-                            </span>
-                        )}
-                        {a.createdAt && (
-                            <>
-                                {a.releasedAt && <span aria-hidden>•</span>}
-                                <span title="Когда альбом загружен в каталог">
-                                    Загружен {formatDateTimeRu(a.createdAt)}
-                                </span>
-                            </>
-                        )}
-                        {tracks.data && (
-                            <>
-                                <span aria-hidden>•</span>
-                                <span>{tracks.data.length} {pluralTracks(tracks.data.length)}</span>
-                            </>
-                        )}
-                    </div>
-
-                    {a.genres && a.genres.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                            {a.genres.map((g) => (
-                                <span
-                                    key={g}
-                                    className="rounded-full border border-border px-2 py-0.5 text-[11px] text-fg-muted"
-                                >
-                                    {g}
-                                </span>
-                            ))}
+                    <div className="flex flex-col gap-2 mt-2">
+                        <div className="flex items-center gap-2 text-sm text-fg font-medium">
+                            {a.artistId ? (
+                                <Link to={`/artists/${a.artistId}`} className="hover:underline font-bold flex items-center gap-2">
+                                    <div className="size-6 rounded-full bg-border flex items-center justify-center overflow-hidden shrink-0 border border-border/50">
+                                        {(a as any).artistAvatarUrl ? (
+                                            <img src={(a as any).artistAvatarUrl} alt="" className="size-full object-cover" />
+                                        ) : (
+                                            <UserIcon className="size-3.5 text-fg-muted" />
+                                        )}
+                                    </div>
+                                    {a.artistName || 'Артист'}
+                                </Link>
+                            ) : (
+                                <div className="flex items-center gap-2">
+                                    <div className="size-6 rounded-full bg-border flex items-center justify-center overflow-hidden shrink-0 border border-border/50">
+                                        <UserIcon className="size-3.5 text-fg-muted" />
+                                    </div>
+                                    <span>Неизвестный артист</span>
+                                </div>
+                            )}
+                            <span className="text-fg-muted">•</span>
+                            <span className="text-fg-muted">{tracks.length} {pluralTracks(tracks.length)}</span>
                         </div>
-                    )}
 
-                    <div className="flex flex-wrap gap-2 pt-2">
-                        {tracks.data && tracks.data.length > 0 && (
-                            <button
-                                onClick={() => playQueue(tracks.data!, 0, { type: 'album', id: id! })}
-                                className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:opacity-90"
-                            >
-                                ▶ Играть альбом
-                            </button>
-                        )}
-                        {isOwner && (
-                            <>
-                                <button
-                                    onClick={() => setEditOpen(true)}
-                                    className="rounded-md border border-border px-4 py-2 text-sm hover:bg-bg-elevated"
-                                >
-                                    Редактировать
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        if (!tracks.data || tracks.data.length === 0) {
-                                            if (confirm('Удалить пустой альбом?')) remove.mutate();
-                                        } else {
-                                            showAlert('Сначала открепите все треки от альбома.', 'Ошибка удаления');
-                                        }
-                                    }}
-                                    disabled={remove.isPending}
-                                    className="rounded-md border border-danger/40 px-4 py-2 text-sm text-danger hover:bg-danger/10 disabled:opacity-50"
-                                >
-                                    Удалить
-                                </button>
-                            </>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
+                            {a.releasedAt && <span>Релиз {formatDateRu(a.releasedAt)}</span>}
+                            {a.createdAt && (
+                                <>
+                                    <span>•</span>
+                                    <span>Загружен {formatDateTimeRu(a.createdAt)}</span>
+                                </>
+                            )}
+                        </div>
+
+                        {a.genres && a.genres.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 pt-1">
+                                {a.genres.map((g) => (
+                                    <span key={g} className="bg-fg/5 text-fg-muted px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                                        {g}
+                                    </span>
+                                ))}
+                            </div>
                         )}
                     </div>
                 </div>
-            </header>
+            </div>
 
-            <section className="space-y-3">
-                {tracks.isLoading && <p className="text-fg-muted">Загружаем…</p>}
-                {tracks.data && tracks.data.length === 0 && (
-                    <p className="text-fg-muted">В альбоме нет треков.</p>
+            {/* TOOLBAR */}
+            <div className="flex items-center gap-4 px-6 md:px-10 py-6 relative z-40 w-full">
+                {tracks.length > 0 && (
+                    <button
+                        onClick={handlePlayAll}
+                        className="h-14 px-5 rounded font-black uppercase tracking-widest bg-accent text-white shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-3"
+                    >
+                        <PlayIcon className="size-6" /> Играть
+                    </button>
                 )}
-                {tracks.data && tracks.data.length > 0 && (
-                    <ul className="divide-y divide-border rounded-md border border-border">
-                        {tracks.data.map((t, i) => (
-                            <TrackRow key={t.id} track={t} number={t.trackNumber ?? i + 1} />
-                        ))}
-                    </ul>
-                )}
-            </section>
 
+                <div className="flex-1" />
+
+                {isOwner && (
+                    <div className="relative">
+                        <Tooltip content="Опции" position="top">
+                            <button
+                                ref={optionsMenuBtnRef}
+                                onClick={() => setOptionsMenuOpen(!optionsMenuOpen)}
+                                className="size-14 flex items-center justify-center rounded transition-all text-fg hover:bg-accent/20"
+                            >
+                                <SettingsIcon className="w-7 h-7" />
+                            </button>
+                        </Tooltip>
+
+                        {optionsMenuOpen && (
+                            <div
+                                ref={optionsMenuRef}
+                                className="absolute top-full right-0 mt-2 z-[9999] w-64 rounded-md border border-border bg-bg-elevated shadow-xl p-1 animate-in fade-in zoom-in-95"
+                            >
+                                <button
+                                    onClick={() => { fileInputRef.current?.click(); }}
+                                    className="w-full text-left px-3 py-2 text-sm rounded flex items-center gap-2 hover:bg-fg/10 transition-colors"
+                                >
+                                    <DownloadIcon className={cn("size-4", !a.coverUrl && "rotate-180")} />
+                                    {a.coverUrl ? 'Заменить обложку' : 'Загрузить обложку'}
+                                </button>
+
+                                {a.coverUrl && (
+                                    <button
+                                        onClick={() => {
+                                            setIsConfirmDeleteCoverOpen(true);
+                                            setOptionsMenuOpen(false);
+                                        }}
+                                        className="w-full text-left px-3 py-2 text-sm rounded flex items-center gap-2 hover:bg-danger/10 text-danger transition-colors"
+                                    >
+                                        <TrashIcon className="size-4" />
+                                        Убрать обложку
+                                    </button>
+                                )}
+
+                                <div className="h-px bg-border my-1" />
+
+                                <button
+                                    onClick={() => { setEditOpen(true); setOptionsMenuOpen(false); }}
+                                    className="w-full text-left px-3 py-2 text-sm rounded flex items-center gap-2 hover:bg-fg/10 transition-colors"
+                                >
+                                    <PencilIcon className="size-4" />
+                                    Редактировать
+                                </button>
+
+                                <button
+                                    onClick={() => {
+                                        if (!tracks || tracks.length === 0) {
+                                            setIsConfirmDeleteOpen(true);
+                                        } else {
+                                            showAlert('Сначала открепите все треки от альбома.', 'Ошибка удаления');
+                                        }
+                                        setOptionsMenuOpen(false);
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-sm rounded flex items-center gap-2 hover:bg-danger/10 text-danger transition-colors"
+                                >
+                                    <TrashIcon className="size-4" />
+                                    Удалить альбом
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* TRACKS */}
+            <div className="px-6 md:px-10 pb-10 w-full">
+                <div ref={tableContainerRef} className="w-full">
+                    <div ref={sentinelRef} className="w-full h-px pointer-events-none -mb-px" />
+                    <div
+                        className={cn(
+                            "group sticky top-0 z-30 grid gap-4 px-4 py-2 border-b text-sm font-bold tracking-tight uppercase w-full transition-all duration-300 text-fg-muted",
+                            isSticky ? "bg-bg-elevated border-border shadow backdrop-blur" : "bg-transparent border-border/50"
+                        )}
+                        style={{ gridTemplateColumns }}
+                    >
+                        <div className="text-center">#</div>
+                        <div className="relative flex items-center">
+                            <span>Название</span>
+                            <div
+                                onMouseDown={(e) => handleResizeMouseDown(0, e)}
+                                className={cn("absolute -right-3 top-0 bottom-0 w-6 cursor-col-resize z-40 flex justify-center items-center transition-opacity opacity-0 group-hover:opacity-100", activeResizer === 0 && "opacity-100")}
+                            >
+                                <div className={cn("w-[2px] h-[60%] rounded bg-border hover:bg-accent", activeResizer === 0 && "bg-accent")} />
+                            </div>
+                        </div>
+                        <div>Альбом</div>
+                        <div className="flex justify-end pr-2"><ClockIcon className="size-4" /></div>
+                    </div>
+
+                    <div className="flex flex-col w-full mt-2">
+                        {tracks.length === 0 ? (
+                            <p className="p-10 text-center text-fg-muted italic">В альбоме нет треков.</p>
+                        ) : (
+                            tracks.map((t, index) => (
+                                <TrackRow
+                                    key={t.id}
+                                    track={t}
+                                    number={t.trackNumber ?? index + 1}
+                                />
+                            ))
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* MODALS */}
             {isOwner && editOpen && (
                 <AlbumEditDialog
                     album={a}
@@ -192,161 +350,43 @@ export function AlbumPage() {
                     }}
                 />
             )}
+
+            <ConfirmDialog
+                isOpen={isConfirmDeleteOpen}
+                title="Удалить альбом"
+                message={`Вы уверены, что хотите безвозвратно удалить альбом "${a.title}"?`}
+                confirmText="Удалить"
+                danger
+                onConfirm={() => removeAlbum.mutate()}
+                onCancel={() => setIsConfirmDeleteOpen(false)}
+            />
+
+            <ConfirmDialog
+                isOpen={isConfirmDeleteCoverOpen}
+                title="Удалить обложку"
+                message="Вы уверены, что хотите удалить обложку этого альбома?"
+                confirmText="Удалить"
+                danger
+                onConfirm={async () => {
+                    await deleteAlbumCover(a.id);
+                    qc.invalidateQueries({ queryKey: ['album', a.id] });
+                    setIsConfirmDeleteCoverOpen(false);
+                }}
+                onCancel={() => setIsConfirmDeleteCoverOpen(false)}
+            />
         </article>
     );
 }
 
-function AlbumEditDialog({
-    album,
-    onClose,
-    onSaved,
-}: {
-    album: AlbumSummary;
-    onClose: () => void;
-    onSaved: (a: AlbumSummary) => void;
-}) {
-    const [title, setTitle] = useState(album.title);
-    const [releaseDate, setReleaseDate] = useState<string>(
-        album.releasedAt ? album.releasedAt.slice(0, 10) : '',
-    );
-    const [genres, setGenres] = useState<string[]>(album.genres ?? []);
-    const [error, setError] = useState<string | null>(null);
-
-    const genresQ = useQuery({
-        queryKey: ['genres'],
-        queryFn: listGenres,
-        staleTime: 10 * 60 * 1000,
-    });
-
-    const save = useMutation({
-        mutationFn: () =>
-            updateAlbum(album.id, {
-                title: title.trim(),
-                releaseDate: releaseDate || null,
-                genres,
-            }),
-        onSuccess: (data) => onSaved(data),
-        onError: (err: any) => {
-            const data = err?.response?.data;
-            setError(typeof data === 'string' ? data : data?.message ?? 'Не удалось сохранить.');
-        },
-    });
-
-    function toggleGenre(slug: string) {
-        setGenres((p) => (p.includes(slug) ? p.filter((x) => x !== slug) : [...p, slug]));
-    }
-
-    function onSubmit(e: FormEvent) {
-        e.preventDefault();
-        if (!title.trim()) {
-            setError('Название не может быть пустым.');
-            return;
-        }
-        setError(null);
-        save.mutate();
-    }
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-            <form
-                onSubmit={onSubmit}
-                onClick={(e) => e.stopPropagation()}
-                className="w-full max-w-lg space-y-4 rounded-lg border border-border bg-bg p-6"
-            >
-                <header className="flex items-center justify-between">
-                    <h2 className="text-lg font-semibold">Редактирование альбома</h2>
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="text-fg-muted hover:text-fg"
-                        aria-label="Закрыть"
-                    >
-                        ×
-                    </button>
-                </header>
-
-                <label className="block">
-                    <span className="mb-1 block text-sm text-fg-muted">Название *</span>
-                    <input
-                        type="text"
-                        required
-                        maxLength={200}
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        disabled={save.isPending}
-                        className="w-full rounded-md border border-border bg-bg-elevated px-3 py-2 text-fg outline-none focus:border-accent focus:ring-1 focus:ring-accent disabled:opacity-50"
-                    />
-                </label>
-
-                <label className="block">
-                    <span className="mb-1 block text-sm text-fg-muted">Дата релиза</span>
-                    <input
-                        type="date"
-                        value={releaseDate}
-                        onChange={(e) => setReleaseDate(e.target.value)}
-                        disabled={save.isPending}
-                        className="w-full rounded-md border border-border bg-bg-elevated px-3 py-2 text-fg outline-none focus:border-accent focus:ring-1 focus:ring-accent disabled:opacity-50"
-                    />
-                </label>
-
-                <div>
-                    <span className="mb-2 block text-sm text-fg-muted">Жанры</span>
-                    <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto">
-                        {(genresQ.data ?? []).map((g) => {
-                            const selected = genres.includes(g.slug);
-                            return (
-                                <button
-                                    key={g.id}
-                                    type="button"
-                                    onClick={() => toggleGenre(g.slug)}
-                                    disabled={save.isPending}
-                                    className={cn(
-                                        'rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-50',
-                                        selected
-                                            ? 'border-accent bg-accent/15 text-accent'
-                                            : 'border-border text-fg-muted hover:border-accent/50 hover:text-fg',
-                                    )}
-                                >
-                                    {g.displayName}
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
-
-                {error && <p className="text-sm text-danger">{error}</p>}
-
-                <div className="flex justify-end gap-2 pt-2">
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        disabled={save.isPending}
-                        className="rounded-md border border-border px-4 py-2 text-sm hover:bg-bg-elevated disabled:opacity-50"
-                    >
-                        Отмена
-                    </button>
-                    <button
-                        type="submit"
-                        disabled={save.isPending}
-                        className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
-                    >
-                        {save.isPending ? 'Сохраняем…' : 'Сохранить'}
-                    </button>
-                </div>
-            </form>
-        </div>
-    );
-}
-
-function formatDateRu(isoOrYmd: string): string {
-    const d = new Date(isoOrYmd);
-    if (Number.isNaN(d.getTime())) return isoOrYmd;
+function formatDateRu(iso: string): string {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
     return d.toLocaleDateString('ru-RU', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 function formatDateTimeRu(iso: string): string {
     const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
+    if (isNaN(d.getTime())) return iso;
     return d.toLocaleString('ru-RU', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
@@ -357,4 +397,54 @@ function pluralTracks(n: number): string {
     if (last1 === 1) return 'трек';
     if (last1 >= 2 && last1 <= 4) return 'трека';
     return 'треков';
+}
+
+function AlbumEditDialog({ album, onClose, onSaved }: { album: AlbumSummary; onClose: () => void; onSaved: (a: AlbumSummary) => void; }) {
+    const [title, setTitle] = useState(album.title);
+    const [releaseDate, setReleaseDate] = useState<string>(album.releasedAt ? album.releasedAt.slice(0, 10) : '');
+    const [genres, setGenres] = useState<string[]>(album.genres ?? []);
+    const [error, setError] = useState<string | null>(null);
+
+    const genresQ = useQuery({ queryKey: ['genres'], queryFn: listGenres, staleTime: 10 * 60 * 1000 });
+    const save = useMutation({
+        mutationFn: () => updateAlbum(album.id, { title: title.trim(), releaseDate: releaseDate || null, genres }),
+        onSuccess: (data) => onSaved(data),
+        onError: (err: any) => setError(err?.response?.data?.message ?? 'Не удалось сохранить.'),
+    });
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+            <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} onClick={(e) => e.stopPropagation()} className="w-full max-w-lg space-y-4 rounded-xl border border-border bg-bg-elevated p-6 shadow-2xl animate-in zoom-in-95">
+                <h2 className="text-xl font-bold">Редактирование альбома</h2>
+                <div className="space-y-4">
+                    <label className="block">
+                        <span className="text-sm text-fg-muted mb-1 block">Название</span>
+                        <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-bg border border-border rounded-lg px-3 py-2 outline-none focus:border-accent" />
+                    </label>
+                    <label className="block">
+                        <span className="text-sm text-fg-muted mb-1 block">Дата релиза</span>
+                        <input type="date" value={releaseDate} onChange={e => setReleaseDate(e.target.value)} className="w-full bg-bg border border-border rounded-lg px-3 py-2 outline-none focus:border-accent" />
+                    </label>
+                    <div>
+                        <span className="text-sm text-fg-muted mb-2 block">Жанры</span>
+                        <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
+                            {genresQ.data?.map(g => (
+                                <button key={g.slug} type="button" onClick={() => setGenres(prev => prev.includes(g.slug) ? prev.filter(x => x !== g.slug) : [...prev, g.slug])}
+                                    className={cn("px-3 py-1 rounded-full border text-xs transition-colors", genres.includes(g.slug) ? "bg-accent/20 border-accent text-accent" : "border-border text-fg-muted hover:border-fg")}>
+                                    {g.displayName}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+                {error && <p className="text-danger text-sm">{error}</p>}
+                <div className="flex justify-end gap-3 pt-4">
+                    <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium hover:bg-fg/10 rounded-lg transition-colors">Отмена</button>
+                    <button type="submit" disabled={save.isPending} className="px-6 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
+                        {save.isPending ? 'Сохранение...' : 'Сохранить'}
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
 }

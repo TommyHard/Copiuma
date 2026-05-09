@@ -57,7 +57,7 @@ export async function getFeed(limit = 30): Promise<FeedItem[]> {
         uploadedAt: item.uploadedAt ?? item.releasedAt ?? '',
         duration: item.duration ?? null,
         isLikedByMe: item.isLikedByMe ?? item.IsLikedByMe ?? false,
-        coverUrl: item.coverUrl ?? item.CoverUrl ?? null
+        coverUrl: item.coverUrl ?? item.CoverUrl ?? null,
     }));
 }
 

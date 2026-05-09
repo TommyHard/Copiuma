@@ -200,6 +200,7 @@ export interface PlaylistSummary {
 export interface PlaylistMember {
     userId: string;
     displayName?: string | null;
+    avatarUrl?: string | null;
     role: string;
     joinedAt: string;
 }
@@ -216,6 +217,9 @@ export interface PlaylistTrack {
     addedByUserId?: string;
     isLikedByMe?: boolean;
     coverUrl?: string | null;
+    albumId?: string | null;
+    albumTitle?: string | null;
+    featuredArtists?: FeaturedArtist[];
 }
 
 export interface PlaylistDetail extends PlaylistSummary {
@@ -319,6 +323,7 @@ export interface RawPlayEvent {
 export interface UserSearchResult {
     id: string;
     displayName: string;
+    avatarUrl?: string | null;
 }
 
 // Friends / User follows

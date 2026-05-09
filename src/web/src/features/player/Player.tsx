@@ -161,7 +161,7 @@ export function LikeButton({
             }
         `}</style>
 
-            <Tooltip content={isLiked ? "Убрать из избранных" : "Добавить в избранные"}>
+            <Tooltip position="left" content={isLiked ? "Убрать из избранных" : "Добавить в избранные"}>
                 <button
                     onClick={handleClick}
                     className={cn(

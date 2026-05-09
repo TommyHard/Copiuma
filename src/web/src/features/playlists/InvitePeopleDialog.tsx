@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { invite } from '@/shared/api/playlists';
 import { searchUsers } from '@/shared/api/users';
 import type { UserSearchResult } from '@/shared/types';
+import { SearchIcon, CheckIcon, UserIcon } from '@/shared/ui/icons';
+import { cn } from '@/shared/lib/cn';
 
 export function InvitePeopleDialog({
     open,
@@ -53,6 +56,7 @@ export function InvitePeopleDialog({
         setQuery('');
         setResults([]);
         setSelected(null);
+        setRole('Editor');
     }
 
     function pick(u: UserSearchResult) {
@@ -73,96 +77,172 @@ export function InvitePeopleDialog({
         m.mutate();
     }
 
+    useEffect(() => {
+        if (!open) return;
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') onClose();
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [open, onClose]);
+
     if (!open) return null;
 
-    return (
+    return createPortal(
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-            onClick={onClose}>
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+            onClick={onClose}
+        >
             <form
                 onClick={(e) => e.stopPropagation()}
                 onSubmit={onSubmit}
-                className="w-full max-w-sm space-y-4 rounded-lg border border-border bg-bg-elevated p-6">
-                <h2 className="text-xl font-semibold">Пригласить участника</h2>
+                className="w-full max-w-md space-y-6 rounded-xl border border-border bg-bg-elevated p-6 shadow-2xl animate-in zoom-in-95 duration-200"
+            >
+                <div className="flex items-center justify-between">
+                    <h2 className="text-xl font-bold tracking-tight text-fg">Пригласить участника</h2>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="rounded p-1.5 text-fg-muted hover:bg-bg hover:text-fg transition-colors"
+                    >
+                        <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
 
-                <div className="relative">
-                    <span className="mb-1 block text-sm text-fg-muted">Имя или email</span>
+                <div className="space-y-2">
+                    <label className="block text-sm font-medium text-fg-muted">Пользователь</label>
 
-                    <div className="flex items-center gap-2">
-                        <input
-                            autoFocus
-                            value={query}
-                            onChange={(e) => { if (selected) clearSelection(); setQuery(e.target.value); }}
-                            placeholder="Начни вводить имя или email…"
-                            disabled={!!selected}
-                            className="w-full rounded-md border border-border bg-bg px-3 py-2 outline-none focus:border-accent"/>
-                        {selected && (
+                    {selected ? (
+                        <div className="flex items-center justify-between rounded border border-accent bg-accent/10 py-2 pl-3 pr-2">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <div className="size-8 shrink-0 rounded-full bg-bg overflow-hidden flex items-center justify-center border border-border">
+                                    {selected.avatarUrl ? (
+                                        <img src={selected.avatarUrl} alt="" className="size-full object-cover" />
+                                    ) : (
+                                        <UserIcon className="size-4 text-fg-muted" />
+                                    )}
+                                </div>
+                                <span className="truncate text-sm font-medium text-fg">
+                                    {selected.displayName}
+                                </span>
+                            </div>
                             <button
                                 type="button"
                                 onClick={clearSelection}
-                                className="shrink-0 rounded-md border border-border px-2 py-2 text-xs text-fg-muted hover:text-danger"
+                                className="shrink-0 rounded p-1.5 text-fg-muted hover:bg-bg hover:text-danger transition-colors ml-2"
+                                title="Изменить"
                             >
-                                ✕
+                                <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
                             </button>
-                        )}
-                    </div>
+                        </div>
+                    ) : (
+                        <div className="relative">
+                            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-fg-muted pointer-events-none" />
+                            <input
+                                autoFocus
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                                placeholder="Имя или email..."
+                                className="w-full rounded border border-border bg-bg pl-9 pr-3 py-2.5 text-sm text-fg outline-none transition-colors focus:border-accent placeholder:text-fg-muted/60"
+                            />
+                            {searching && (
+                                <div className="absolute right-3 top-1/2 -translate-y-1/2 size-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+                            )}
 
-                    {/* Dropdown */}
-                    {results.length > 0 && !selected && (
-                        <ul className="absolute z-10 mt-1 w-full rounded-md border border-border bg-bg-elevated shadow-lg">
-                            {results.map((u) => (
-                                <li key={u.id}>
-                                    <button
-                                        type="button"
-                                        onClick={() => pick(u)}
-                                        className="w-full px-3 py-2 text-left text-sm hover:bg-bg"
-                                    >
-                                        {u.displayName}
-                                    </button>
-                                </li>
-                            ))}
-                        </ul>
+                            {!selected && results.length > 0 && (
+                                <ul className="absolute left-0 top-full mt-1 z-10 max-h-48 w-full overflow-y-auto rounded border border-border bg-bg shadow-xl">
+                                    {results.map((u) => (
+                                        <li key={u.id}>
+                                            <button
+                                                type="button"
+                                                onClick={() => pick(u)}
+                                                className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-bg-elevated transition-colors"
+                                            >
+                                                <div className="size-7 shrink-0 rounded-full bg-border flex items-center justify-center overflow-hidden">
+                                                    {u.avatarUrl ? (
+                                                        <img src={u.avatarUrl} alt="" className="size-full object-cover" />
+                                                    ) : (
+                                                        <span className="text-[10px] font-bold text-fg-muted">{u.displayName.charAt(0).toUpperCase()}</span>
+                                                    )}
+                                                </div>
+                                                <span className="truncate text-sm text-fg font-medium">{u.displayName}</span>
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
                     )}
 
-                    {searching && <p className="mt-1 text-xs text-fg-muted">Поиск…</p>}
                     {!searching && query.trim().length >= 2 && results.length === 0 && !selected && (
-                        <p className="mt-1 text-xs text-fg-muted">Пользователь не найден.</p>
-                    )}
-                    {selected && (
-                        <p className="mt-1 text-xs text-success">✓ {selected.displayName}</p>
+                        <p className="text-xs text-fg-muted">Пользователь не найден.</p>
                     )}
                 </div>
 
-                <label className="block">
-                    <span className="mb-1 block text-sm text-fg-muted">Роль</span>
-                    <select
-                        value={role}
-                        onChange={(e) => setRole(e.target.value)}
-                        className="w-full rounded-md border border-border bg-bg px-3 py-2 outline-none focus:border-accent">
-                        <option value="Viewer">Viewer — только слушать</option>
-                        <option value="Editor">Editor — добавлять треки</option>
-                    </select>
-                </label>
+                <div className="space-y-2">
+                    <label className="block text-sm font-medium text-fg-muted">Права доступа</label>
+                    <div className="grid grid-cols-2 gap-3">
+                        <button
+                            type="button"
+                            onClick={() => setRole('Viewer')}
+                            className={cn(
+                                "flex flex-col items-start gap-1 rounded border p-3 text-left transition-colors",
+                                role === 'Viewer' ? "border-accent bg-accent/5" : "border-border hover:border-fg-muted bg-bg"
+                            )}
+                        >
+                            <span className={cn("text-sm font-bold flex items-center gap-1.5", role === 'Viewer' ? "text-accent" : "text-fg")}>
+                                Viewer
+                                {role === 'Viewer' && <CheckIcon className="size-3.5" />}
+                            </span>
+                            <span className="text-xs text-fg-muted">Слушать и смотреть</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setRole('Editor')}
+                            className={cn(
+                                "flex flex-col items-start gap-1 rounded border p-3 text-left transition-colors",
+                                role === 'Editor' ? "border-accent bg-accent/5" : "border-border hover:border-fg-muted bg-bg"
+                            )}
+                        >
+                            <span className={cn("text-sm font-bold flex items-center gap-1.5", role === 'Editor' ? "text-accent" : "text-fg")}>
+                                Editor
+                                {role === 'Editor' && <CheckIcon className="size-3.5" />}
+                            </span>
+                            <span className="text-xs text-fg-muted">Добавлять треки</span>
+                        </button>
+                    </div>
+                </div>
 
                 {m.isError && (
-                    <p className="text-sm text-danger">Не удалось пригласить. Проверь, не в плейлисте ли уже.</p>
+                    <div className="rounded border border-danger/20 bg-danger/10 p-3 text-sm text-danger flex items-center gap-2">
+                        <svg className="size-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        Не удалось пригласить. Возможно, пользователь уже в плейлисте.
+                    </div>
                 )}
 
-                <div className="flex justify-end gap-2 pt-2">
+                <div className="flex justify-end gap-3 pt-4 border-t border-border">
                     <button
                         type="button"
                         onClick={() => { reset(); onClose(); }}
-                        className="rounded-md border border-border px-3 py-1.5 hover:bg-bg">
+                        className="rounded px-4 py-2 text-sm font-medium text-fg hover:bg-bg transition-colors"
+                    >
                         Отмена
                     </button>
                     <button
                         type="submit"
                         disabled={m.isPending || !selected}
-                        className="rounded-md bg-accent px-3 py-1.5 text-accent-fg hover:opacity-90 disabled:opacity-50">
+                        className="rounded bg-accent px-5 py-2 text-sm font-bold text-accent-fg hover:opacity-90 transition-opacity disabled:opacity-50"
+                    >
                         {m.isPending ? 'Отправляем…' : 'Пригласить'}
                     </button>
                 </div>
             </form>
-        </div>
+        </div>,
+        document.body
     );
 }

@@ -202,7 +202,7 @@ function NowPlayingView({ onOpenQueue }: { onOpenQueue: () => void }) {
 
             {a && (
                 <div className="rounded-xl overflow-hidden border border-border bg-bg-elevated shadow-sm">
-                    <div className="h-32 bg-cover bg-center relative" style={{ backgroundImage: a.bannerUrl ? `url('${a.bannerUrl}')` : undefined }}>
+                    <div className="h-32 bg-cover bg-center relative border-b border-black" style={{ backgroundImage: a.bannerUrl ? `url('${a.bannerUrl}')` : undefined }}>
                         <span className="absolute top-3 left-4 text-[10px] font-bold uppercase bg-black/60 px-2 py-1 rounded text-white">Об артисте</span>
                     </div>
                     <div className="p-4 space-y-3 min-w-0">

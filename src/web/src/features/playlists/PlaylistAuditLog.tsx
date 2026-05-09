@@ -4,6 +4,8 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { getPlaylistAudit, PlaylistAudit } from '@/shared/api/playlists';
 import { batchUsers } from '@/shared/api/users';
 import { cn } from '@/shared/lib/cn';
+import { ClockIcon, PlusIcon, TrashIcon, PencilIcon, UserIcon, LogOutIcon, RefreshIcon } from '@/shared/ui/icons';
+import type { UserSearchResult } from '@/shared/types';
 
 const PAGE_SIZE = 5;
 
@@ -32,70 +34,119 @@ export function PlaylistAuditLog({ playlistId }: { playlistId: string }) {
         staleTime: 5 * 60 * 1000,
     });
 
-    const nameMap = useMemo(() => {
-        const map: Record<string, string> = {};
-        usersQuery.data?.forEach(u => map[u.id] = u.displayName);
+    const userMap = useMemo(() => {
+        const map: Record<string, UserSearchResult> = {};
+        usersQuery.data?.forEach(u => map[u.id] = u);
         return map;
     }, [usersQuery.data]);
 
-    if (auditQuery.isLoading) return <p className="text-sm text-fg-muted py-4">Загрузка истории...</p>;
-    if (auditQuery.isError) return <p className="text-sm text-danger py-4">Ошибка загрузки истории.</p>;
+    if (auditQuery.isLoading) {
+        return (
+            <div className="flex flex-col gap-4 p-4">
+                {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex gap-4 animate-pulse">
+                        <div className="size-10 rounded-full bg-border/50 shrink-0" />
+                        <div className="flex-1 space-y-2 py-2">
+                            <div className="h-4 bg-border/50 rounded w-3/4" />
+                            <div className="h-3 bg-border/50 rounded w-1/4" />
+                        </div>
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    if (auditQuery.isError) return <p className="text-sm text-danger p-4 text-center">Ошибка загрузки истории.</p>;
 
     return (
-        <div className="space-y-3">
-            <div className="flex justify-end">
+        <div className="flex flex-col h-full max-h-[500px]">
+            {/* Header actions */}
+            <div className="flex justify-end p-3 border-b border-border/50 bg-bg-elevated/50 sticky top-0 z-10">
                 <button
                     onClick={() => auditQuery.refetch()}
                     disabled={auditQuery.isFetching && !auditQuery.isFetchingNextPage}
-                    className="rounded-md border border-border px-3 py-1.5 text-xs text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50 transition-colors"
+                    className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50 transition-colors"
                 >
-                    {auditQuery.isFetching && !auditQuery.isFetchingNextPage ? 'Обновление...' : 'Обновить историю'}
+                    <RefreshIcon className={cn("size-3.5", auditQuery.isFetching && !auditQuery.isFetchingNextPage && "animate-spin")} />
+                    {auditQuery.isFetching && !auditQuery.isFetchingNextPage ? 'Обновление...' : 'Обновить'}
                 </button>
             </div>
 
-            {logs.length === 0 ? (
-                <p className="text-sm text-fg-muted py-4">История пуста.</p>
-            ) : (
-                <>
-                    <div className="divide-y divide-border rounded-md border border-border bg-bg-elevated/20 overflow-y-auto max-h-[400px]">
-                        {logs.map((log) => (
-                            <AuditRow key={log.id} log={log} nameMap={nameMap} />
-                        ))}
+            {/* Timeline content */}
+            <div className="flex-1 overflow-y-auto p-4 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full">
+                {logs.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-fg-muted">
+                        <ClockIcon className="size-10 opacity-20 mb-3" />
+                        <p className="text-sm">История пуста.</p>
                     </div>
+                ) : (
+                    <div className="space-y-4">
+                        {logs.map((log, index) => (
+                            <AuditRow
+                                key={log.id}
+                                log={log}
+                                userMap={userMap}
+                                isLast={index === logs.length - 1 && !auditQuery.hasNextPage}
+                            />
+                        ))}
 
-                    {/* Загрузить еще */}
-                    {auditQuery.hasNextPage && (
-                        <div className="flex justify-center pt-2">
-                            <button
-                                onClick={() => auditQuery.fetchNextPage()}
-                                disabled={auditQuery.isFetchingNextPage}
-                                className="rounded-md border border-border px-4 py-2 text-sm text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50 transition-colors"
-                            >
-                                {auditQuery.isFetchingNextPage ? 'Загрузка...' : 'Загрузить еще'}
-                            </button>
-                        </div>
-                    )}
-                </>
-            )}
+                        {/* Загрузить еще */}
+                        {auditQuery.hasNextPage && (
+                            <div className="flex justify-center pt-4 pb-2 relative">
+                                {/* Продолжение линии таймлайна */}
+                                <div className="absolute top-0 bottom-full left-5 w-px bg-border/50" />
+
+                                <button
+                                    onClick={() => auditQuery.fetchNextPage()}
+                                    disabled={auditQuery.isFetchingNextPage}
+                                    className="rounded-full border border-border bg-bg-elevated px-5 py-2 text-sm font-medium text-fg hover:border-fg-muted disabled:opacity-50 transition-all shadow-sm z-10"
+                                >
+                                    {auditQuery.isFetchingNextPage ? 'Загрузка...' : 'Загрузить еще'}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
 
-function AuditRow({ log, nameMap }: { log: PlaylistAudit; nameMap: Record<string, string> }) {
+function AuditRow({ log, userMap, isLast }: { log: PlaylistAudit; userMap: Record<string, UserSearchResult>; isLast: boolean }) {
     const [isOpen, setIsOpen] = useState(false);
 
-    const actorName = log.actorUserId ? (nameMap[log.actorUserId] ?? 'Пользователь') : 'Система';
+    const user = log.actorUserId ? userMap[log.actorUserId] : null;
+    const actorName = user?.displayName ?? (log.actorUserId ? 'Пользователь' : 'Система');
+    const avatarUrl = user?.avatarUrl;
+
     const actorLink = log.actorUserId ? (
         <Link
             to={`/users/${log.actorUserId}`}
-            className="font-medium text-fg hover:underline transition-colors"
+            className="font-bold text-fg hover:text-accent transition-colors truncate max-w-[120px]"
             onClick={(e) => e.stopPropagation()}
         >
             {actorName}
         </Link>
     ) : (
-        <span className="font-medium text-fg">{actorName}</span>
+        <span className="font-bold text-fg">{actorName}</span>
     );
+
+    const actionInfo = useMemo(() => {
+        if (log.entityType === 'PlaylistTrack') {
+            if (log.changeKind === 0) return { icon: <PlusIcon className="size-4" />, color: "text-success bg-success/10 border-success/20", label: "Добавил трек" };
+            if (log.changeKind === 2) return { icon: <TrashIcon className="size-4" />, color: "text-danger bg-danger/10 border-danger/20", label: "Удалил трек" };
+            if (log.changeKind === 1) return { icon: <PencilIcon className="size-4" />, color: "text-accent bg-accent/10 border-accent/20", label: "Изменил позицию" };
+        }
+        if (log.entityType === 'PlaylistMember') {
+            if (log.changeKind === 0) return { icon: <UserIcon className="size-4" />, color: "text-success bg-success/10 border-success/20", label: "Присоединился" };
+            if (log.changeKind === 2) return { icon: <LogOutIcon className="size-4" />, color: "text-fg-muted bg-border border-border", label: "Покинул плейлист" };
+            if (log.changeKind === 1) return { icon: <PencilIcon className="size-4" />, color: "text-accent bg-accent/10 border-accent/20", label: "Изменил роль" };
+        }
+        if (log.entityType === 'Playlist') {
+            if (log.changeKind === 1) return { icon: <PencilIcon className="size-4" />, color: "text-accent bg-accent/10 border-accent/20", label: "Изменил плейлист" };
+        }
+        return { icon: <ClockIcon className="size-4" />, color: "text-fg-muted bg-border border-border", label: "Сделал изменения" };
+    }, [log]);
 
     const detailedChanges = useMemo(() => {
         try {
@@ -110,9 +161,9 @@ function AuditRow({ log, nameMap }: { log: PlaylistAudit; nameMap: Record<string
             };
 
             const visibilityMap: Record<string | number, string> = {
-                0: 'Приватный (Private)',
-                1: 'Публичный (Public)',
-                2: 'По ссылке (Unlisted)'
+                0: 'Private',
+                1: 'Public',
+                2: 'Unlisted'
             };
 
             for (const key in data) {
@@ -145,59 +196,74 @@ function AuditRow({ log, nameMap }: { log: PlaylistAudit; nameMap: Record<string
         }
     }, [log.changes]);
 
-    const actionText = useMemo(() => {
-        if (log.entityType === 'PlaylistTrack') {
-            const trackName = log.trackTitle ? <span className="font-medium text-fg italic">"{log.trackTitle}"</span> : 'трек';
-            if (log.changeKind === 0) return <span>добавил {trackName}</span>;
-            if (log.changeKind === 2) return <span>удалил {trackName}</span>;
-            if (log.changeKind === 1) return <span>изменил позицию для {trackName}</span>;
-        }
-        if (log.entityType === 'PlaylistMember') {
-            if (log.changeKind === 0) return <span>присоединился к плейлисту</span>;
-            if (log.changeKind === 2) return <span>покинул плейлист</span>;
-            if (log.changeKind === 1) return <span>изменил роль участника</span>;
-        }
-        if (log.entityType === 'Playlist') {
-            if (log.changeKind === 1) return <span>изменил настройки плейлиста</span>;
-        }
-        return <span>сделал изменения ({log.entityType})</span>;
-    }, [log]);
-
     return (
-        <div className="border-b border-border last:border-0 bg-bg-elevated/10">
-            <div
-                className="flex items-center gap-3 px-4 py-3 text-sm cursor-pointer hover:bg-bg-elevated/30 transition-colors"
-                onClick={() => setIsOpen(!isOpen)}
-            >
-                <div className={cn(
-                    "flex size-2 shrink-0 rounded-full",
-                    log.changeKind === 0 ? "bg-success" : log.changeKind === 2 ? "bg-danger" : "bg-accent"
-                )} />
-                <div className="flex-1 text-fg-muted leading-tight">
-                    {actorLink} {actionText}
-                </div>
-                <div className="shrink-0 text-[11px] text-fg-muted/60 uppercase">
-                    {new Date(log.createdAt).toLocaleDateString('ru-RU', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                </div>
-                <span className={cn("text-xs text-fg-muted transition-transform", isOpen && "rotate-180")}>▼</span>
+        <div className="relative flex items-start gap-3 group">
+            {/* Линия таймлайна */}
+            {!isLast && <div className="absolute top-10 bottom-[-1rem] left-5 w-px bg-border/50" />}
+
+            {/* Иконка действия */}
+            <div className={cn(
+                "relative z-10 flex size-10 shrink-0 items-center justify-center rounded-full border shadow-sm",
+                actionInfo.color
+            )}>
+                {actionInfo.icon}
             </div>
 
-            {isOpen && (
-                <div className="px-9 pb-3 pt-1 animate-in fade-in slide-in-from-top-1 duration-200">
-                    <div className="rounded-md border border-border/50 bg-bg-elevated/40 p-3 space-y-1">
-                        <h4 className="text-[11px] font-semibold text-fg-muted uppercase tracking-wider mb-2">Детали изменения</h4>
-                        {detailedChanges.length > 0 ? (
-                            detailedChanges.map((c, i) => (
-                                <div key={i} className="text-xs font-mono text-fg-muted break-all">
-                                    <span className="text-accent/50 mr-2">#</span> {c}
-                                </div>
-                            ))
-                        ) : (
-                            <div className="text-xs font-mono text-fg-muted italic">Нет дополнительных данных в логе</div>
+            {/* Карточка */}
+            <div className="flex-1 rounded-lg border border-border/50 bg-bg p-3 shadow-sm hover:border-border transition-colors">
+                <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        {/* Аватарка */}
+                        <div className="size-5 shrink-0 rounded-full bg-bg-elevated border border-border overflow-hidden flex items-center justify-center">
+                            {avatarUrl ? (
+                                <img src={avatarUrl} alt="" className="size-full object-cover" />
+                            ) : (
+                                <span className="text-[9px] font-bold text-fg-muted">{actorName.charAt(0).toUpperCase()}</span>
+                            )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5 text-sm">
+                            {actorLink}
+                            <span className="text-fg-muted">{actionInfo.label}</span>
+                            {log.trackTitle && (
+                                <span className="font-medium text-fg max-w-[150px] truncate" title={log.trackTitle}>
+                                    "{log.trackTitle}"
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    <span className="text-xs text-fg-muted/70 whitespace-nowrap sm:ml-auto">
+                        {new Date(log.createdAt).toLocaleDateString('ru-RU', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                </div>
+
+                {/* Блок с деталями */}
+                {detailedChanges.length > 0 && (
+                    <div className="mt-2">
+                        <button
+                            onClick={() => setIsOpen(!isOpen)}
+                            className="flex items-center gap-1 text-[11px] font-medium text-accent hover:underline px-1 py-0.5 rounded transition-colors"
+                        >
+                            {isOpen ? 'Скрыть детали' : 'Показать детали'}
+                            <svg className={cn("size-3 transition-transform duration-200", isOpen && "rotate-180")} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+
+                        {isOpen && (
+                            <div className="mt-2 rounded bg-bg-elevated/50 p-2.5 border border-border/50 space-y-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                                {detailedChanges.map((c, i) => (
+                                    <div key={i} className="text-[11px] font-mono text-fg-muted break-all flex items-start gap-2">
+                                        <span className="text-accent/50 shrink-0 select-none">↳</span>
+                                        <span>{c}</span>
+                                    </div>
+                                ))}
+                            </div>
                         )}
                     </div>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 }
