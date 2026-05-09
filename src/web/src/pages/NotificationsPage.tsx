@@ -19,10 +19,30 @@ import {
     InfoIcon
 } from '@/shared/ui/icons';
 import { Tooltip } from '@/shared/ui/Tooltip';
+import { acceptInvitation, declineInvitation } from '@/shared/api/invitations';
 
 export function NotificationsPage() {
     const qc = useQueryClient();
     const q = useQuery({ queryKey: ['notifications'], queryFn: () => listNotifications(1, 50) });
+
+    const acceptInv = useMutation({
+        mutationFn: (id: string) => acceptInvitation(id),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['notifications'] });
+            qc.invalidateQueries({ queryKey: ['notifications-unread-count'] });
+            qc.invalidateQueries({ queryKey: ['playlists'] });
+            qc.invalidateQueries({ queryKey: ['invitations'] });
+        },
+    });
+
+    const declineInv = useMutation({
+        mutationFn: (id: string) => declineInvitation(id),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['notifications'] });
+            qc.invalidateQueries({ queryKey: ['notifications-unread-count'] });
+            qc.invalidateQueries({ queryKey: ['invitations'] });
+        },
+    });
 
     const invalidate = () => {
         qc.invalidateQueries({ queryKey: ['notifications'] });
@@ -133,6 +153,9 @@ export function NotificationsPage() {
                             n={n}
                             onMarkRead={() => markOne.mutate(n.id)}
                             onDelete={() => removeOne.mutate(n.id)}
+                            onAcceptInvitation={(invId) => acceptInv.mutate(invId)}
+                            onDeclineInvitation={(invId) => declineInv.mutate(invId)}
+                            invitationPending={acceptInv.isPending || declineInv.isPending}
                         />
                     ))}
                 </ul>
@@ -145,26 +168,51 @@ function NotificationRow({
     n,
     onMarkRead,
     onDelete,
+    onAcceptInvitation,
+    onDeclineInvitation,
+    invitationPending,
 }: {
     n: NotificationItem;
     onMarkRead: () => void;
     onDelete: () => void;
+    onAcceptInvitation?: (invitationId: string) => void;
+    onDeclineInvitation?: (invitationId: string) => void;
+    invitationPending?: boolean;
 }) {
     const renderPayloadAction = () => {
         if (!n.payload) return null;
 
         switch (n.type) {
-            case 'PlaylistInvitation':
+            case 'PlaylistInvitation': {
+                const payload = n.payload as Record<string, unknown>;
+                const invitationId = (payload.invitationId ?? payload.InvitationId ?? payload.id ?? payload.Id) as string | undefined;
+                const status = (payload.status ?? payload.Status) as string | undefined;
+                if (status && status !== 'Pending') {
+                    return (
+                        <p className="mt-3 text-xs italic text-fg-muted">
+                            {status === 'Accepted' ? 'Приглашение принято' : status === 'Declined' ? 'Приглашение отклонено' : status}
+                        </p>
+                    );
+                }
                 return (
                     <div className="mt-3 flex items-center gap-2">
-                        <button className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90">
+                        <button
+                            disabled={!invitationId || invitationPending}
+                            onClick={() => invitationId && onAcceptInvitation?.(invitationId)}
+                            className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                        >
                             Принять
                         </button>
-                        <button className="rounded-md border border-border bg-transparent px-3 py-1.5 text-xs font-medium transition-colors hover:bg-bg">
+                        <button
+                            disabled={!invitationId || invitationPending}
+                            onClick={() => invitationId && onDeclineInvitation?.(invitationId)}
+                            className="rounded-md border border-border bg-transparent px-3 py-1.5 text-xs font-medium transition-colors hover:bg-bg disabled:opacity-50"
+                        >
                             Отклонить
                         </button>
                     </div>
                 );
+            }
             case 'NewTrackByFollowed':
                 return (
                     <button className="mt-3 flex items-center gap-2 rounded-md bg-bg px-3 py-1.5 text-xs font-medium border border-border hover:border-accent transition-colors">

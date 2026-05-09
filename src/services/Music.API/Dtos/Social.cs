@@ -22,7 +22,10 @@ public record FeedItem(
     string? CoverUrl,
     DateTime ReleasedAt,
     TimeSpan? Duration = null,
-    bool IsLikedByMe = false);
+    bool IsLikedByMe = false,
+    IReadOnlyList<FeedFeaturedArtist>? FeaturedArtists = null);
+
+public record FeedFeaturedArtist(Guid Id, string Name);
 
 /// <summary>
 /// Топ артистов юзера по истории прослушиваний. За окно sinceDays

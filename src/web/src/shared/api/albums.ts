@@ -7,6 +7,7 @@ function normalizeAlbum(a: any): AlbumSummary {
         title: a.title ?? a.Title ?? '',
         artistId: a.artistId ?? a.ArtistId,
         artistName: a.artistName ?? a.ArtistName ?? null,
+        artistAvatarUrl: a.artistAvatarUrl ?? a.ArtistAvatarUrl ?? null,
         releasedAt: a.releaseDate ?? a.ReleaseDate ?? a.releasedAt ?? null,
         coverUrl: a.coverUrl ?? a.CoverUrl ?? null,
         trackCount: a.trackCount ?? a.TrackCount ?? 0,

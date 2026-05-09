@@ -66,14 +66,15 @@ export function HomePage() {
         trackNumber: null,
         isExplicit: false,
         isLikedByMe: f.isLikedByMe ?? false,
+        featuredArtists: f.featuredArtists ?? [],
     })) || [];
 
     return (
-        <div className="relative z-10 space-y-8 p-6">
-            <div className="absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-accent/20 to-transparent pointer-events-none z-[-1]" />
+        <div className="relative z-10 space-y-8 px-6 pb-6 pt-2">
+            <div className="absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-accent/30 to-transparent pointer-events-none z-[-1]" />
 
-            <div className="pt-8">
-                <h1 className="text-2xl font-bold tracking-tight text-left">
+            <div className="pt-5">
+                <h1 className="text-4xl font-bold tracking-tight text-left">
                     Привет, {user?.displayName ?? user?.email ?? 'Гость'}
                 </h1>
             </div>

@@ -4,7 +4,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { invite } from '@/shared/api/playlists';
 import { searchUsers } from '@/shared/api/users';
 import type { UserSearchResult } from '@/shared/types';
-import { SearchIcon, CheckIcon, UserIcon } from '@/shared/ui/icons';
+import { SearchIcon, CheckIcon } from '@/shared/ui/icons';
+import { UserAvatar } from '@/shared/ui/UserAvatar';
 import { cn } from '@/shared/lib/cn';
 
 export function InvitePeopleDialog({
@@ -117,13 +118,7 @@ export function InvitePeopleDialog({
                     {selected ? (
                         <div className="flex items-center justify-between rounded border border-accent bg-accent/10 py-2 pl-3 pr-2">
                             <div className="flex items-center gap-3 min-w-0">
-                                <div className="size-8 shrink-0 rounded-full bg-bg overflow-hidden flex items-center justify-center border border-border">
-                                    {selected.avatarUrl ? (
-                                        <img src={selected.avatarUrl} alt="" className="size-full object-cover" />
-                                    ) : (
-                                        <UserIcon className="size-4 text-fg-muted" />
-                                    )}
-                                </div>
+                                <UserAvatar avatarUrl={selected.avatarUrl} displayName={selected.displayName} size={32} />
                                 <span className="truncate text-sm font-medium text-fg">
                                     {selected.displayName}
                                 </span>
@@ -162,13 +157,7 @@ export function InvitePeopleDialog({
                                                 onClick={() => pick(u)}
                                                 className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-bg-elevated transition-colors"
                                             >
-                                                <div className="size-7 shrink-0 rounded-full bg-border flex items-center justify-center overflow-hidden">
-                                                    {u.avatarUrl ? (
-                                                        <img src={u.avatarUrl} alt="" className="size-full object-cover" />
-                                                    ) : (
-                                                        <span className="text-[10px] font-bold text-fg-muted">{u.displayName.charAt(0).toUpperCase()}</span>
-                                                    )}
-                                                </div>
+                                                <UserAvatar avatarUrl={u.avatarUrl} displayName={u.displayName} size={28} />
                                                 <span className="truncate text-sm text-fg font-medium">{u.displayName}</span>
                                             </button>
                                         </li>

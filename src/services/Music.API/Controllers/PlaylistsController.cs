@@ -410,6 +410,7 @@ public class PlaylistsController : ControllerBase
         var playlist = await _context.Playlists
             .Include(p => p.PlaylistTracks)
             .ThenInclude(pt => pt.Track)
+            .ThenInclude(t => t!.Album)
             .Include(p => p.PlaylistMembers)
             .FirstOrDefaultAsync(p => p.Id == id);
 
@@ -422,6 +423,55 @@ public class PlaylistsController : ControllerBase
         var owner = playlist.PlaylistMembers.FirstOrDefault(pm => pm.Role == PlaylistRole.Owner);
 
         var previewCovers = await BuildPreviewCoversAsync(id);
+
+        var orderedPlTracks = playlist.PlaylistTracks
+            .OrderBy(pt => pt.Position).ThenBy(pt => pt.AddedAt)
+            .ToList();
+
+        var trackIds = orderedPlTracks.Select(pt => pt.TrackId).ToList();
+        var featuredMap = await _context.TrackFeaturedArtists
+            .Where(fa => trackIds.Contains(fa.TrackId))
+            .OrderBy(fa => fa.Position)
+            .Select(fa => new { fa.TrackId, fa.Artist!.Id, fa.Artist.Name })
+            .ToListAsync();
+
+        var feauturedByTrack = featuredMap
+            .GroupBy(x => x.TrackId)
+            .ToDictionary(g => g.Key, g => g.Select(x => new { x.Id, Name = x.Name }).ToList());
+
+        var likedSet = await _context.LikedTracks
+            .Where(l => l.UserId == UserId && trackIds.Contains(l.TrackId))
+            .Select(l => l.TrackId)
+            .ToListAsync();
+        var likedHash = new HashSet<Guid>(likedSet);
+
+        var tracksOut = new List<object>(orderedPlTracks.Count);
+        foreach (var pt in orderedPlTracks)
+        {
+            var coverKey = pt.Track!.CoverKey ?? pt.Track.Album?.CoverKey;
+            var coverUrl = coverKey != null
+                ? await _storage.GeneratePresignedImageGetUrlAsync(coverKey)
+                : null;
+
+            tracksOut.Add(new
+            {
+                TrackId = pt.Track!.Id,
+                pt.Track.Title,
+                pt.Track.Artist,
+                ArtistId = pt.Track.ArtistId,
+                pt.Track.Duration,
+                pt.Track.IsExplicit,
+                pt.Position,
+                pt.AddedAt,
+                IsLikedByMe = likedHash.Contains(pt.TrackId),
+                CoverUrl = coverUrl,
+                AlbumId = pt.Track.AlbumId,
+                AlbumTitle = pt.Track.Album?.Title,
+                FeaturedArtists = feauturedByTrack.TryGetValue(pt.TrackId, out var feats)
+                    ? feats.Select(f => (object)new { f.Id, f.Name }).ToList()
+                    : new List<object>(),
+            });
+        }
 
         return Ok(new
         {
@@ -436,19 +486,7 @@ public class PlaylistsController : ControllerBase
             UpdatedAt = playlist.CreatedAt,
             PreviewCovers = previewCovers,
 
-            Tracks = playlist.PlaylistTracks
-                .OrderBy(pt => pt.Position).ThenBy(pt => pt.AddedAt)
-                .Select(pt => new {
-                    TrackId = pt.Track!.Id,
-                    pt.Track.Title,
-                    pt.Track.Artist,
-                    ArtistId = pt.Track.ArtistId,
-                    pt.Track.Duration,
-                    pt.Track.IsExplicit,
-                    pt.Position,
-                    pt.AddedAt,
-                    IsLikedByMe = _context.LikedTracks.Any(l => l.TrackId == pt.TrackId && l.UserId == UserId),
-                }),
+            Tracks = tracksOut,
             Members = playlist.PlaylistMembers.Select(m => new {
                 m.UserId,
                 m.DisplayName,

@@ -340,6 +340,7 @@ public class AlbumsController : ControllerBase
                 a.Title,
                 a.ArtistId,
                 ArtistName = a.Artist!.Name,
+                ArtistAvatarKey = a.Artist!.AvatarKey,
                 a.CoverKey,
                 a.ReleaseDate,
                 a.Genres,
@@ -355,6 +356,10 @@ public class AlbumsController : ControllerBase
             ? null
             : await _storage.GeneratePresignedImageGetUrlAsync(row.CoverKey);
 
+        var artistAvatarUrl = row.ArtistAvatarKey is null
+            ? null
+            : await _storage.GeneratePresignedImageGetUrlAsync(row.ArtistAvatarKey);
+
         return new AlbumResponse(
             row.Id,
             row.Title,
@@ -365,6 +370,7 @@ public class AlbumsController : ControllerBase
             row.Genres ?? new List<string>(),
             row.CreatedByUserId,
             row.CreatedAt,
-            row.TrackCount);
+            row.TrackCount,
+            artistAvatarUrl);
     }
 }

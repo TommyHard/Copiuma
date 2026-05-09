@@ -75,3 +75,23 @@ export function useIsTrackPlaying(trackId: string): { isCurrent: boolean; isPlay
     const isPlaying = usePlayer((s) => s.isPlaying);
     return { isCurrent, isPlaying: isCurrent && isPlaying };
 }
+
+/**
+ * Бадж для конкретного трека
+ */
+export function NowPlayingBadge({ trackId, className }: { trackId: string; className?: string }) {
+    const { isCurrent, isPlaying } = useIsTrackPlaying(trackId);
+    if (!isCurrent) return null;
+    return (
+        <span
+            className={cn(
+                "inline-flex items-center",
+                isPlaying ? "text-accent" : "text-fg-muted",
+                className,
+            )}
+            aria-label={isPlaying ? 'Сейчас играет' : 'На паузе'}
+        >
+            <PlayingBars paused={!isPlaying} />
+        </span>
+    );
+}

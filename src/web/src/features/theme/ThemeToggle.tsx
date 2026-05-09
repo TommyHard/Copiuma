@@ -19,7 +19,7 @@ export function ThemeToggle() {
 
             className="inline-flex size-8 items-center justify-center rounded-full text-fg-muted transition-colors hover:bg-accent/20 hover:text-fg"
         >
-            <Icon className="h-5 w-5" aria-hidden="true" />
+            <Icon className="h-6 w-6" aria-hidden="true" />
         </button>
     );
 }

@@ -237,10 +237,10 @@ export const CatalogIcon = ({ className }: { className?: string }) => (
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="2"
+        strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
-        className={cn("w-4 h-4", className)}
+        className={cn(className)}
     >
         <rect x="3" y="3" width="7" height="7" />
         <rect x="14" y="3" width="7" height="7" />
@@ -357,5 +357,19 @@ export const MoreHorizontalIcon = ({ className }: { className?: string }) => (
         <circle cx="12" cy="12" r="1"></circle>
         <circle cx="19" cy="12" r="1"></circle>
         <circle cx="5" cy="12" r="1"></circle>
+    </svg>
+);
+
+export const HomeIcon = ({ className }: { className?: string }) => (
+    <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={cn(className)}
+    >
+        <path d="M3 9l8.5-6.5 h1 l8.5 6.5v12H14v-8H10v8H3V10z" />
     </svg>
 );

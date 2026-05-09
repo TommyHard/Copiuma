@@ -5,6 +5,7 @@ import { getPlaylistAudit, PlaylistAudit } from '@/shared/api/playlists';
 import { batchUsers } from '@/shared/api/users';
 import { cn } from '@/shared/lib/cn';
 import { ClockIcon, PlusIcon, TrashIcon, PencilIcon, UserIcon, LogOutIcon, RefreshIcon } from '@/shared/ui/icons';
+import { UserAvatar } from '@/shared/ui/UserAvatar';
 import type { UserSearchResult } from '@/shared/types';
 
 const PAGE_SIZE = 5;
@@ -214,13 +215,7 @@ function AuditRow({ log, userMap, isLast }: { log: PlaylistAudit; userMap: Recor
                 <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-2 flex-wrap">
                         {/* Аватарка */}
-                        <div className="size-5 shrink-0 rounded-full bg-bg-elevated border border-border overflow-hidden flex items-center justify-center">
-                            {avatarUrl ? (
-                                <img src={avatarUrl} alt="" className="size-full object-cover" />
-                            ) : (
-                                <span className="text-[9px] font-bold text-fg-muted">{actorName.charAt(0).toUpperCase()}</span>
-                            )}
-                        </div>
+                        <UserAvatar avatarUrl={avatarUrl} displayName={actorName} size={20} />
 
                         <div className="flex items-center gap-1.5 text-sm">
                             {actorLink}

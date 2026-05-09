@@ -31,9 +31,10 @@ import { useContextMenu, ContextMenuPortal, ContextMenuItem, ContextMenuSub, Con
 import {
     PlayIcon, HeartIcon, PlusIcon, SearchIcon, MusicIcon, CheckIcon, ClockIcon,
     LockIcon, GlobeIcon, EyeOffIcon, DragHandleIcon, TrashIcon, MoreHorizontalIcon,
-    PencilIcon, LogOutIcon, UserIcon,
+    PencilIcon, LogOutIcon,
     UsersIcon, SettingsIcon
 } from '@/shared/ui/icons';
+import { UserAvatar } from '@/shared/ui/UserAvatar';
 
 const ROLE_TRANSLATIONS: Record<string, string> = {
     Owner: 'Владелец',
@@ -47,6 +48,8 @@ export function PlaylistPage() {
     const navigate = useNavigate();
     const qc = useQueryClient();
     const playQueue = usePlayer((s) => s.playQueue);
+    const playTrack = usePlayTrack();
+    const toggleLike = useToggleTrackLike();
 
     const [inviteOpen, setInviteOpen] = useState(false);
 
@@ -256,12 +259,18 @@ export function PlaylistPage() {
 
             setColWidths(prev => {
                 const reservedSpace = 240;
-                const maxAllowed = containerWidth - reservedSpace;
+                const maxAllowed = Math.max(COL_LIMITS[0].min + COL_LIMITS[1].min, containerWidth - reservedSpace);
 
                 if (!isManuallyResized) {
                     return [Math.max(COL_LIMITS[0].min, maxAllowed * 0.6), Math.max(COL_LIMITS[1].min, maxAllowed * 0.4)];
                 }
-                return prev;
+                const total = prev[0] + prev[1];
+                if (total <= maxAllowed) return prev;
+                const ratio = maxAllowed / total;
+                return [
+                    Math.max(COL_LIMITS[0].min, prev[0] * ratio),
+                    Math.max(COL_LIMITS[1].min, prev[1] * ratio),
+                ];
             });
         });
         observer.observe(el);
@@ -438,13 +447,12 @@ export function PlaylistPage() {
                         return (
                             <div className="flex items-center gap-2 text-sm text-fg font-medium mt-2">
                                 <Link to={`/users/${p.ownerId}`} className="hover:underline flex items-center gap-2">
-                                    <div className="size-6 rounded-full bg-border flex items-center justify-center overflow-hidden shrink-0 border border-border/50">
-                                        {ownerAvatar ? (
-                                            <img src={ownerAvatar} alt="" className="size-full object-cover" />
-                                        ) : (
-                                            <UserIcon className="size-3.5 text-fg-muted" />
-                                        )}
-                                    </div>
+                                    <UserAvatar
+                                        avatarUrl={ownerAvatar}
+                                        displayName={p.ownerName || ownerDetails?.displayName || 'П'}
+                                        size={24}
+                                        showIconFallback={!p.ownerName && !ownerDetails?.displayName}
+                                    />
                                     {p.ownerName || 'Пользователь'}
                                 </Link>
                                 <span className="text-fg-muted">•</span>
@@ -457,7 +465,7 @@ export function PlaylistPage() {
             </div>
 
             {/* TOOLBAR */}
-            <div className="flex items-center gap-4 px-6 md:px-10 py-6 relative z-40 w-full flex-wrap">
+            <div className="flex items-center gap-4 px-6 md:px-10 py-6 relative z-20 w-full flex-wrap">
                 {tracks.length > 0 && (
                     <Tooltip content="Играть всё">
                         <button
@@ -571,7 +579,7 @@ export function PlaylistPage() {
                         className={cn(
                             "group sticky top-0 z-30 grid gap-4 px-4 py-2 border-b text-sm font-bold tracking-tight uppercase w-full transition-all duration-300 text-fg-muted",
                             isSticky
-                                ? "bg-bg-elevated border-border shadow backdrop-blur"
+                                ? "bg-bg-elevated border-border"
                                 : "bg-transparent border-border/50"
                         )}
                         style={{ gridTemplateColumns }}
@@ -650,7 +658,24 @@ export function PlaylistPage() {
                                                 <Tooltip content="Играть">
                                                     <button
                                                         className="hidden group-hover:flex items-center justify-center w-full"
-                                                        onClick={() => usePlayTrack()(trackForPlayer as any)}
+                                                        onClick={() => playTrack(trackForPlayer as any, {
+                                                            queue: tracks.map((tt) => ({
+                                                                id: tt.trackId,
+                                                                title: tt.title,
+                                                                artist: tt.artist,
+                                                                artistId: tt.artistId || null,
+                                                                duration: tt.duration,
+                                                                uploadedAt: '',
+                                                                albumId: (tt as any).albumId || null,
+                                                                trackNumber: null,
+                                                                isExplicit: tt.isExplicit,
+                                                                coverUrl: (tt as any).coverUrl,
+                                                                isLikedByMe: tt.isLikedByMe,
+                                                                featuredArtists: (tt as any).featuredArtists,
+                                                            })),
+                                                            startIndex: index,
+                                                            context: id ? { type: 'playlist', id } : undefined,
+                                                        })}
                                                     >
                                                         <PlayIcon className="size-4 text-fg" />
                                                     </button>
@@ -671,11 +696,11 @@ export function PlaylistPage() {
                                         </div>
                                         <div className="flex flex-col min-w-0">
                                             <Tooltip content={t.title}>
-                                                <Link to={`/tracks/${t.trackId}`} className="truncate text-fg font-medium hover:underline">
+                                                <Link to={`/tracks/${t.trackId}`} className="truncate text-[18px] font-medium hover:underline">
                                                     {t.title}
                                                 </Link>
                                             </Tooltip>
-                                            <div className="truncate text-xs text-fg-muted mt-0.5">
+                                            <div className="truncate text-[14px] text-fg-muted mt-0.5">
                                                 <Tooltip content={fullArtistText}>
                                                     <span>
                                                         <Link to={`/artists/${t.artistId}`} className="hover:text-fg hover:underline">
@@ -713,7 +738,7 @@ export function PlaylistPage() {
                                     <div className="flex items-center justify-end gap-2 text-fg-muted pr-2">
                                         <Tooltip content={t.isLikedByMe ? "Убрать из избранного" : "В избранное"}>
                                             <button
-                                                onClick={() => useToggleTrackLike().mutate({ trackId: t.trackId, nextLiked: !t.isLikedByMe })}
+                                                onClick={() => toggleLike.mutate({ trackId: t.trackId, nextLiked: !t.isLikedByMe })}
                                                 className={cn(
                                                     "opacity-0 group-hover:opacity-100 p-2 transition-transform hover:scale-110",
                                                     t.isLikedByMe ? "text-accent opacity-100" : "hover:text-fg"
@@ -761,13 +786,7 @@ export function PlaylistPage() {
                             return (
                                 <li key={m.userId} className="group flex items-center justify-between p-3 rounded bg-bg-elevated border border-border/50 hover:border-border transition-colors">
                                     <div className="flex items-center gap-3 min-w-0">
-                                        <div className="size-10 rounded-full bg-border flex items-center justify-center shrink-0 text-fg-muted font-bold overflow-hidden border border-border/50">
-                                            {avatarUrl ? (
-                                                <img src={avatarUrl} alt="" className="size-full object-cover" />
-                                            ) : (
-                                                displayName?.charAt(0).toUpperCase()
-                                            )}
-                                        </div>
+                                        <UserAvatar avatarUrl={avatarUrl} displayName={displayName} size={40} />
                                         <div className="min-w-0">
                                             <Link to={`/users/${m.userId}`} className="block truncate font-medium text-fg hover:text-accent transition-colors text-sm">
                                                 {displayName}

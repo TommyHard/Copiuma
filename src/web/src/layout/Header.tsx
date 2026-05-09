@@ -17,7 +17,8 @@ import {
     LogOutIcon,
     SearchIcon,
     CatalogIcon,
-    ArtistSettingsIcon
+    ArtistSettingsIcon,
+    HomeIcon
 } from '@/shared/ui/icons';
 import { NotificationsBell } from '@/features/notifications/NotificationsBell';
 import { getMyArtist } from '@/shared/api/artists';
@@ -82,41 +83,57 @@ export function Header() {
     };
 
     return (
-        <header className="shrink-0 z-10 rounded-xl border border-border bg-bg-elevated px-5 flex h-14 items-center shadow-sm">
+        <header className="shrink-0 z-10 rounded-xl px-5 flex h-10 items-center">
 
-            {/* LOGO, NAVIGATION */}
+            {/* LOGO */}
             <div className="flex-1 flex items-center gap-6">
-                <Link to="/" className="flex items-center gap-2 font-semibold tracking-tight shrink-0">
-                    <div className="size-6 rounded-md bg-accent" aria-hidden />
+                <Link to="/" className="flex items-center gap-2 font-bold tracking-tight shrink-0">
+                    <img
+                        src="/favicon.svg"
+                        alt="Copiuma"
+                        className="size-10"
+                    />
                     Copiuma
                 </Link>
-
-                <nav className="hidden lg:flex items-center gap-4 text-sm">
-                    <NavItem to="/">Главная</NavItem>
-                </nav>
             </div>
 
-            {/* SEARCH */}
-            <div className="flex-1 hidden md:flex justify-center">
-                <div className="w-full max-w-md flex items-center bg-bg rounded-lg border border-border px-3 py-1.5 focus-within:border-accent/50 group transition-all">
-                    <SearchIcon className="w-4 h-4 text-fg-muted group-focus-within:text-accent transition-colors" />
+            {/* SEARCH AND HOME LINK */}
+            <div className="flex-1 hidden md:flex items-center justify-center gap-2">
+                <Tooltip content="Главная" position="bottom">
+                    <NavLink
+                        to="/"
+                        className={({ isActive }) =>
+                            cn(
+                                'p-3 rounded-full transition-colors flex items-center justify-center shrink-0',
+                                isActive
+                                    ? 'bg-accent/5 border border-border text-accent'
+                                    : 'text-fg-muted hover:text-fg hover:bg-accent/10'
+                            )
+                        }
+                    >
+                        <HomeIcon className="w-7 h-7" />
+                    </NavLink>
+                </Tooltip>
+
+                <div className="w-full max-w-xl flex items-center bg-bg rounded-full border border-border px-3 py-2 focus-within:border-accent/50 group transition-all">
+                    <SearchIcon className="w-6 h-6 text-fg-muted group-focus-within:text-accent transition-colors" />
                     <input
                         type="text"
                         placeholder="Поиск..."
-                        className="flex-1 bg-transparent outline-none border-none text-xs px-2 text-fg"
+                        className="flex-1 bg-transparent outline-none border-none text-1xl px-2 text-fg"
                         value={searchValue}
                         onChange={(e) => setSearchValue(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSearchEnter()}
                     />
 
-                    <div className="w-px h-4 bg-border mx-2" />
+                    <div className="w-0.5 self-stretch bg-border mx-2" />
 
                     <Tooltip content="Каталог" position="bottom">
                         <button
                             onClick={goToCatalog}
                             className="p-1 text-fg-muted hover:text-accent transition-colors shrink-0"
                         >
-                            <CatalogIcon className="w-4 h-4" />
+                            <CatalogIcon className="w-6 h-6" />
                         </button>
                     </Tooltip>
                 </div>
@@ -142,7 +159,7 @@ export function Header() {
                                         : "border-border text-fg-muted hover:text-fg hover:bg-accent/20"
                                 )}
                             >
-                                <UsersIcon className="w-5 h-5" />
+                                <UsersIcon className="w-6 h-6" />
                             </button>
                         </Tooltip>
 
@@ -186,7 +203,6 @@ export function Header() {
                                 История
                             </ContextMenuItem>
 
-
                             {ARTIST_PLUS.has(user.role) && (
                                 <>
                                     <ContextMenuSeparator />
@@ -220,19 +236,5 @@ export function Header() {
                 )}
             </div>
         </header>
-    );
-}
-
-function NavItem({ to, children }: { to: string; children: React.ReactNode }) {
-    return (
-        <NavLink
-            to={to}
-            end={to === '/'}
-            className={({ isActive }) =>
-                cn('hover:text-fg transition-colors', isActive ? 'text-fg font-medium' : 'text-fg-muted')
-            }
-        >
-            {children}
-        </NavLink>
     );
 }

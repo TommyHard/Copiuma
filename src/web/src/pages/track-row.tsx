@@ -9,7 +9,7 @@ import { dislikeTrack, undoDislikeTrack } from '@/shared/api/dislikes';
 import { addTrack, listPlaylists, getPlaylistsContainingTrack } from '@/shared/api/playlists';
 import { Tooltip } from '@/shared/ui/Tooltip';
 import { useContextMenu, ContextMenuPortal, ContextMenuItem, ContextMenuSub, ContextMenuSeparator } from '@/shared/ui/ContextMenu';
-import { PlayIcon, HeartIcon, PlusIcon, DislikeIcon, SearchIcon, TrashIcon, CheckIcon } from '@/shared/ui/icons';
+import { PlayIcon, HeartIcon, PlusIcon, DislikeIcon, SearchIcon, TrashIcon, CheckIcon, MusicIcon } from '@/shared/ui/icons';
 import { cn } from '@/shared/lib/cn';
 
 export function TrackRow({
@@ -124,12 +124,12 @@ export function TrackRow({
                     {track.coverUrl ? (
                         <img src={track.coverUrl} alt="" className="w-full h-full object-cover" />
                     ) : (
-                        <span className="text-xs text-fg-muted">♪</span>
+                        <MusicIcon className="w-4 h-4 text-fg-muted" />
                     )}
                 </div>
 
                 <div className="flex flex-col min-w-0 flex-1 ml-2 justify-center">
-                    <Link to={`/tracks/${track.id}`} className="block truncate font-semibold text-sm hover:underline text-fg">
+                    <Link to={`/tracks/${track.id}`} className="block truncate font-semibold text-[18px] hover:underline text-fg">
                         {track.title}
                         {track.isExplicit && (
                             <span className="ml-2 rounded bg-fg/15 px-1.5 py-0.5 text-[9px] uppercase text-fg-muted align-middle">
@@ -138,7 +138,7 @@ export function TrackRow({
                         )}
                     </Link>
 
-                    <div className="truncate text-xs text-fg-muted mt-0.5">
+                    <div className="truncate text-[14px] text-fg-muted mt-0.5">
                         {track.artistId ? (
                             <Link to={`/artists/${track.artistId}`} className="hover:text-fg hover:underline" onClick={(e) => e.stopPropagation()}>
                                 {track.artist ?? 'Неизвестен'}

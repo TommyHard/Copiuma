@@ -373,14 +373,14 @@ public class FollowsController : ControllerBase
         {
             var url = a.CoverKey != null ? await _storage.GeneratePresignedImageGetUrlAsync(a.CoverKey) : null;
             albums.Add(new FeedItem(
-                "album", 
-                a.Id, 
-                a.Title, 
-                a.ArtistId, 
-                a.ArtistName, 
-                url, 
-                a.CreatedAt, 
-                null, 
+                "album",
+                a.Id,
+                a.Title,
+                a.ArtistId,
+                a.ArtistName,
+                url,
+                a.CreatedAt,
+                null,
                 false));
         }
 
@@ -403,7 +403,12 @@ public class FollowsController : ControllerBase
                 AlbumCoverKey = t.Album != null ? t.Album.CoverKey : null,
                 t.UploadedAt,
                 t.Duration,
-                IsLikedByMe = _db.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == me)
+                IsLikedByMe = _db.LikedTracks.Any(l => l.TrackId == t.Id && l.UserId == me),
+                FeaturedArtists = _db.TrackFeaturedArtists
+                    .Where(fa => fa.TrackId == t.Id)
+                    .OrderBy(fa => fa.Position)
+                    .Select(fa => new FeedFeaturedArtist(fa.Artist!.Id, fa.Artist.Name))
+                    .ToList()
             })
             .ToListAsync(ct);
 
@@ -412,7 +417,7 @@ public class FollowsController : ControllerBase
         {
             var key = t.CoverKey ?? t.AlbumCoverKey;
             var url = key != null ? await _storage.GeneratePresignedImageGetUrlAsync(key) : null;
-            tracks.Add(new FeedItem("track", t.Id, t.Title, t.ArtistId!.Value, t.ArtistName, url, t.UploadedAt, t.Duration, t.IsLikedByMe));
+            tracks.Add(new FeedItem("track", t.Id, t.Title, t.ArtistId!.Value, t.ArtistName, url, t.UploadedAt, t.Duration, t.IsLikedByMe, t.FeaturedArtists));
         }
 
         var merged = albums.Concat(tracks)

@@ -47,13 +47,21 @@ public class UsersController : ControllerBase
 
         if (parsed.Count == 0) return Ok(Array.Empty<object>());
 
-        var results = await _context.Users
+        var rows = await _context.Users
             .Where(u => parsed.Contains(u.Id))
-            .Select(u => (object)new UserSearchResult(
+            .Select(u => new
+            {
                 u.Id,
-                u.DisplayName ?? u.Email.Substring(0, u.Email.IndexOf("@"))
-            ))
+                Name = u.DisplayName ?? u.Email.Substring(0, u.Email.IndexOf("@")),
+                u.AvatarKey
+            })
             .ToListAsync(ct);
+
+        var results = rows.Select(u => (object)new UserSearchResult(
+            u.Id,
+            u.Name,
+            u.AvatarKey != null ? $"/images/{u.AvatarKey}" : null
+        )).ToList();
 
         return Ok(results);
     }
@@ -128,39 +136,46 @@ public class UsersController : ControllerBase
         var callerId = CallerId;
         bool looksLikeEmail = q.Contains('@');
 
-        IQueryable<object> query;
-
+        IQueryable<UserRow> rowsQuery;
         if (looksLikeEmail)
         {
             var emailNorm = q.ToLowerInvariant();
 
-            query = _context.Users
+            rowsQuery = _context.Users
                 .Where(u => u.Id != callerId
                          && u.EmailVerifiedAt != null
                          && u.Email.ToLower() == emailNorm)
                 .Take(MaxResults)
-                .Select(u => (object)new UserSearchResult(
+                .Select(u => new UserRow(
                     u.Id,
-                    u.DisplayName ?? u.Email.Substring(0, u.Email.IndexOf("@"))
+                    u.DisplayName ?? u.Email.Substring(0, u.Email.IndexOf("@")),
+                    u.AvatarKey
                 ));
         }
         else
         {
-            query = _context.Users
+            rowsQuery = _context.Users
                 .Where(u => u.Id != callerId
                          && u.DisplayName != null
                          && EF.Functions.ILike(u.DisplayName, $"%{q}%"))
                 .OrderBy(u => u.DisplayName)
                 .Take(MaxResults)
-                .Select(u => (object)new UserSearchResult(u.Id, u.DisplayName!));
+                .Select(u => new UserRow(u.Id, u.DisplayName!, u.AvatarKey));
         }
 
-        var results = await query.ToListAsync(ct);
+        var rows = await rowsQuery.ToListAsync(ct);
+        var results = rows.Select(r => new UserSearchResult(
+            r.Id,
+            r.DisplayName,
+            r.AvatarKey != null ? $"/images/{r.AvatarKey}" : null
+        )).ToList();
         return Ok(results);
     }
 }
 
-public record UserSearchResult(Guid Id, string DisplayName);
+internal record UserRow(Guid Id, string DisplayName, string? AvatarKey);
+
+public record UserSearchResult(Guid Id, string DisplayName, string? AvatarUrl);
 
 public record PublicUserProfile(
     Guid Id,

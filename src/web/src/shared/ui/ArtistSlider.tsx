@@ -49,10 +49,10 @@ export function ArtistSlider({ artists }: { artists: ArtistSummary[] }) {
                                 {!a.avatarUrl && a.name && <span>{a.name.charAt(0).toUpperCase()}</span>}
                             </div>
                             <div className="w-full text-left">
-                                <div className="font-semibold text-fg text-base truncate">
+                                <div className="font-semibold text-[18px] text-base truncate">
                                     {a.name}
                                 </div>
-                                <div className="text-sm text-fg-muted mt-0.5">Артист</div>
+                                <div className="text-[14px] text-fg-muted mt-0.5">Артист</div>
                             </div>
                         </Link>
                     </li>

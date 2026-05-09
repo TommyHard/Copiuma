@@ -41,7 +41,8 @@ public record AlbumResponse(
     IReadOnlyList<string> Genres,
     Guid CreatedByUserId,
     DateTime CreatedAt,
-    int TrackCount);
+    int TrackCount,
+    string? ArtistAvatarUrl = null);
 
 public record AlbumListItem(
     Guid Id,

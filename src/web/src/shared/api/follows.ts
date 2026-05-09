@@ -49,16 +49,24 @@ export async function listFollowedArtists(): Promise<FollowedArtist[]> {
 
 export async function getFeed(limit = 30): Promise<FeedItem[]> {
     const r = await api.get<any[]>('/follows/feed', { params: { limit } });
-    return r.data.map((item) => ({
-        trackId: item.trackId ?? item.entityId,
-        title: item.title,
-        artist: item.artist ?? item.artistName ?? null,
-        artistId: item.artistId ?? null,
-        uploadedAt: item.uploadedAt ?? item.releasedAt ?? '',
-        duration: item.duration ?? null,
-        isLikedByMe: item.isLikedByMe ?? item.IsLikedByMe ?? false,
-        coverUrl: item.coverUrl ?? item.CoverUrl ?? null,
-    }));
+    return r.data.map((item) => {
+        const featRaw = item.featuredArtists ?? item.FeaturedArtists ?? [];
+        return {
+            trackId: item.trackId ?? item.entityId ?? item.EntityId,
+            title: item.title ?? item.Title,
+            artist: item.artist ?? item.artistName ?? item.ArtistName ?? null,
+            artistId: item.artistId ?? item.ArtistId ?? null,
+            uploadedAt: item.uploadedAt ?? item.releasedAt ?? item.ReleasedAt ?? '',
+            duration: item.duration ?? item.Duration ?? null,
+            isLikedByMe: item.isLikedByMe ?? item.IsLikedByMe ?? false,
+            coverUrl: item.coverUrl ?? item.CoverUrl ?? null,
+            featuredArtists: Array.isArray(featRaw)
+                ? featRaw
+                    .map((f: any) => ({ id: f?.id ?? f?.Id, name: f?.name ?? f?.Name ?? '' }))
+                    .filter((f: { id?: string }) => !!f.id)
+                : [],
+        };
+    });
 }
 
 // User follows

@@ -97,7 +97,7 @@ const RepeatIcon = ({ state }: { state: 'off' | 'all' | 'one' }) => {
 const VolumeIcon = ({ volume }: { volume: number }) => {
     if (volume === 0) {
         return (
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M1, 11 L1, 13 Q 1, 14, 2, 14.5 L11, 19.5 Q 12, 20, 12, 18 L12, 6 Q 12, 4, 11, 4.5 L2, 9.5 Q 1, 10, 1, 11 Z" />
                 <path d="M15 10 L19 14 M19 10 L15 14" />
             </svg>
@@ -105,7 +105,7 @@ const VolumeIcon = ({ volume }: { volume: number }) => {
     }
     if (volume < 0.33) {
         return (
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M1, 11 L1, 13 Q 1, 14, 2, 14.5 L11, 19.5 Q 12, 20, 12, 18 L12, 6 Q 12, 4, 11, 4.5 L2, 9.5 Q 1, 10, 1, 11 Z" />
                 <path d="M14.6 10.5 A 3 3 0 0 1 14.6 13.5" />
             </svg>
@@ -113,7 +113,7 @@ const VolumeIcon = ({ volume }: { volume: number }) => {
     }
     if (volume < 0.66) {
         return (
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M1, 11 L1, 13 Q 1, 14, 2, 14.5 L11, 19.5 Q 12, 20, 12, 18 L12, 6 Q 12, 4, 11, 4.5 L2, 9.5 Q 1, 10, 1, 11 Z" />
                 <path d="M15 8 A 5 5 0 0 1 15 16" />
             </svg>
@@ -121,7 +121,7 @@ const VolumeIcon = ({ volume }: { volume: number }) => {
         );
     }
     return (
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M1, 11 L1, 13 Q 1, 14, 2, 14.5 L11, 19.5 Q 12, 20, 12, 18 L12, 6 Q 12, 4, 11, 4.5 L2, 9.5 Q 1, 10, 1, 11 Z" />
             <path d="M14.6 9 A 4 4 0 0 1 14.6 15" />
             <path d="M17.3 6 A 8 8 0 0 1 17.3 18" />

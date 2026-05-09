@@ -305,7 +305,7 @@ export function FavoritesPage() {
                     </span>
                     <h1 className="text-5xl md:text-8xl font-black text-white tracking-tight drop-shadow-lg">Избранное</h1>
                     <div className="flex items-center gap-1 mt-5 text-sm text-white font-medium">
-                        <div className="size-6 rounded-full bg-accent flex items-center justify-center shrink-0 overflow-hidden">
+                        <div className="size-7 rounded-full bg-accent flex items-center justify-center shrink-0 overflow-hidden">
                             {userAvatar ? <img src={userAvatar} className="size-full object-cover" alt="" /> : <span className="text-[10px]">{user?.displayName?.charAt(0)}</span>}
                         </div>
                         <Link to={`/users/${user?.id}`} className="text-1xl font-bold hover:underline">
@@ -329,7 +329,7 @@ export function FavoritesPage() {
                     <div className="flex items-center gap-4 justify-end ml-auto">
                         <Tooltip content="Поиск в плейлисте">
                             <div className={cn(
-                                "flex items-center gap-2 transition-all duration-300 border border-accent/0 hover:bg-accent/15 rounded-md px-3 py-1.5",
+                                "flex items-center gap-2 transition-all duration-300 hover:bg-accent/15 rounded px-3 py-1.5",
                                 isSearchExpanded ? "w-64" : "w-10 cursor-pointer justify-center"
                             )}
                                 onClick={() => !isSearchExpanded && setIsSearchExpanded(true)}
@@ -471,7 +471,7 @@ export function FavoritesPage() {
                                     )}
                                     style={{ gridTemplateColumns }}
                                 >
-                                    <div className="text-center text-fg-muted flex justify-center">
+                                    <div className="text-lg text-center text-fg-muted flex justify-center">
                                         <span className="group-hover:hidden tabular-nums">{i + 1}</span>
                                         <Tooltip content={`Играть ${f.title} от ${fullArtistText}`}>
                                             <button
@@ -495,11 +495,11 @@ export function FavoritesPage() {
                                         </div>
                                         <div className="flex flex-col min-w-0">
                                             <Tooltip content={f.title}>
-                                                <Link to={`/tracks/${f.id}`} className="truncate text-fg font-bold hover:underline">
+                                                <Link to={`/tracks/${f.id}`} className="truncate text-[18px] font-bold hover:underline">
                                                     <HighlightedText text={f.title} query={searchQuery} />
                                                 </Link>
                                             </Tooltip>
-                                            <div className="truncate text-xs text-fg-muted mt-0.5">
+                                            <div className="truncate text-[14px] text-fg-muted mt-0.5">
                                                 <Tooltip content={fullArtistText}>
                                                     <span>
                                                         <Link to={`/artists/${f.artistId}`} className="hover:text-fg hover:underline">

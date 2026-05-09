@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, type FormEvent } from 'react';
+import { useState, useRef, useEffect, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -15,15 +15,16 @@ import { usePlayer } from '@/features/player/store';
 import { NowPlayingFromBadge } from '@/features/player/NowPlayingBadge';
 import { useAuth } from '@/features/auth/useAuth';
 import { cn } from '@/shared/lib/cn';
-import type { AlbumSummary, TrackListItem } from '@/shared/types';
+import type { AlbumSummary } from '@/shared/types';
 import { useAlertStore } from '@/shared/store/alertStore';
 import { Tooltip } from '@/shared/ui/Tooltip';
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 import {
-    PlayIcon, ClockIcon, MusicIcon, CheckIcon,
-    TrashIcon, MoreHorizontalIcon, PencilIcon,
-    SettingsIcon, DownloadIcon, PlusIcon, UserIcon
+    PlayIcon, ClockIcon, MusicIcon,
+    TrashIcon, PencilIcon,
+    SettingsIcon, DownloadIcon
 } from '@/shared/ui/icons';
+import { UserAvatar } from '@/shared/ui/UserAvatar';
 
 export function AlbumPage() {
     const { id } = useParams();
@@ -45,9 +46,6 @@ export function AlbumPage() {
     const tableContainerRef = useRef<HTMLDivElement>(null);
 
     const [isSticky, setIsSticky] = useState(false);
-    const [colWidths, setColWidths] = useState([400, 180]);
-    const [activeResizer, setActiveResizer] = useState<number | null>(null);
-    const [isManuallyResized, setIsManuallyResized] = useState(false);
 
     const albumQ = useQuery({
         queryKey: ['album', id],
@@ -106,31 +104,6 @@ export function AlbumPage() {
         }
     };
 
-    const handleResizeMouseDown = (index: number, e: React.MouseEvent) => {
-        e.preventDefault();
-        setIsManuallyResized(true);
-        setActiveResizer(index);
-        const startX = e.clientX;
-        const startWidth = colWidths[index];
-        const onMouseMove = (moveEvent: MouseEvent) => {
-            const delta = moveEvent.clientX - startX;
-            setColWidths(prev => {
-                const newWidths = [...prev];
-                newWidths[index] = Math.max(150, startWidth + delta);
-                return newWidths;
-            });
-        };
-        const onMouseUp = () => {
-            setActiveResizer(null);
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-        };
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-    };
-
-    const gridTemplateColumns = `48px ${colWidths[0]}px minmax(120px, 1fr) 80px`;
-
     return (
         <article className="relative flex flex-col min-h-full pb-32">
             <input
@@ -172,20 +145,12 @@ export function AlbumPage() {
                         <div className="flex items-center gap-2 text-sm text-fg font-medium">
                             {a.artistId ? (
                                 <Link to={`/artists/${a.artistId}`} className="hover:underline font-bold flex items-center gap-2">
-                                    <div className="size-6 rounded-full bg-border flex items-center justify-center overflow-hidden shrink-0 border border-border/50">
-                                        {(a as any).artistAvatarUrl ? (
-                                            <img src={(a as any).artistAvatarUrl} alt="" className="size-full object-cover" />
-                                        ) : (
-                                            <UserIcon className="size-3.5 text-fg-muted" />
-                                        )}
-                                    </div>
+                                    <UserAvatar avatarUrl={a.artistAvatarUrl} displayName={a.artistName ?? 'Артист'} size={24} showIconFallback={!a.artistAvatarUrl && !a.artistName} />
                                     {a.artistName || 'Артист'}
                                 </Link>
                             ) : (
                                 <div className="flex items-center gap-2">
-                                    <div className="size-6 rounded-full bg-border flex items-center justify-center overflow-hidden shrink-0 border border-border/50">
-                                        <UserIcon className="size-3.5 text-fg-muted" />
-                                    </div>
+                                    <UserAvatar avatarUrl={null} displayName="Неизвестный артист" size={24} showIconFallback />
                                     <span>Неизвестный артист</span>
                                 </div>
                             )}
@@ -217,7 +182,7 @@ export function AlbumPage() {
             </div>
 
             {/* TOOLBAR */}
-            <div className="flex items-center gap-4 px-6 md:px-10 py-6 relative z-40 w-full">
+            <div className="flex items-center gap-4 px-6 md:px-10 py-6 relative z-20 w-full">
                 {tracks.length > 0 && (
                     <button
                         onClick={handlePlayAll}
@@ -303,23 +268,13 @@ export function AlbumPage() {
                     <div ref={sentinelRef} className="w-full h-px pointer-events-none -mb-px" />
                     <div
                         className={cn(
-                            "group sticky top-0 z-30 grid gap-4 px-4 py-2 border-b text-sm font-bold tracking-tight uppercase w-full transition-all duration-300 text-fg-muted",
+                            "sticky top-0 z-30 flex items-center gap-3 px-4 py-2 border-b text-sm font-bold tracking-tight uppercase w-full transition-all duration-300 text-fg-muted",
                             isSticky ? "bg-bg-elevated border-border shadow backdrop-blur" : "bg-transparent border-border/50"
                         )}
-                        style={{ gridTemplateColumns }}
                     >
-                        <div className="text-center">#</div>
-                        <div className="relative flex items-center">
-                            <span>Название</span>
-                            <div
-                                onMouseDown={(e) => handleResizeMouseDown(0, e)}
-                                className={cn("absolute -right-3 top-0 bottom-0 w-6 cursor-col-resize z-40 flex justify-center items-center transition-opacity opacity-0 group-hover:opacity-100", activeResizer === 0 && "opacity-100")}
-                            >
-                                <div className={cn("w-[2px] h-[60%] rounded bg-border hover:bg-accent", activeResizer === 0 && "bg-accent")} />
-                            </div>
-                        </div>
-                        <div>Альбом</div>
-                        <div className="flex justify-end pr-2"><ClockIcon className="size-4" /></div>
+                        <span className="w-12 text-center">#</span>
+                        <span className="flex-1">Название</span>
+                        <span className="w-10 text-right pr-2"><ClockIcon className="size-4 inline-block" /></span>
                     </div>
 
                     <div className="flex flex-col w-full mt-2">

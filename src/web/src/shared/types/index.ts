@@ -127,6 +127,7 @@ export interface AlbumSummary {
     title: string;
     artistId: string;
     artistName?: string | null;
+    artistAvatarUrl?: string | null;
     releasedAt?: string | null;       // YYYY-MM-DD (releaseDate)
     coverUrl?: string | null;
     trackCount?: number;
@@ -172,6 +173,7 @@ export interface FeedItem {
     duration: string | null;
     isLikedByMe?: boolean;
     coverUrl?: string | null;
+    featuredArtists?: FeaturedArtist[];
 }
 
 export interface FriendFeedItem {
