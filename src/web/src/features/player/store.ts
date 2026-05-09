@@ -108,6 +108,12 @@ export interface PlayerState {
     shuffleOrder: number[];
     repeat: RepeatMode;
 
+    /**
+     * Меняется при каждом playTrack/playQueue
+     * Трек надо перезапустить с нуля
+     */
+    playNonce: number;
+
     // sleep timer
     sleepTimer: SleepTimerState | null;
 
@@ -164,6 +170,7 @@ export const usePlayer = create<PlayerState>()(
             isShuffle: false,
             shuffleOrder: [],
             repeat: 'off',
+            playNonce: 0,
 
             sleepTimer: null,
 
@@ -172,30 +179,33 @@ export const usePlayer = create<PlayerState>()(
             seekRequest: null,
 
             playTrack(track, context) {
-                set({
+                set((s) => ({
                     queue: [track],
                     index: 0,
                     isPlaying: true,
                     position: 0,
                     duration: 0,
                     context: context ?? { type: 'track' },
-                    shuffleOrder: get().isShuffle ? [0] : [],
-                });
+                    shuffleOrder: s.isShuffle ? [0] : [],
+                    seekRequest: { value: 0, nonce: Date.now() },
+                    playNonce: s.playNonce + 1,
+                }));
             },
 
             playQueue(tracks, startIndex = 0, context) {
                 if (tracks.length === 0) return;
                 const safe = Math.max(0, Math.min(startIndex, tracks.length - 1));
-                const shuffleOrder = get().isShuffle ? buildShuffleOrder(tracks.length, safe) : [];
-                set({
+                set((s) => ({
                     queue: tracks,
                     index: safe,
                     isPlaying: true,
                     position: 0,
                     duration: 0,
                     context: context ?? { type: 'queue' },
-                    shuffleOrder,
-                });
+                    shuffleOrder: s.isShuffle ? buildShuffleOrder(tracks.length, safe) : [],
+                    seekRequest: { value: 0, nonce: Date.now() },
+                    playNonce: s.playNonce + 1,
+                }));
             },
 
             togglePlay() {
@@ -377,6 +387,7 @@ export const usePlayer = create<PlayerState>()(
                 repeat: state.repeat,
                 equalizer: state.equalizer,
                 context: state.context,
+                playNonce: state.playNonce,
             }),
             onRehydrateStorage: () => (state) => {
                 if (!state) return;

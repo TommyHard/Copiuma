@@ -66,14 +66,14 @@ export function UploadPage() {
 
     if (!me) {
         return (
-            <section className="mx-auto max-w-2xl space-y-4 rounded-md border border-border bg-bg-elevated p-6">
+            <section className="mx-auto max-w-2xl space-y-4 rounded-xl border border-border bg-bg-elevated p-8 shadow-sm mt-8">
                 <h1 className="text-2xl font-semibold">Нужен профиль артиста</h1>
                 <p className="text-sm text-fg-muted">
                     Загружать музыку можно только под своим артист-профилем. Создайте профиль, чтобы продолжить.
                 </p>
                 <Link
                     to="/artist/settings"
-                    className="inline-block rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:opacity-90"
+                    className="inline-block rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-fg hover:opacity-90 transition-opacity"
                 >
                     Создать профиль артиста
                 </Link>
@@ -84,24 +84,24 @@ export function UploadPage() {
     const genresList = (genresQ.data ?? []).map((g) => ({ slug: g.slug, displayName: g.displayName, id: g.id }));
 
     return (
-        <section className="mx-auto max-w-3xl space-y-6">
+        <section className="mx-auto max-w-3xl space-y-6 pt-8 pb-12">
             <header className="space-y-2">
-                <h1 className="text-2xl font-semibold">Загрузка музыки</h1>
+                <h1 className="text-2xl font-semibold tracking-tight">Загрузка музыки</h1>
                 <p className="text-sm text-fg-muted">
                     Один трек или целый альбом. Аудио - MP3/WAV/FLAC/OGG/AAC до 200&nbsp;МБ.
                     Обложки — JPEG/PNG/WEBP до 10&nbsp;МБ.
                 </p>
             </header>
 
-            <div className="inline-flex rounded-md border border-border bg-bg-elevated p-1">
+            <div className="inline-flex rounded-lg border border-border bg-bg-elevated p-1 shadow-sm">
                 <button
                     type="button"
                     onClick={() => setMode('track')}
                     className={cn(
-                        'rounded px-4 py-1.5 text-sm transition-colors',
+                        'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
                         mode === 'track'
-                            ? 'bg-accent text-accent-fg'
-                            : 'text-fg-muted hover:text-fg',
+                            ? 'bg-accent text-accent-fg shadow-sm'
+                            : 'text-fg-muted hover:text-fg hover:bg-bg/50',
                     )}
                 >
                     Один трек
@@ -110,10 +110,10 @@ export function UploadPage() {
                     type="button"
                     onClick={() => setMode('album')}
                     className={cn(
-                        'rounded px-4 py-1.5 text-sm transition-colors',
+                        'rounded-md px-4 py-1.5 text-sm font-medium transition-colors',
                         mode === 'album'
-                            ? 'bg-accent text-accent-fg'
-                            : 'text-fg-muted hover:text-fg',
+                            ? 'bg-accent text-accent-fg shadow-sm'
+                            : 'text-fg-muted hover:text-fg hover:bg-bg/50',
                     )}
                 >
                     Альбом
@@ -122,32 +122,34 @@ export function UploadPage() {
 
             <LockedArtistCard me={me} />
 
-            {mode === 'track' ? (
-                <SingleTrackForm
-                    artistId={me.id}
-                    genresList={genresList}
-                    navigate={navigate}
-                />
-            ) : (
-                <AlbumForm
-                    artistId={me.id}
-                    genresList={genresList}
-                    navigate={navigate}
-                />
-            )}
+            <div className="rounded-xl border border-border bg-bg-elevated p-6 shadow-sm">
+                {mode === 'track' ? (
+                    <SingleTrackForm
+                        artistId={me.id}
+                        genresList={genresList}
+                        navigate={navigate}
+                    />
+                ) : (
+                    <AlbumForm
+                        artistId={me.id}
+                        genresList={genresList}
+                        navigate={navigate}
+                    />
+                )}
+            </div>
         </section>
     );
 }
 
 function LockedArtistCard({ me }: { me: ArtistSummary }) {
     return (
-        <div className="rounded-md border border-border bg-bg-elevated/40 p-3">
-            <span className="mb-2 block text-xs uppercase tracking-wide text-fg-muted">
+        <div className="rounded-xl border border-border bg-bg p-4 shadow-sm">
+            <span className="mb-2 block text-xs font-semibold uppercase tracking-wider text-fg-muted">
                 Исполнитель
             </span>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
                 <div
-                    className="size-10 shrink-0 rounded-full bg-bg bg-cover bg-center"
+                    className="size-12 shrink-0 rounded-full bg-bg-elevated bg-cover bg-center ring-2 ring-border"
                     style={{ backgroundImage: me.avatarUrl ? `url(${me.avatarUrl})` : undefined }}
                     aria-hidden
                 />
@@ -155,13 +157,13 @@ function LockedArtistCard({ me }: { me: ArtistSummary }) {
                     <Link
                         to={`/artists/${me.id}`}
                         target="_blank"
-                        className="block truncate font-medium hover:underline"
+                        className="block truncate text-lg font-medium hover:underline"
                     >
                         {me.name}
                     </Link>
-                    <p className="text-xs text-fg-muted">
-                        Загрузка идёт под вашим профилем артиста. Добавить других артистов можно ниже.{' '}
-                        <Link to="/artist/settings" className="text-accent hover:underline">
+                    <p className="text-sm text-fg-muted mt-0.5">
+                        Загрузка идёт под вашим профилем артиста.{' '}
+                        <Link to="/artist/settings" className="text-accent hover:underline transition-colors">
                             Настроить профиль
                         </Link>
                     </p>
@@ -265,15 +267,15 @@ function SingleTrackForm({
 
     if (trackId) {
         return (
-            <section className="mx-auto max-w-md space-y-4 text-center">
+            <section className="mx-auto max-w-md space-y-4 text-center py-8">
                 <h2 className="text-xl font-semibold">Загружено</h2>
                 <p className="text-fg-muted">
-                    Трек ушёл в обработку. Статус: <span className="text-fg">{status ?? '...'}</span>.
+                    Трек ушёл в обработку. Статус: <span className="text-fg font-medium">{status ?? '...'}</span>.
                 </p>
                 {status === 'Ready' && (
                     <button
                         onClick={() => navigate(`/tracks/${trackId}`)}
-                        className="rounded-md bg-accent px-4 py-2 text-accent-fg hover:opacity-90"
+                        className="rounded-lg bg-accent px-4 py-2 text-accent-fg hover:opacity-90 shadow-sm transition-opacity"
                     >
                         Открыть страницу трека
                     </button>
@@ -289,7 +291,7 @@ function SingleTrackForm({
     }
 
     return (
-        <form onSubmit={onSubmit} className="space-y-5">
+        <form onSubmit={onSubmit} className="space-y-6">
             <FilePicker file={file} onPick={pickAudio} disabled={submitting} />
 
             <Field label="Название *">
@@ -304,14 +306,16 @@ function SingleTrackForm({
                 />
             </Field>
 
-            <CoverPicker
-                file={cover}
-                onPick={pickCover}
-                onClear={() => setCover(null)}
-                disabled={submitting}
-                label="Обложка трека (опционально)"
-                hint="Если не загружать — у трека не будет своей обложки."
-            />
+            <div className="rounded-xl border border-border bg-bg p-4">
+                <CoverPicker
+                    file={cover}
+                    onPick={pickCover}
+                    onClear={() => setCover(null)}
+                    disabled={submitting}
+                    label="Обложка трека (опционально)"
+                    hint="Если не загружать — у трека не будет своей обложки."
+                />
+            </div>
 
             <FeaturedArtistsField
                 ownArtistId={artistId}
@@ -336,9 +340,9 @@ function SingleTrackForm({
             <button
                 type="submit"
                 disabled={submitting || !file || !title.trim()}
-                className="rounded-md bg-accent px-4 py-2 font-medium text-accent-fg hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full sm:w-auto rounded-lg bg-accent px-6 py-2.5 font-medium text-accent-fg shadow-sm hover:opacity-90 transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
             >
-                {submitting ? 'Загружаем…' : 'Загрузить'}
+                {submitting ? 'Загружаем…' : 'Загрузить трек'}
             </button>
         </form>
     );
@@ -523,14 +527,14 @@ function AlbumForm({
 
     if (createdAlbumId && progressList.length > 0 && progressList.every((p) => p.state === 'done')) {
         return (
-            <section className="space-y-4 rounded-md border border-border bg-bg-elevated p-6 text-center">
+            <section className="space-y-4 rounded-xl border border-border bg-bg-elevated p-8 text-center shadow-sm">
                 <h2 className="text-xl font-semibold">Альбом загружен</h2>
                 <p className="text-fg-muted">
                     Все {progressList.length} треков ушли в обработку (HLS-транскод запустится автоматически).
                 </p>
                 <button
                     onClick={() => navigate(`/albums/${createdAlbumId}`)}
-                    className="rounded-md bg-accent px-4 py-2 text-accent-fg hover:opacity-90"
+                    className="rounded-lg bg-accent px-4 py-2 text-accent-fg hover:opacity-90 transition-opacity shadow-sm"
                 >
                     Открыть страницу альбома
                 </button>
@@ -539,9 +543,9 @@ function AlbumForm({
     }
 
     return (
-        <form onSubmit={onSubmit} className="space-y-6">
-            <fieldset className="space-y-4 rounded-md border border-border bg-bg-elevated/40 p-4">
-                <legend className="px-2 text-sm font-medium text-fg-muted">Альбом</legend>
+        <form onSubmit={onSubmit} className="space-y-8">
+            <fieldset className="space-y-5 rounded-xl border border-border bg-bg p-5 shadow-sm">
+                <legend className="px-2 text-sm font-semibold tracking-wide text-fg-muted uppercase">Настройки альбома</legend>
 
                 <Field label="Название альбома *">
                     <input
@@ -555,7 +559,7 @@ function AlbumForm({
                     />
                 </Field>
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                     <Field label="Дата релиза">
                         <input
                             type="date"
@@ -565,14 +569,16 @@ function AlbumForm({
                             className={inputClass}
                         />
                     </Field>
-                    <CoverPicker
-                        file={albumCover}
-                        onPick={pickAlbumCover}
-                        onClear={() => setAlbumCover(null)}
-                        disabled={submitting}
-                        label="Обложка альбома"
-                        hint="Будет наследоваться всеми треками без своей обложки."
-                    />
+                    <div className="rounded-xl border border-border bg-bg-elevated p-3">
+                        <CoverPicker
+                            file={albumCover}
+                            onPick={pickAlbumCover}
+                            onClear={() => setAlbumCover(null)}
+                            disabled={submitting}
+                            label="Обложка альбома"
+                            hint="Будет наследоваться всеми треками."
+                        />
+                    </div>
                 </div>
 
                 <GenresField
@@ -583,29 +589,29 @@ function AlbumForm({
                 />
             </fieldset>
 
-            <fieldset className="space-y-3 rounded-md border border-border bg-bg-elevated/40 p-4">
-                <legend className="px-2 text-sm font-medium text-fg-muted">
+            <fieldset className="space-y-4 rounded-xl border border-border bg-bg p-5 shadow-sm">
+                <legend className="px-2 text-sm font-semibold tracking-wide text-fg-muted uppercase">
                     Треки ({tracks.length})
                 </legend>
 
-                <ul className="space-y-3">
+                <ul className="space-y-4">
                     {tracks.map((t, i) => {
                         const progress = progressList.find((p) => p.id === t.id);
                         return (
-                            <li key={t.id} className="rounded-md border border-border bg-bg p-3">
-                                <div className="flex items-start gap-3">
-                                    <span className="mt-2 w-6 shrink-0 text-center text-sm text-fg-muted">{i + 1}</span>
-                                    <div className="min-w-0 flex-1 space-y-2">
-                                        <div className="flex items-center gap-2">
+                            <li key={t.id} className="rounded-xl border border-border bg-bg-elevated p-4 shadow-sm transition-all hover:border-accent/40">
+                                <div className="flex items-start gap-4">
+                                    <span className="mt-2.5 w-6 shrink-0 text-center text-sm font-medium text-fg-muted bg-bg rounded-md py-1">{i + 1}</span>
+                                    <div className="min-w-0 flex-1 space-y-3">
+                                        <div className="flex items-center gap-3">
                                             <input
                                                 type="file"
                                                 accept="audio/*"
                                                 onChange={(e) => pickTrackAudio(t.id, e.target.files?.[0] ?? null)}
                                                 disabled={submitting}
-                                                className="text-xs file:mr-2 file:rounded file:border file:border-border file:bg-bg-elevated file:px-2 file:py-1 file:text-fg file:hover:bg-bg"
+                                                className="text-xs file:mr-3 file:rounded-lg file:border file:border-border file:bg-bg file:px-3 file:py-1.5 file:text-fg file:font-medium file:transition-colors file:hover:bg-accent/10"
                                             />
                                             {t.file && (
-                                                <span className="truncate text-xs text-fg-muted">
+                                                <span className="truncate text-xs font-medium text-accent">
                                                     {(t.file.size / 1024 / 1024).toFixed(1)} МБ
                                                 </span>
                                             )}
@@ -619,11 +625,11 @@ function AlbumForm({
                                             value={t.title}
                                             onChange={(e) => updateTrack(t.id, { title: e.target.value })}
                                             disabled={submitting}
-                                            className={cn(inputClass, 'py-1.5 text-sm')}
+                                            className={cn(inputClass, 'py-2 text-sm')}
                                         />
 
-                                        <div className="flex flex-wrap items-center gap-3">
-                                            <label className="flex cursor-pointer items-center gap-1.5 text-xs">
+                                        <div className="flex flex-wrap items-center gap-4 bg-bg rounded-lg p-2 border border-border">
+                                            <label className="flex cursor-pointer items-center gap-2 text-xs">
                                                 <input
                                                     type="checkbox"
                                                     checked={!t.cover}
@@ -631,8 +637,9 @@ function AlbumForm({
                                                         if (e.target.checked) pickTrackCover(t.id, null);
                                                     }}
                                                     disabled={submitting}
+                                                    className="rounded border-border bg-bg-elevated text-accent focus:ring-accent"
                                                 />
-                                                <span className="text-fg-muted">Наследовать обложку альбома</span>
+                                                <span className="text-fg">Обложка альбома</span>
                                             </label>
                                             {!t.cover && (
                                                 <span className="text-xs text-fg-muted">— или —</span>
@@ -642,16 +649,16 @@ function AlbumForm({
                                                 accept="image/*"
                                                 onChange={(e) => pickTrackCover(t.id, e.target.files?.[0] ?? null)}
                                                 disabled={submitting}
-                                                className="text-xs file:mr-2 file:rounded file:border file:border-border file:bg-bg-elevated file:px-2 file:py-1 file:text-fg file:hover:bg-bg"
+                                                className="text-xs file:mr-3 file:rounded-lg file:border file:border-border file:bg-bg-elevated file:px-3 file:py-1 file:text-fg file:hover:bg-accent/10 transition-colors"
                                             />
                                             {t.cover && (
-                                                <span className="inline-flex items-center gap-1 text-xs text-fg">
-                                                    своя обложка: {t.cover.name}
+                                                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-fg bg-bg-elevated px-2 py-1 rounded-md border border-border">
+                                                    {t.cover.name}
                                                     <button
                                                         type="button"
                                                         onClick={() => pickTrackCover(t.id, null)}
                                                         disabled={submitting}
-                                                        className="text-fg-muted hover:text-danger"
+                                                        className="text-fg-muted hover:text-danger ml-1"
                                                     >
                                                         ×
                                                     </button>
@@ -669,15 +676,15 @@ function AlbumForm({
                                         />
 
                                         {progress && progress.state !== 'pending' && (
-                                            <div className="space-y-1">
+                                            <div className="space-y-1 pt-2">
                                                 {progress.state === 'uploading' && (
                                                     <ProgressBar percent={progress.percent} label={`Загрузка — ${progress.percent}%`} />
                                                 )}
                                                 {progress.state === 'done' && (
-                                                    <p className="text-xs text-accent">✓ Загружен, ID: {progress.trackId?.slice(0, 8)}…</p>
+                                                    <p className="text-xs font-medium text-success">✓ Загружен, ID: {progress.trackId?.slice(0, 8)}…</p>
                                                 )}
                                                 {progress.state === 'error' && (
-                                                    <p className="text-xs text-danger">✗ {progress.error}</p>
+                                                    <p className="text-xs font-medium text-danger">✗ {progress.error}</p>
                                                 )}
                                             </div>
                                         )}
@@ -687,7 +694,7 @@ function AlbumForm({
                                         onClick={() => removeTrack(t.id)}
                                         disabled={submitting || tracks.length <= 1}
                                         title="Удалить трек из списка"
-                                        className="text-fg-muted hover:text-danger disabled:opacity-30"
+                                        className="p-1.5 rounded-md text-fg-muted hover:bg-danger/10 hover:text-danger disabled:opacity-30 transition-colors"
                                     >
                                         ×
                                     </button>
@@ -701,18 +708,18 @@ function AlbumForm({
                     type="button"
                     onClick={addTrack}
                     disabled={submitting}
-                    className="rounded-md border border-dashed border-border px-3 py-1.5 text-sm text-fg-muted hover:border-accent/50 hover:text-fg disabled:opacity-50"
+                    className="w-full rounded-xl border-2 border-dashed border-border px-4 py-3 text-sm font-medium text-fg-muted hover:border-accent hover:text-accent disabled:opacity-50 transition-colors bg-bg"
                 >
-                    + Добавить трек
+                    + Добавить еще трек
                 </button>
             </fieldset>
 
-            {error && <p className="text-sm text-danger">{error}</p>}
+            {error && <p className="text-sm font-medium text-danger bg-danger/10 p-3 rounded-lg border border-danger/20">{error}</p>}
 
             <button
                 type="submit"
                 disabled={submitting || !!canSubmit()}
-                className="rounded-md bg-accent px-4 py-2 font-medium text-accent-fg hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full sm:w-auto rounded-lg bg-accent px-6 py-3 font-medium text-accent-fg shadow-sm hover:opacity-90 transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
             >
                 {submitting ? 'Загружаем альбом…' : `Загрузить альбом (${tracks.length} тр.)`}
             </button>
@@ -764,19 +771,19 @@ function FeaturedArtistsField({
         .filter((a) => !featuredArtists.some((x) => x.id === a.id));  // не уже добавленных
 
     return (
-        <div className={compact ? 'space-y-1' : ''}>
-            <span className={cn('block text-fg-muted', compact ? 'mb-1 text-xs' : 'mb-1 text-sm')}>
+        <div className={compact ? 'space-y-2' : 'space-y-3'}>
+            <span className={cn('block font-medium text-fg-muted', compact ? 'text-xs' : 'text-sm')}>
                 Доп. исполнители (feat.)
             </span>
 
             {featuredArtists.length > 0 && (
-                <div className={cn('flex flex-wrap gap-1.5', compact ? 'mb-1' : 'mb-2')}>
+                <div className="flex flex-wrap gap-2">
                     {featuredArtists.map((a) => (
                         <span
                             key={a.id}
                             className={cn(
-                                'inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent/10 text-accent',
-                                compact ? 'px-2 py-0.5 text-[10px]' : 'px-3 py-1 text-xs',
+                                'inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent/10 text-accent font-medium',
+                                compact ? 'px-2 py-1 text-[11px]' : 'px-3 py-1.5 text-xs',
                             )}
                         >
                             {a.name}
@@ -784,7 +791,7 @@ function FeaturedArtistsField({
                                 type="button"
                                 onClick={() => setFeaturedArtists(featuredArtists.filter((x) => x.id !== a.id))}
                                 disabled={disabled}
-                                className="ml-0.5 text-fg-muted hover:text-danger"
+                                className="text-fg-muted hover:text-danger transition-colors"
                                 aria-label={`Убрать ${a.name}`}
                             >
                                 ×
@@ -801,27 +808,27 @@ function FeaturedArtistsField({
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder={compact ? 'Поиск feat.-артиста…' : 'Поиск артистов в каталоге…'}
                     disabled={disabled}
-                    className={cn(inputClass, compact && 'py-1 text-xs')}
+                    className={cn(inputClass, compact && 'py-1.5 text-xs')}
                 />
                 {searching && <p className="mt-1 text-xs text-fg-muted">Поиск…</p>}
                 {query.trim().length >= 2 && !searching && visible.length === 0 && (
-                    <p className="mt-1 text-xs text-fg-muted">
+                    <p className="mt-1.5 text-xs text-fg-muted bg-bg p-2 rounded-md border border-border">
                         Никого не нашли. Featured-исполнители должны иметь свой профиль артиста в каталоге.
                     </p>
                 )}
                 {visible.length > 0 && (
-                    <ul className="absolute z-10 mt-1 w-full rounded-md border border-border bg-bg-elevated shadow-lg">
+                    <ul className="absolute z-20 mt-1 w-full rounded-lg border border-border bg-bg-elevated shadow-lg overflow-hidden">
                         {visible.map((a) => (
-                            <li key={a.id} className="flex items-center justify-between gap-3 px-3 py-2 hover:bg-bg">
-                                <div className="flex min-w-0 items-center gap-2">
+                            <li key={a.id} className="flex items-center justify-between gap-3 px-3 py-2.5 hover:bg-bg transition-colors">
+                                <div className="flex min-w-0 items-center gap-3">
                                     {a.avatarUrl && (
                                         <img
                                             src={a.avatarUrl}
                                             alt=""
-                                            className="size-6 shrink-0 rounded-full object-cover"
+                                            className="size-7 shrink-0 rounded-full object-cover ring-1 ring-border"
                                         />
                                     )}
-                                    <span className="truncate text-sm">{a.name}</span>
+                                    <span className="truncate text-sm font-medium">{a.name}</span>
                                 </div>
                                 <button
                                     type="button"
@@ -830,7 +837,7 @@ function FeaturedArtistsField({
                                         setQuery('');
                                         setResults([]);
                                     }}
-                                    className="rounded-md bg-accent px-2 py-1 text-xs text-accent-fg hover:opacity-90"
+                                    className="rounded-md bg-accent/10 text-accent px-3 py-1 text-xs font-medium hover:bg-accent hover:text-accent-fg transition-colors"
                                 >
                                     Добавить
                                 </button>
@@ -856,7 +863,7 @@ function GenresField({
 }) {
     return (
         <div>
-            <span className="mb-2 block text-sm text-fg-muted">Жанры</span>
+            <span className="mb-2 block text-sm font-medium text-fg-muted">Жанры</span>
             <div className="flex flex-wrap gap-2">
                 {genresList.map((g) => {
                     const selected = genres.includes(g.slug);
@@ -867,10 +874,10 @@ function GenresField({
                             onClick={() => toggleGenre(g.slug)}
                             disabled={disabled}
                             className={cn(
-                                'rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-50',
+                                'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50',
                                 selected
-                                    ? 'border-accent bg-accent/15 text-accent'
-                                    : 'border-border text-fg-muted hover:border-accent/50 hover:text-fg',
+                                    ? 'border-accent bg-accent text-accent-fg shadow-sm'
+                                    : 'border-border bg-bg text-fg hover:border-accent/50',
                             )}
                         >
                             {g.displayName}
@@ -879,7 +886,7 @@ function GenresField({
                 })}
             </div>
             {genres.length > 0 && (
-                <p className="mt-2 text-xs text-fg-muted">Выбрано: {genres.join(', ')}</p>
+                <p className="mt-3 text-xs font-medium text-fg-muted">Выбрано: <span className="text-fg">{genres.join(', ')}</span></p>
             )}
         </div>
     );
@@ -896,32 +903,37 @@ function FilePicker({
 }) {
     const inputRef = useRef<HTMLInputElement>(null);
     return (
-        <div className="rounded-md border border-dashed border-border bg-bg-elevated p-6 text-center">
+        <div className="rounded-xl border-2 border-dashed border-border bg-bg p-8 text-center transition-colors hover:border-accent/50">
             {file ? (
-                <div className="space-y-2 text-sm">
-                    <p className="font-medium">{file.name}</p>
-                    <p className="text-fg-muted">
+                <div className="space-y-3 text-sm">
+                    <p className="font-medium text-lg text-fg">{file.name}</p>
+                    <p className="text-fg-muted bg-bg-elevated inline-block px-3 py-1 rounded-md border border-border">
                         {file.type || 'unknown'} • {(file.size / 1024 / 1024).toFixed(1)} МБ
                     </p>
-                    <button
-                        type="button"
-                        onClick={() => onPick(null)}
-                        disabled={disabled}
-                        className="text-xs text-fg-muted underline hover:text-fg disabled:opacity-50"
-                    >
-                        Заменить файл
-                    </button>
+                    <div>
+                        <button
+                            type="button"
+                            onClick={() => onPick(null)}
+                            disabled={disabled}
+                            className="mt-2 text-sm font-medium text-fg-muted underline hover:text-accent transition-colors disabled:opacity-50"
+                        >
+                            Заменить файл
+                        </button>
+                    </div>
                 </div>
             ) : (
                 <>
-                    <p className="text-sm text-fg-muted">Перетащи файл сюда или</p>
+                    <div className="mx-auto size-12 bg-bg-elevated rounded-full flex items-center justify-center mb-3">
+                        <span className="text-xl text-fg-muted">+</span>
+                    </div>
+                    <p className="text-sm font-medium text-fg-muted mb-4">Перетащи аудиофайл сюда или</p>
                     <button
                         type="button"
                         onClick={() => inputRef.current?.click()}
                         disabled={disabled}
-                        className="mt-2 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-bg disabled:opacity-50"
+                        className="rounded-lg border border-border bg-bg-elevated px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-fg hover:border-accent transition-colors disabled:opacity-50"
                     >
-                        Выбрать
+                        Выбрать файл
                     </button>
                 </>
             )}
@@ -959,32 +971,32 @@ function CoverPicker({
 
     return (
         <div className="space-y-2">
-            <span className="block text-sm text-fg-muted">{label}</span>
-            <div className="flex items-center gap-3">
+            <span className="block text-sm font-medium text-fg-muted">{label}</span>
+            <div className="flex items-center gap-4">
                 <button
                     type="button"
                     onClick={() => inputRef.current?.click()}
                     disabled={disabled}
-                    className="size-20 shrink-0 rounded-md border border-dashed border-border bg-bg-elevated bg-cover bg-center disabled:opacity-50"
+                    className="size-24 shrink-0 rounded-xl border border-dashed border-border bg-bg bg-cover bg-center transition-colors hover:border-accent disabled:opacity-50 flex items-center justify-center overflow-hidden"
                     style={{ backgroundImage: previewUrl ? `url(${previewUrl})` : undefined }}
                 >
-                    {!previewUrl && <span className="text-xs text-fg-muted">+ обложка</span>}
+                    {!previewUrl && <span className="text-xs font-medium text-fg-muted text-center leading-tight px-2">+ Загрузить</span>}
                 </button>
-                <div className="text-xs text-fg-muted">
+                <div className="text-sm">
                     {file ? (
-                        <>
-                            <p className="text-fg">{file.name}</p>
+                        <div className="space-y-1">
+                            <p className="text-fg font-medium line-clamp-1">{file.name}</p>
                             <button
                                 type="button"
                                 onClick={onClear}
                                 disabled={disabled}
-                                className="text-fg-muted underline hover:text-danger disabled:opacity-50"
+                                className="text-xs font-medium text-danger hover:underline disabled:opacity-50"
                             >
-                                убрать
+                                Удалить обложку
                             </button>
-                        </>
+                        </div>
                     ) : (
-                        hint
+                        <span className="text-xs text-fg-muted block max-w-[200px]">{hint}</span>
                     )}
                 </div>
                 <input
@@ -1001,14 +1013,14 @@ function CoverPicker({
 
 function ProgressBar({ percent, label }: { percent: number; label?: string }) {
     return (
-        <div className="space-y-1">
-            <div className="h-2 w-full overflow-hidden rounded bg-bg-elevated">
+        <div className="space-y-1.5 pt-2">
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-bg border border-border">
                 <div
-                    className="h-full bg-accent transition-[width]"
+                    className="h-full bg-accent transition-[width] duration-300 ease-out"
                     style={{ width: `${percent}%` }}
                 />
             </div>
-            {label && <p className="text-xs text-fg-muted">{label}</p>}
+            {label && <p className="text-xs font-medium text-fg-muted text-right">{label}</p>}
         </div>
     );
 }
@@ -1016,12 +1028,11 @@ function ProgressBar({ percent, label }: { percent: number; label?: string }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
     return (
         <label className="block">
-            <span className="mb-1 block text-sm text-fg-muted">{label}</span>
+            <span className="mb-1.5 block text-sm font-medium text-fg-muted">{label}</span>
             {children}
         </label>
     );
 }
 
 const inputClass =
-    'w-full rounded-md border border-border bg-bg-elevated px-3 py-2 text-fg outline-none ' +
-    'focus:border-accent focus:ring-1 focus:ring-accent disabled:opacity-50';
+    'w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-fg outline-none transition-colors focus:border-accent focus:ring-1 focus:ring-accent disabled:opacity-50';

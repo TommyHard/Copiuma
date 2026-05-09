@@ -2,11 +2,9 @@ import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-q
 import { toggleLike } from '@/shared/api/tracks';
 import type { FavoriteItem, FriendFeedItem, TrackListItem } from '@/shared/types';
 
-/**
- * Префиксы query-ключей, в данных которых может встречаться трек с полем isLikedByMe
- */
 const TRACK_LIST_QUERY_PREFIXES: readonly (readonly unknown[])[] = [
     ['catalog'],
+    ['catalog-infinite'],
     ['popular'],
     ['for-you'],
     ['similar'],
@@ -17,6 +15,10 @@ const TRACK_LIST_QUERY_PREFIXES: readonly (readonly unknown[])[] = [
     ['album-tracks'],
     ['playlist'],
     ['search'],
+    ['search-tracks'],
+    ['search-albums'],
+    ['search-users'],
+    ['search-artists'],
     ['history-tracks'],
     ['history-tracks-infinite'],
     ['history-raw'],
@@ -35,9 +37,6 @@ type AnyTrackList =
     | { tracks?: unknown[];[k: string]: unknown }
     | unknown;
 
-/**
- * Применяем нужное значение isLikedByMe ко всем кэшам, где попадается trackId
- */
 function patchLikedInCaches(
     qc: QueryClient,
     trackId: string,
@@ -52,16 +51,6 @@ function patchLikedInCaches(
     }
 }
 
-/**
- * Возвращает { value, changed }
- *
- * Поддерживаем формы:
- *  - TrackListItem[] (catalog/popular/for-you/similar/artist-tracks/)
- *  - FavoriteItem[]: либо удаляем (если становится unliked), либо ничего (favorites не имеет isLikedByMe)
- *  - FriendFeedItem[] — правим item.track.isLikedByMe
- *  - SearchResults { tracks, albums, artists }
- *  - TrackDetail (одиночный объект с id)
- */
 function matchAndPatch(
     data: unknown,
     trackId: string,
@@ -95,13 +84,11 @@ function matchAndPatch(
                 return null;
             }
 
-            // Обычный TrackListItem (HistoryRaw, HistoryTracks, Catalog и т.д.)
             if (obj.id === trackId && obj.isLikedByMe !== nextValue) {
                 changed = true;
                 return { ...obj, isLikedByMe: nextValue };
             }
 
-            // PlaylistTrack и HistoryTrackItem
             if (obj.trackId === trackId && obj.isLikedByMe !== nextValue) {
                 changed = true;
                 return { ...obj, isLikedByMe: nextValue };
@@ -141,11 +128,6 @@ function matchAndPatch(
     return { value: data, changed: false };
 }
 
-/**
- * Хук для кнопки "В избранное". Делает апдейт
- * по всем кэшам (heart мгновенно обновляется на всех страницах,
- * где встречается тот же track) + инвалидирует списки
- */
 export function useToggleTrackLike() {
     const qc = useQueryClient();
 

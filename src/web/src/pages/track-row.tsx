@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { TrackListItem } from '@/shared/types';
 import { usePlayTrack } from '@/features/player/usePlayTrack';
-import { usePlayer } from '@/features/player/store';
+import { usePlayer, type PlaybackContext } from '@/features/player/store';
 import { useToggleTrackLike } from '@/features/track/useToggleTrackLike';
 import { dislikeTrack, undoDislikeTrack } from '@/shared/api/dislikes';
 import { addTrack, listPlaylists, getPlaylistsContainingTrack } from '@/shared/api/playlists';
@@ -12,7 +12,23 @@ import { useContextMenu, ContextMenuPortal, ContextMenuItem, ContextMenuSub, Con
 import { PlayIcon, HeartIcon, PlusIcon, DislikeIcon, SearchIcon, TrashIcon, CheckIcon } from '@/shared/ui/icons';
 import { cn } from '@/shared/lib/cn';
 
-export function TrackRow({ track, number, onPlay, onRemoveFromQueue }: { track: TrackListItem; number?: number; onPlay?: () => void; onRemoveFromQueue?: () => void; }) {
+export function TrackRow({
+    track,
+    number,
+    onPlay,
+    onRemoveFromQueue,
+    playList,
+    playListContext,
+    playListIndex,
+}: {
+    track: TrackListItem;
+    number?: number;
+    onPlay?: () => void;
+    onRemoveFromQueue?: () => void;
+    playList?: TrackListItem[];
+    playListContext?: PlaybackContext;
+    playListIndex?: number;
+}) {
     const play = usePlayTrack();
     const qc = useQueryClient();
     const like = useToggleTrackLike();
@@ -78,7 +94,19 @@ export function TrackRow({ track, number, onPlay, onRemoveFromQueue }: { track: 
             >
                 <Tooltip position="top" content={isDisliked ? "Трек скрыт" : "Играть"}>
                     <button
-                        onClick={() => onPlay ? onPlay() : play(track)}
+                        onClick={() => {
+                            if (onPlay) return onPlay();
+                            if (playList && playList.length > 0) {
+                                const idx = playListIndex ?? playList.findIndex((t) => t.id === track.id);
+                                play(track, {
+                                    queue: playList,
+                                    startIndex: idx >= 0 ? idx : 0,
+                                    context: playListContext,
+                                });
+                                return;
+                            }
+                            play(track);
+                        }}
                         disabled={isDisliked}
                         className="relative flex items-center justify-center size-8 shrink-0 text-fg-muted hover:text-fg transition-colors disabled:opacity-50"
                     >

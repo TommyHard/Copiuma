@@ -16,9 +16,11 @@ import {
     SettingsIcon,
     LogOutIcon,
     SearchIcon,
-    CatalogIcon
+    CatalogIcon,
+    ArtistSettingsIcon
 } from '@/shared/ui/icons';
 import { NotificationsBell } from '@/features/notifications/NotificationsBell';
+import { getMyArtist } from '@/shared/api/artists';
 
 const ARTIST_PLUS = new Set(['Artist', 'Moderator', 'Admin', 1, 2, 3]);
 
@@ -47,7 +49,15 @@ export function Header() {
         enabled: !!user?.id,
         staleTime: 5 * 60 * 1000,
     });
-    const avatarUrl = user?.avatarUrl ?? profileQ.data?.avatarUrl ?? null;
+    const avatarUrl = profileQ.data?.avatarUrl ?? null;
+
+    const myArtistQ = useQuery({
+        queryKey: ['my-artist', user?.id],
+        queryFn: getMyArtist,
+        enabled: !!user?.id && ARTIST_PLUS.has(user.role),
+        staleTime: 5 * 60 * 1000,
+    });
+    const artistId = myArtistQ.data?.id;
 
     const handleSearchEnter = () => {
         if (!searchValue.trim()) return;
@@ -176,10 +186,24 @@ export function Header() {
                                 История
                             </ContextMenuItem>
 
+
                             {ARTIST_PLUS.has(user.role) && (
-                                <ContextMenuItem icon={<UploadIcon />} onClick={() => handleMenuClick('/upload')}>
-                                    Загрузить
-                                </ContextMenuItem>
+                                <>
+                                    <ContextMenuSeparator />
+
+                                    {artistId && (
+                                        <ContextMenuItem icon={<UserIcon />} onClick={() => handleMenuClick(`/artists/${artistId}`)}>
+                                            Профиль артиста
+                                        </ContextMenuItem>
+                                    )}
+
+                                    <ContextMenuItem icon={<ArtistSettingsIcon />} onClick={() => handleMenuClick('/artist/settings')}>
+                                        Настройки артиста
+                                    </ContextMenuItem>
+                                    <ContextMenuItem icon={<UploadIcon />} onClick={() => handleMenuClick('/upload')}>
+                                        Загрузить
+                                    </ContextMenuItem>
+                                </>
                             )}
 
                             <ContextMenuSeparator />

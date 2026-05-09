@@ -10,6 +10,8 @@ interface UIState {
     isResizingLeft: boolean;
     isResizingRight: boolean;
 
+    isLyricsOpen: boolean;
+
     setLeftOpen: (open: boolean) => void;
     setLeftWidth: (width: number) => void;
     setRightOpen: (open: boolean) => void;
@@ -18,6 +20,9 @@ interface UIState {
 
     setIsResizingLeft: (b: boolean) => void;
     setIsResizingRight: (b: boolean) => void;
+
+    setLyricsOpen: (open: boolean) => void;
+    toggleLyricsOpen: () => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -37,4 +42,8 @@ export const useUIStore = create<UIState>((set) => ({
     isResizingRight: false,
     setIsResizingLeft: (b) => set({ isResizingLeft: b }),
     setIsResizingRight: (b) => set({ isResizingRight: b }),
+
+    isLyricsOpen: false,
+    setLyricsOpen: (open) => set({ isLyricsOpen: open }),
+    toggleLyricsOpen: () => set((s) => ({ isLyricsOpen: !s.isLyricsOpen })),
 }));

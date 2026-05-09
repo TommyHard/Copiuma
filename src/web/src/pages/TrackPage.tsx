@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getTrack, getTrackStatus } from '@/shared/api/catalog';
 import { deleteTrack, deleteTrackCover, uploadTrackCover } from '@/shared/api/tracks';
+import { setLyrics, deleteLyrics, getLyrics } from '@/shared/api/lyrics';
 import { useToggleTrackLike } from '@/features/track/useToggleTrackLike';
 import { dislikeTrack } from '@/shared/api/dislikes';
 import { similarTracks } from '@/shared/api/recommendations';
@@ -14,17 +15,19 @@ import { TrackRow } from './track-row';
 import { useAuth } from '@/features/auth/useAuth';
 import { StarRating } from '@/features/ratings/StarRating';
 import { Reviews } from '@/features/reviews/Reviews';
-import { ReportButton } from '@/features/reports/ReportButton';
+import { ReportButton, ReportButtonRef } from '@/features/reports/ReportButton';
 import { TrackEditDialog } from '@/features/track/TrackEditDialog';
 import { useToggleOfflineForTrack } from './OfflinePage';
 import { useAverageColor } from '@/shared/hooks/useAverageColor';
 import { Tooltip } from '@/shared/ui/Tooltip';
 import {
     MusicIcon, PlayIcon, HeartIcon, DislikeIcon,
-    DownloadIcon, CheckIcon, TrashIcon, RefreshIcon
+    CheckIcon, TrashIcon, RefreshIcon, SettingsIcon, DownloadIcon,
+    FlagIcon,
+    LyricsIcon,
+    PencilIcon
 } from '@/shared/ui/icons';
 import { cn } from '@/shared/lib/cn';
-import { useContextMenu, ContextMenuPortal, ContextMenuItem } from '@/shared/ui/ContextMenu';
 
 export function TrackPage() {
     const { id } = useParams();
@@ -33,12 +36,39 @@ export function TrackPage() {
     const play = usePlayTrack();
     const { user } = useAuth();
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const lyricsInputRef = useRef<HTMLInputElement>(null);
+
+    const reportRef = useRef<ReportButtonRef>(null);
 
     const [editOpen, setEditOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
+    const [deleteLyricsOpen, setDeleteLyricsOpen] = useState(false);
+    const [deleteCoverOpen, setDeleteCoverOpen] = useState(false);
+
+    const [menuOpen, setMenuOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+    const menuBtnRef = useRef<HTMLButtonElement>(null);
+
+    useEffect(() => {
+        if (!menuOpen) return;
+        const handler = (e: MouseEvent) => {
+            const target = e.target as Node;
+            if (menuRef.current?.contains(target) || menuBtnRef.current?.contains(target)) return;
+            setMenuOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [menuOpen]);
+
+    const lyricsQ = useQuery({
+        queryKey: ['lyrics', id],
+        queryFn: () => getLyrics(id!),
+        enabled: !!id,
+        staleTime: 60_000,
+    });
+    const hasLyrics = !!lyricsQ.data;
     const [scrollY, setScrollY] = useState(0);
     const pageRef = useRef<HTMLDivElement>(null);
-    const { isOpen, position, onContextMenu, close } = useContextMenu();
 
     const trackQ = useQuery({
         queryKey: ['track', id],
@@ -142,6 +172,25 @@ export function TrackPage() {
                 }}
             />
 
+            <input
+                type="file"
+                ref={lyricsInputRef}
+                className="hidden"
+                accept=".lrc,.txt,text/plain"
+                onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    if (file.size > 64 * 1024) {
+                        alert('Файл слишком большой (макс. 64KB).');
+                        return;
+                    }
+                    const text = await file.text();
+                    await setLyrics(t.id, text);
+                    qc.invalidateQueries({ queryKey: ['lyrics', id] });
+                    e.target.value = '';
+                }}
+            />
+
             {/* STICKY HEADER */}
             <div className="sticky top-0 z-50 w-full h-0 pointer-events-none">
                 <div
@@ -188,10 +237,7 @@ export function TrackPage() {
                 )}
 
                 <div className="absolute bottom-20 left-6 md:left-12 right-6 flex flex-col md:flex-row items-end gap-8 z-10">
-                    <div
-                        onContextMenu={isOwner ? onContextMenu : undefined}
-                        className="shrink-0 shadow-2xl rounded-lg overflow-hidden bg-bg-elevated cursor-context-menu"
-                    >
+                    <div className="shrink-0 shadow-2xl rounded-lg overflow-hidden bg-bg-elevated">
                         <div className="size-48 md:size-64 relative group">
                             {t.coverUrl ? (
                                 <img src={t.coverUrl} alt={t.title} className="h-full w-full object-cover" />
@@ -331,54 +377,128 @@ export function TrackPage() {
                         </button>
                     </Tooltip>
 
-                    <Tooltip content={offline.cached ? "Удалить из офлайна" : "Сохранить в офлайн"} position="top">
-                        <button
-                            onClick={() => offline.cached ? offline.remove() : offline.add()}
-                            disabled={offline.busy || !ready}
-                            className={cn(
-                                "h-14 px-6 rounded-md font-bold transition-all flex items-center gap-2",
-                                offline.cached ? "bg-accent text-white hover:bg-accent/90" : "bg-bg-elevated text-fg hover:bg-fg/10"
-                            )}
-                        >
-                            {offline.busy ? <RefreshIcon className="size-5 animate-spin" /> : offline.cached ? <CheckIcon className="size-5" /> : <DownloadIcon className="size-5" />}
-                            {offline.busy ? 'Загрузка...' : offline.cached ? 'Офлайн' : 'Офлайн'}
-                        </button>
-                    </Tooltip>
-
                     <div className="flex-1" />
 
-                    {isOwner ? (
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => setEditOpen(true)}
-                                className="h-10 px-6 rounded bg-accent tracking-tight font-bold hover:scale-105 active:scale-95 transition-all"
-                            >
-                                Редактировать
-                            </button>
-                            <button
-                                onClick={() => setDeleteOpen(true)}
-                                disabled={remove.isPending}
-                                className="h-10 px-4 rounded bg-danger tracking-tight font-bold hover:bg-danger/60 transition-colors flex items-center gap-2"
-                            >
-                                <TrashIcon className="size-4" /> Удалить
-                            </button>
+                    <div className="flex items-center gap-2">
+
+                        {/* SETTINGS MENU */}
+                        <div className="relative">
+                            <Tooltip content="Опции" position="top">
+                                <button
+                                    ref={menuBtnRef}
+                                    onClick={() => setMenuOpen(!menuOpen)}
+                                    className="size-14 flex items-center justify-center rounded transition-all text-fg hover:bg-accent/20"
+                                >
+                                    <SettingsIcon className="w-7 h-7" />
+                                </button>
+                            </Tooltip>
+
+                            {menuOpen && (
+                                <div
+                                    ref={menuRef}
+                                    className="absolute top-full right-0 mt-2 z-[9999] w-64 rounded-md border border-border bg-bg-elevated shadow-xl p-1 animate-in fade-in zoom-in-95"
+                                >
+                                    <button
+                                        onClick={() => { offline.cached ? offline.remove() : offline.add(); setMenuOpen(false); }}
+                                        disabled={offline.busy || !ready}
+                                        className="w-full text-left px-3 py-2 text-sm hover:bg-fg/10 rounded flex items-center gap-2 text-fg disabled:opacity-50"
+                                    >
+                                        {offline.cached ? <CheckIcon className="size-4" /> : <DownloadIcon className="size-4" />}
+                                        {offline.cached ? 'Удалить из офлайна' : 'Сохранить в офлайн'}
+                                    </button>
+
+                                    <div className="h-px bg-border my-1" />
+
+                                    {!isOwner && (
+                                        <>
+                                            <button
+                                                onClick={() => { dislike.mutate(); setMenuOpen(false); }}
+                                                disabled={dislike.isPending || dislike.isSuccess}
+                                                className={cn(
+                                                    "w-full text-left px-3 py-2 text-sm hover:bg-fg/10 rounded flex items-center gap-2 text-fg transition-colors",
+                                                    dislike.isSuccess && "opacity-50 line-through"
+                                                )}
+                                            >
+                                                <DislikeIcon className="size-4" /> Не интересно
+                                            </button>
+
+                                            <button
+                                                onClick={() => {
+                                                    setMenuOpen(false);
+                                                    reportRef.current?.open();
+                                                }}
+                                                className="w-full text-left px-3 py-2 text-sm hover:bg-danger/10 text-danger rounded flex items-center gap-2 transition-colors"
+                                            >
+                                                <FlagIcon className="size-4" /> Пожаловаться
+                                            </button>
+                                        </>
+                                    )}
+
+                                    {isOwner && (
+                                        <>
+                                            <button
+                                                onClick={() => { fileInputRef.current?.click(); setMenuOpen(false); }}
+                                                className="w-full text-left px-3 py-2 text-sm hover:bg-fg/10 rounded flex items-center gap-2 text-fg"
+                                            >
+                                                {t.hasOwnCover ? <DownloadIcon className="size-4" /> : <DownloadIcon className="size-4 rotate-180" />}
+                                                {t.hasOwnCover ? 'Заменить обложку' : 'Загрузить обложку'}
+                                            </button>
+                                            {t.hasOwnCover && (
+                                                <button
+                                                    onClick={() => {
+                                                        setMenuOpen(false);
+                                                        setDeleteCoverOpen(true);
+                                                    }}
+                                                    className="w-full text-left px-3 py-2 text-sm hover:bg-danger/10 text-danger rounded flex items-center gap-2"
+                                                >
+                                                    Убрать обложку
+                                                </button>
+                                            )}
+
+                                            <div className="h-px bg-border my-1" />
+
+                                            <button
+                                                onClick={() => { lyricsInputRef.current?.click(); setMenuOpen(false); }}
+                                                className="w-full text-left px-3 py-2 text-sm hover:bg-fg/10 rounded flex items-center gap-2 text-fg"
+                                            >
+                                                <LyricsIcon className="size-4"/> {hasLyrics ? 'Заменить .lrc-файл' : 'Загрузить .lrc-файл'}
+                                            </button>
+                                            {hasLyrics && (
+                                                <button
+                                                    onClick={() => {
+                                                        setMenuOpen(false);
+                                                        setDeleteLyricsOpen(true);
+                                                    }}
+                                                    className="w-full text-left px-3 py-2 text-sm hover:bg-danger/10 text-danger rounded flex items-center gap-2"
+                                                >
+                                                    <TrashIcon className="size-4" /> Удалить текст песни
+                                                </button>
+                                            )}
+
+                                            <div className="h-px bg-border my-1" />
+
+                                            <button
+                                                onClick={() => { setEditOpen(true); setMenuOpen(false); }}
+                                                className="w-full text-left px-3 py-2 text-sm hover:bg-fg/10 rounded flex items-center gap-2 text-fg"
+                                            >
+                                                <PencilIcon/> Редактировать
+                                            </button>
+                                            <button
+                                                onClick={() => { setDeleteOpen(true); setMenuOpen(false); }}
+                                                disabled={remove.isPending}
+                                                className="w-full text-left px-3 py-2 text-sm hover:bg-danger/10 text-danger rounded flex items-center gap-2 disabled:opacity-50"
+                                            >
+                                                <TrashIcon className="size-4" /> Удалить трек
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            )}
                         </div>
-                    ) : (
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => dislike.mutate()}
-                                disabled={dislike.isPending || dislike.isSuccess}
-                                className={cn(
-                                    "h-10 px-6 rounded bg-accent font-bold tracking-tight hover:scale-105 active:scale-95 transition-all flex items-center gap-2",
-                                    dislike.isSuccess ? "opacity-50 line-through" : "hover:border-black/40"
-                                )}
-                            >
-                                <DislikeIcon className="size-4" /> Не интересно
-                            </button>
-                            <ReportButton targetType="Track" targetId={t.id} />
-                        </div>
-                    )}
+                    </div>
                 </div>
+
+                <ReportButton ref={reportRef} targetType="Track" targetId={t.id} />
 
                 <div className="grid grid-cols-1 gap-16">
                     <div className="space-y-16">
@@ -413,8 +533,14 @@ export function TrackPage() {
                         <h2 className="text-3xl font-black tracking-tight">Похожие треки</h2>
                         {similarQ.data && similarQ.data.length > 0 ? (
                             <div className="rounded border border-border bg-bg-elevated/20 backdrop-blur-sm overflow-hidden">
-                                {similarQ.data.map((s) => (
-                                    <TrackRow key={s.id} track={s} />
+                                {similarQ.data.map((s, i) => (
+                                    <TrackRow
+                                        key={s.id}
+                                        track={s}
+                                        playList={similarQ.data!}
+                                        playListIndex={i}
+                                        playListContext={{ type: 'queue' }}
+                                    />
                                 ))}
                             </div>
                         ) : (
@@ -425,32 +551,6 @@ export function TrackPage() {
             </div>
 
             {isOwner && (
-                <ContextMenuPortal isOpen={isOpen} position={position}>
-                    <ContextMenuItem
-                        icon={<DownloadIcon className="size-4" />}
-                        onClick={() => fileInputRef.current?.click()}
-                    >
-                        Загрузить обложку
-                    </ContextMenuItem>
-                    {t.hasOwnCover && (
-                        <ContextMenuItem
-                            danger
-                            icon={<TrashIcon className="size-4" />}
-                            onClick={async () => {
-                                if (confirm('Удалить собственную обложку?')) {
-                                    await deleteTrackCover(t.id);
-                                    qc.invalidateQueries({ queryKey: ['track', id] });
-                                    close();
-                                }
-                            }}
-                        >
-                            Убрать обложку
-                        </ContextMenuItem>
-                    )}
-                </ContextMenuPortal>
-            )}
-
-            {isOwner && (
                 <TrackEditDialog
                     open={editOpen}
                     track={t}
@@ -459,35 +559,69 @@ export function TrackPage() {
             )}
 
             {isOwner && (
-                <ConfirmDeleteDialog
+                <ConfirmDialog
                     open={deleteOpen}
+                    title="Удалить трек?"
+                    description="Вы уверены, что хотите безвозвратно удалить этот трек? Это действие нельзя отменить."
                     onClose={() => setDeleteOpen(false)}
                     onConfirm={() => remove.mutate()}
                     isPending={remove.isPending}
+                />
+            )}
+
+            {isOwner && (
+                <ConfirmDialog
+                    open={deleteCoverOpen}
+                    title="Удалить обложку?"
+                    description="Вы уверены, что хотите удалить собственную обложку?"
+                    onClose={() => setDeleteCoverOpen(false)}
+                    onConfirm={async () => {
+                        await deleteTrackCover(t.id);
+                        qc.invalidateQueries({ queryKey: ['track', id] });
+                        setDeleteCoverOpen(false);
+                    }}
+                />
+            )}
+
+            {isOwner && (
+                <ConfirmDialog
+                    open={deleteLyricsOpen}
+                    title="Удалить текст песни?"
+                    description="Вы уверены, что хотите удалить текст этой песни?"
+                    onClose={() => setDeleteLyricsOpen(false)}
+                    onConfirm={async () => {
+                        await deleteLyrics(t.id);
+                        qc.invalidateQueries({ queryKey: ['lyrics', id] });
+                        setDeleteLyricsOpen(false);
+                    }}
                 />
             )}
         </div>
     );
 }
 
-function ConfirmDeleteDialog({
+function ConfirmDialog({
     open,
+    title,
+    description,
     onClose,
     onConfirm,
     isPending
 }: {
     open: boolean;
+    title: string;
+    description: string;
     onClose: () => void;
     onConfirm: () => void;
-    isPending: boolean;
+    isPending?: boolean;
 }) {
     if (!open) return null;
 
     return createPortal(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
             <div className="bg-bg-elevated border border-border rounded-xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-4">
-                <h2 className="text-xl font-bold text-fg">Удалить трек?</h2>
-                <p className="text-fg-muted">Вы уверены, что хотите безвозвратно удалить этот трек? Это действие нельзя отменить.</p>
+                <h2 className="text-xl font-bold text-fg">{title}</h2>
+                <p className="text-fg-muted">{description}</p>
 
                 <div className="flex justify-end gap-3 mt-4">
                     <button

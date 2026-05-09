@@ -10,6 +10,7 @@ import { ResizeHandle } from './ResizeHandle';
 import { useUIStore } from '@/shared/store/uiStore';
 import * as ScrollArea from '@radix-ui/react-scroll-area';
 import { AlertDialog } from '@/shared/ui/AlertDialog';
+import { LyricsView } from '@/features/lyrics/LyricsView';
 
 export function AppLayout() {
     useNotificationHub();
@@ -17,7 +18,8 @@ export function AppLayout() {
     const {
         isLeftOpen, setLeftOpen, leftWidth, setLeftWidth,
         isRightOpen, setRightOpen, rightWidth, setRightWidth,
-        setIsResizingLeft, setIsResizingRight
+        setIsResizingLeft, setIsResizingRight,
+        isLyricsOpen,
     } = useUIStore();
 
     const COLLAPSE_THRESHOLD = 100;
@@ -84,6 +86,9 @@ export function AppLayout() {
                             <ScrollArea.Thumb className="flex-1 bg-border rounded-md relative before:content-[''] before:absolute before:top-1/2 before:left-1/2 before:-translate-x-1/2 before:-translate-y-1/2 before:w-full before:h-full before:min-w-[44px] before:min-h-[44px]" />
                         </ScrollArea.Scrollbar>
                     </ScrollArea.Root>
+
+                    {/* Lyrics поверх центральной секции */}
+                    {isLyricsOpen && <LyricsView />}
                 </main>
 
                 {isRightOpen && (

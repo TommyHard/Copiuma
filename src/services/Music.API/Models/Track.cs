@@ -48,6 +48,13 @@ public class Track
     /// </summary>
     public string? CoverKey { get; set; }
 
+    /// <summary>
+    /// LRC-текст песни с тайм-кодами. Формат: построчно "[mm:ss.xxx] текст"
+    /// null = текст не загружен.
+    /// Хранится прямо в БД
+    /// </summary>
+    public string? Lyrics { get; set; }
+
     public List<string> Genres { get; set; } = new();
 
     public List<TrackGenre> TrackGenres { get; set; } = new();

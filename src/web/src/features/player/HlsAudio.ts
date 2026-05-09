@@ -4,16 +4,33 @@ import { tokenStore } from '@/shared/lib/tokenStore';
 export class HlsAudio {
     private hls: Hls | null = null;
     private audio: HTMLAudioElement;
+    private loadId = 0;
 
     constructor(audio: HTMLAudioElement) {
         this.audio = audio;
     }
 
-    load(masterUrl: string) {
+    /**
+     * Загружает HLS-источник и вызывает onReady, когда поток уже подключён к <audio>
+     */
+    load(masterUrl: string, onReady?: () => void) {
+        const myId = ++this.loadId;
         this.detach();
 
+        const fireReady = () => {
+            if (myId !== this.loadId) return;
+            onReady?.();
+        };
+
         if (!Hls.isSupported()) {
-            this.audio.src = masterUrl;
+            const audio = this.audio;
+            const onMeta = () => {
+                audio.removeEventListener('loadedmetadata', onMeta);
+                fireReady();
+            };
+            audio.addEventListener('loadedmetadata', onMeta, { once: true });
+            audio.src = masterUrl;
+            audio.load();
             return;
         }
 
@@ -25,6 +42,10 @@ export class HlsAudio {
             lowLatencyMode: false,
             maxBufferLength: 30,
             maxMaxBufferLength: 60,
+        });
+
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            fireReady();
         });
 
         hls.on(Hls.Events.ERROR, (_event, data) => {

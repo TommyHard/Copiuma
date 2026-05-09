@@ -7,16 +7,23 @@ import { blockArtist, unblockArtist } from '@/shared/api/blocks';
 import type { AlbumSummary, TrackListItem } from '@/shared/types';
 import { TrackRow } from './track-row';
 import { FollowArtistButton } from '@/features/follows/FollowArtistButton';
-import { ReportButton } from '@/features/reports/ReportButton';
+import { ReportButton, ReportButtonRef } from '@/features/reports/ReportButton';
 import { useAverageColor } from '@/shared/hooks/useAverageColor';
-import { MusicIcon } from '@/shared/ui/icons';
+import { DislikeIcon, FlagIcon, MusicIcon, SettingsIcon } from '@/shared/ui/icons';
 import { NowPlayingFromBadge } from '@/features/player/NowPlayingBadge';
 import { cn } from '@/shared/lib/cn';
+import { Tooltip } from '@/shared/ui/Tooltip';
 
 export function ArtistPage() {
     const { id } = useParams<{ id: string }>();
     const [scrollY, setScrollY] = useState(0);
     const pageRef = useRef<HTMLDivElement>(null);
+
+    const [menuOpen, setMenuOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+    const menuBtnRef = useRef<HTMLButtonElement>(null);
+
+    const reportRef = useRef<ReportButtonRef>(null);
 
     const { user } = useAuth();
     const qc = useQueryClient();
@@ -46,15 +53,23 @@ export function ArtistPage() {
         const scrollContainer = document.getElementById('main-scroll-container');
         if (!scrollContainer) return;
 
-        const handleScroll = () => {
-            setScrollY(scrollContainer.scrollTop);
-        };
-
+        const handleScroll = () => setScrollY(scrollContainer.scrollTop);
         handleScroll();
 
         scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
         return () => scrollContainer.removeEventListener('scroll', handleScroll);
     }, []);
+
+    useEffect(() => {
+        if (!menuOpen) return;
+        const handler = (e: MouseEvent) => {
+            const target = e.target as Node;
+            if (menuRef.current?.contains(target) || menuBtnRef.current?.contains(target)) return;
+            setMenuOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [menuOpen]);
 
     const isBlocked = artist?.isBlockedByMe ?? false;
     const toggleBlock = useMutation({
@@ -70,19 +85,15 @@ export function ArtistPage() {
     if (artistQ.isError || !artist) return <div className="p-8 text-danger">Исполнитель не найден.</div>;
 
     const isOwner = !!user && !!artist && (artist.ownerUserId === user.id || artist.createdByUserId === user.id);
-
     const gradientBaseColor = (bannerColor || 'var(--accent-color, rgba(0, 0, 0, 0))');
 
     const BANNER_HEIGHT = 450;
-
     const bannerScale = Math.max(1, 1.1 - (scrollY / BANNER_HEIGHT) * 0.7);
     const colorOverlayOpacity = Math.min(1, (scrollY / BANNER_HEIGHT) * 3);
-
     const isStickyVisible = scrollY > BANNER_HEIGHT;
 
     return (
         <div ref={pageRef} className="relative flex flex-col min-h-full pb-32">
-
             {/* STICKY HEADER */}
             <div className="sticky top-0 z-50 w-full h-0 pointer-events-none">
                 <div
@@ -100,7 +111,6 @@ export function ArtistPage() {
 
             {/* BANNER */}
             <div className="relative h-[450px] w-full shrink-0 overflow-hidden bg-bg border-b border-black">
-
                 <div
                     className={cn(
                         "absolute inset-0 origin-center transition-all duration-700",
@@ -113,7 +123,6 @@ export function ArtistPage() {
                         backgroundPosition: 'center',
                     }}
                 />
-
                 <div
                     className="absolute inset-0 transition-colors duration-500"
                     style={{
@@ -121,11 +130,8 @@ export function ArtistPage() {
                         opacity: colorOverlayOpacity
                     }}
                 />
-
                 <div className="absolute md:bottom-7 md:left-5 text-left z-10 pointer-events-none">
-                    <h1 className={cn(
-                        "text-6xl md:text-8xl font-black tracking-wide text-white drop-shadow-2xl transition-colors"
-                    )}>
+                    <h1 className={cn("text-6xl md:text-8xl font-black tracking-wide text-white drop-shadow-2xl transition-colors")}>
                         {artist.name}
                     </h1>
                     <div className="mt-5 mx-2 text-white/80 drop-shadow-md text-[1.1rem] flex items-center gap-3 pointer-events-auto">
@@ -150,9 +156,7 @@ export function ArtistPage() {
                 }}
             />
 
-            <div className="px-6 md:px-12 pt-6 relative z-10 space-y-16">
-
-                {/* ПРЕДУПРЕЖДЕНИЕ О БЛОКИРОВКЕ */}
+            <div className="px-6 md:px-12 pt-10 relative z-10 space-y-16">
                 {isBlocked && (
                     <div className="bg-danger/10 border border-danger/30 rounded p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div>
@@ -169,27 +173,53 @@ export function ArtistPage() {
                             <FollowArtistButton
                                 artistId={artist.id}
                                 disabled={isBlocked}
-                                className={cn(
-                                    "h-10 px-6 rounded-md font-bold text-white shadow-sm transition-colors",
-                                    isBlocked ? "cursor-not-allowed opacity-50" : "bg-accent hover:bg-accent/90"
-                                )}
+                                className={cn(isBlocked && "cursor-not-allowed opacity-50")}
                             />
 
-                            {/* КНОПКА БЛОКИРОВКИ */}
-                            <button
-                                onClick={() => toggleBlock.mutate()}
-                                disabled={toggleBlock.isPending}
-                                className={cn(
-                                    "h-10 rounded px-4 font-medium text-sm text-white transition-all disabled:opacity-50",
-                                    isBlocked
-                                        ? "text-danger bg-danger/100 hover:bg-danger/20"
-                                        : "bg-danger hover:bg-bg-elevated text-fg-muted hover:text-danger"
-                                )}
-                            >
-                                {toggleBlock.isPending ? 'Загрузка...' : (isBlocked ? 'Разблокировать' : 'Заблокировать')}
-                            </button>
+                            <div className="flex-1" />
 
-                            <ReportButton targetType="User" targetId={artist.id} />
+                            {/* SETTINGS MENU */}
+                            <div className="relative">
+                                <Tooltip content="Опции" position="top">
+                                    <button
+                                        ref={menuBtnRef}
+                                        onClick={() => setMenuOpen(!menuOpen)}
+                                        className="size-14 flex items-center justify-center rounded transition-all text-fg hover:bg-accent/20"
+                                    >
+                                        <SettingsIcon className="w-7 h-7" />
+                                    </button>
+                                </Tooltip>
+
+                                {menuOpen && (
+                                    <div
+                                        ref={menuRef}
+                                        className="absolute top-full right-0 mt-2 z-[9999] w-64 rounded-md border border-border bg-bg-elevated shadow-xl p-1 animate-in fade-in zoom-in-95"
+                                    >
+                                        <button
+                                            onClick={() => { toggleBlock.mutate(); setMenuOpen(false); }}
+                                            disabled={toggleBlock.isPending}
+                                            className={cn(
+                                                "w-full text-left px-3 py-2 text-sm rounded flex items-center gap-2 transition-colors disabled:opacity-50",
+                                                isBlocked ? "hover:bg-fg/10 text-fg" : "hover:bg-danger/10 text-danger"
+                                            )}
+                                        >
+                                            <DislikeIcon className="size-4" /> {toggleBlock.isPending ? 'Ожидание...' : (isBlocked ? 'Разблокировать' : 'Заблокировать')}
+                                        </button>
+
+                                        <div className="h-px bg-border my-1" />
+
+                                        <button
+                                            onClick={() => {
+                                                setMenuOpen(false);
+                                                reportRef.current?.open();
+                                            }}
+                                            className="w-full text-left px-3 py-2 text-sm hover:bg-danger/10 text-danger rounded flex items-center gap-2 transition-colors"
+                                        >
+                                            <FlagIcon className="size-4" /> Пожаловаться
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
 
@@ -199,11 +229,7 @@ export function ArtistPage() {
                         <div className="flex items-center gap-4 w-max">
                             <div className="size-24 rounded-full overflow-hidden shrink-0">
                                 {artist.avatarUrl ? (
-                                    <img
-                                        src={artist.avatarUrl}
-                                        alt={artist.name}
-                                        className={cn("h-full w-full object-cover", isBlocked && "grayscale")}
-                                    />
+                                    <img src={artist.avatarUrl} alt={artist.name} className={cn("h-full w-full object-cover", isBlocked && "grayscale")} />
                                 ) : (
                                     <div className="flex h-full w-full items-center justify-center text-accent/50 bg-bg-elevated">
                                         <MusicIcon className="size-8" />
@@ -211,18 +237,15 @@ export function ArtistPage() {
                                 )}
                             </div>
                             <div className="flex flex-col justify-center">
-                                <span className="text-base font-bold text-fg leading-tight">
-                                    {artist.trackCount || 0} треков
-                                </span>
-                                <span className="text-sm text-fg-muted font-medium">
-                                    От {artist.name}
-                                </span>
+                                <span className="text-base font-bold text-fg leading-tight">{artist.trackCount || 0} треков</span>
+                                <span className="text-sm text-fg-muted font-medium">От {artist.name}</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Если артист заблокирован - low opacity */}
+                <ReportButton ref={reportRef} targetType="User" targetId={artist.id} />
+
                 <div className={cn("space-y-16 transition-opacity duration-500", isBlocked && "opacity-40 pointer-events-none grayscale")}>
                     <section className="space-y-6">
                         <h2 className="text-2xl font-bold tracking-tight">Популярные треки</h2>
@@ -233,7 +256,6 @@ export function ArtistPage() {
                         </div>
                     </section>
 
-                    {/* Дискография */}
                     <section className="space-y-4">
                         <h2 className="text-2xl font-bold tracking-tight">Дискография</h2>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -255,7 +277,7 @@ export function ArtistPage() {
                                     <div>
                                         <h3 className="truncate font-black text-lg text-fg group-hover:text-white transition-colors">{album.title}</h3>
                                         <p className="text-sm text-fg-muted font-medium group-hover:text-white/80 transition-colors">
-                                            {album.releasedAt ? new Date(album.releasedAt).getFullYear() + ' ' + '•' : ''} Альбом
+                                            {album.releasedAt ? new Date(album.releasedAt).getFullYear() + ' • ' : ''} Альбом
                                         </p>
                                     </div>
                                 </Link>
@@ -263,7 +285,6 @@ export function ArtistPage() {
                         </div>
                     </section>
 
-                    {/* Об артисте */}
                     <section className="space-y-6">
                         <h2 className="text-2xl font-bold tracking-tight">Об артисте</h2>
                         <div className="overflow-hidden rounded-lg border border-border shadow-2xl transition-transform duration-700 ease-in-out hover:scale-[1.05] cursor-default">
@@ -277,8 +298,7 @@ export function ArtistPage() {
                                     }}
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-r from-bg via-bg/20 to-transparent" />
-
-                                <div className="relative p-10 md:p-10 flex flex-col items-start text-left w-full md:w-3/4 z-10">
+                                <div className="relative p-10 flex flex-col items-start text-left w-full md:w-3/4 z-10">
                                     <div className="text-xl md:text-1xl font-bold tracking-tight drop-shadow-md">
                                         {artist.followers?.toLocaleString() || 0} слушателей
                                     </div>

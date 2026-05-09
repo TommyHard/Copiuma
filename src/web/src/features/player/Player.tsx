@@ -12,6 +12,7 @@ import { getTrackStatus } from '@/shared/api/catalog';
 import { cn } from '@/shared/lib/cn';
 import { SleepTimerButton } from './SleepTimerButton';
 import { EqualizerButton } from './EqualizerButton';
+import { LyricsButton } from './LyricsButton';
 import { ensureEqualizerGraph, applyEqualizer } from './equalizerAudio';
 
 interface PlaySession {
@@ -359,11 +360,15 @@ export function Player() {
         return () => clearTimeout(t);
     }, [sleepTimer?.mode, sleepTimer?.deadlineMs]);
 
+    const playNonce = usePlayer((s) => s.playNonce);
+    const sourceReadyRef = useRef(false);
+
     useEffect(() => {
         if (!audioRef.current) return;
         if (!hlsRef.current) hlsRef.current = new HlsAudio(audioRef.current);
 
         let cancelled = false;
+        sourceReadyRef.current = false;
 
         const prepareHls = async () => {
             if (!track) {
@@ -374,12 +379,22 @@ export function Player() {
                 const st = await getTrackStatus(track.id);
                 if (cancelled) return;
 
-                if (st.status === 'Ready') {
-                    hlsRef.current?.load(hlsMasterUrl(track.id));
-                } else {
+                if (st.status !== 'Ready') {
                     console.warn("Трек не готов, пропускаем...");
                     next();
+                    return;
                 }
+
+                hlsRef.current?.load(hlsMasterUrl(track.id), () => {
+                    if (cancelled) return;
+                    sourceReadyRef.current = true;
+
+                    if (usePlayer.getState().isPlaying && audioRef.current) {
+                        audioRef.current.play().catch(() => {
+                            usePlayer.setState({ isPlaying: false });
+                        });
+                    }
+                });
             } catch (e) {
                 if (cancelled) return;
                 console.error("Ошибка загрузки трека (404), пропускаем...", e);
@@ -390,8 +405,10 @@ export function Player() {
         prepareHls();
 
         return () => { cancelled = true; };
-    }, [track?.id]);
+    }, [track?.id, playNonce]);
 
+    // Реакция на toggle play/pause БЕЗ смены трека
+    // Если источник ещё не готов — не трогаем audio.play()
     useEffect(() => {
         const a = audioRef.current;
         if (!a || !track) return;
@@ -401,29 +418,23 @@ export function Player() {
             return;
         }
 
-        const tryPlay = () => {
-            void a.play().catch(() => {
-                const onCanPlay = () => {
-                    a.removeEventListener('canplay', onCanPlay);
-                    void a.play().catch(() => {
-                        usePlayer.setState({ isPlaying: false });
-                    });
-                };
-                a.addEventListener('canplay', onCanPlay, { once: true });
-            });
-        };
+        if (!sourceReadyRef.current) return;
 
         if (a.readyState >= 2) {
-            tryPlay();
+            void a.play().catch(() => {
+                usePlayer.setState({ isPlaying: false });
+            });
         } else {
             const onCanPlay = () => {
                 a.removeEventListener('canplay', onCanPlay);
-                tryPlay();
+                void a.play().catch(() => {
+                    usePlayer.setState({ isPlaying: false });
+                });
             };
             a.addEventListener('canplay', onCanPlay, { once: true });
             return () => a.removeEventListener('canplay', onCanPlay);
         }
-    }, [isPlaying, track?.id]);
+    }, [isPlaying]);
 
     useEffect(() => {
         const a = audioRef.current;
@@ -431,6 +442,62 @@ export function Player() {
         a.volume = volume;
         a.muted = muted;
     }, [volume, muted]);
+
+    // Media Session API: показывает название/исполнителя/обложку в панели мультимедиа ОС/браузера
+    useEffect(() => {
+        if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+        const ms = navigator.mediaSession;
+        if (!track) {
+            ms.metadata = null;
+            return;
+        }
+        try {
+            const featNames = (track.featuredArtists ?? []).map((fa: any) => fa.name).filter(Boolean).join(', ');
+            const artistText = [track.artist ?? 'Неизвестный исполнитель', featNames && `feat. ${featNames}`].filter(Boolean).join(' ');
+            const artwork = track.coverUrl
+                ? [
+                    { src: track.coverUrl, sizes: '96x96', type: 'image/jpeg' },
+                    { src: track.coverUrl, sizes: '256x256', type: 'image/jpeg' },
+                    { src: track.coverUrl, sizes: '512x512', type: 'image/jpeg' },
+                ]
+                : [];
+            ms.metadata = new MediaMetadata({
+                title: track.title || 'Без названия',
+                artist: artistText,
+                album: '',
+                artwork,
+            });
+
+            ms.setActionHandler('play', () => usePlayer.setState({ isPlaying: true }));
+            ms.setActionHandler('pause', () => usePlayer.setState({ isPlaying: false }));
+            ms.setActionHandler('previoustrack', () => prev());
+            ms.setActionHandler('nexttrack', () => next());
+            try {
+                ms.setActionHandler('seekto', (details) => {
+                    if (typeof details.seekTime === 'number') {
+                        usePlayer.getState().seek(details.seekTime);
+                    }
+                });
+            } catch { /* ignore */ }
+        } catch (e) {
+            console.warn('[mediaSession] failed', e);
+        }
+    }, [track?.id, track?.coverUrl, track?.title, track?.artist]);
+
+    // Прогресс для Media Session
+    useEffect(() => {
+        if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+        const ms = navigator.mediaSession as any;
+        if (!ms.setPositionState || !track || !duration) return;
+        try {
+            ms.setPositionState({
+                duration: isFinite(duration) ? duration : 0,
+                position: Math.min(position, duration || 0),
+                playbackRate: 1,
+            });
+            ms.playbackState = isPlaying ? 'playing' : 'paused';
+        } catch { /* ignore */ }
+    }, [position, duration, isPlaying, track?.id]);
 
     // Эквалайзер
     const equalizer = usePlayer((s) => s.equalizer);
@@ -671,6 +738,9 @@ export function Player() {
 
             {/* ПРАВАЯ ЧАСТЬ: Volume */}
             <div className="flex items-center justify-end gap-2 w-1/3 min-w-[150px] pr-[25px] -translate-y-[5px]">
+
+                {/* Текст песни */}
+                <LyricsButton />
 
                 {/* Эквалайзер */}
                 <EqualizerButton />

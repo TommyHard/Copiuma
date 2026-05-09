@@ -593,6 +593,63 @@ public class TracksController : ControllerBase
         return NoContent();
     }
 
+    // Lyrics (LRC)
+
+    /// <summary>
+    /// Возвращает LRC-текст трека. Если текста нет — 204
+    /// </summary>
+    [HttpGet("{id:guid}/lyrics")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetLyrics(Guid id, CancellationToken ct)
+    {
+        var track = await _context.Tracks
+            .AsNoTracking()
+            .Where(t => t.Id == id && t.DeletedAt == null)
+            .Select(t => new { t.Id, t.Lyrics })
+            .FirstOrDefaultAsync(ct);
+
+        if (track is null) return NotFound();
+        if (string.IsNullOrEmpty(track.Lyrics)) return NoContent();
+
+        return Ok(new { trackId = track.Id, lyrics = track.Lyrics });
+    }
+
+    public record SetLyricsRequest(string Lyrics);
+
+    /// <summary>
+    /// Загрузить/обновить LRC-текст трека. Доступно автору трека
+    /// </summary>
+    [HttpPut("{id:guid}/lyrics")]
+    public async Task<IActionResult> SetLyrics(Guid id, [FromBody] SetLyricsRequest req, CancellationToken ct)
+    {
+        if (req?.Lyrics is null) return BadRequest("Body.lyrics обязателен.");
+        if (req.Lyrics.Length > 64 * 1024) return BadRequest("Слишком длинный текст (макс. 64KB).");
+
+        var track = await _context.Tracks.FirstOrDefaultAsync(t => t.Id == id, ct);
+        if (track is null || track.DeletedAt != null) return NotFound();
+        if (track.UploadedByUserId != UserId) return Forbid();
+
+        track.Lyrics = string.IsNullOrWhiteSpace(req.Lyrics) ? null : req.Lyrics;
+        await _context.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Удалить LRC-текст трека. Доступно автору
+    /// </summary>
+    [HttpDelete("{id:guid}/lyrics")]
+    public async Task<IActionResult> DeleteLyrics(Guid id, CancellationToken ct)
+    {
+        var track = await _context.Tracks.FirstOrDefaultAsync(t => t.Id == id, ct);
+        if (track is null || track.DeletedAt != null) return NotFound();
+        if (track.UploadedByUserId != UserId) return Forbid();
+        if (track.Lyrics is null) return NoContent();
+
+        track.Lyrics = null;
+        await _context.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
     [HttpGet("{id}/play")]
     public async Task<IActionResult> PlayTrack(Guid id, [FromQuery] bool inline = false)
     {

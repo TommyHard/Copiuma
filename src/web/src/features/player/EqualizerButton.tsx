@@ -127,10 +127,6 @@ export function EqualizerButton() {
                             <div className="h-4" />
                         </div>
                     </div>
-
-                    <div className="text-[10px] text-fg-muted mt-4 px-1 opacity-80">
-                        Диапазон +-12 дБ. Pre — входное усиление.
-                    </div>
                 </div>
             )}
         </div>
@@ -241,15 +237,33 @@ function EqGraph({ bands, setBand, width, height }: EqGraphProps) {
                 {/* Сетка */}
                 <line x1={0} y1={height / 2} x2={width} y2={height / 2} className="stroke-border" strokeWidth={1} strokeDasharray="4 4" />
                 {points.map((p, i) => (
-                    <line key={i} x1={p.x} y1={0} x2={p.x} y2={height} className="stroke-border/50" strokeWidth={1} />
+                    <line key={`grid-${i}`} x1={p.x} y1={0} x2={p.x} y2={height} className="stroke-border/50" strokeWidth={1} />
                 ))}
 
                 <path d={fillPath} fill="url(#eqGradient)" />
                 <path d={linePath} fill="none" className="stroke-accent" strokeWidth={2.5} />
 
+                {/* Значения полос */}
+                {points.map((p, i) => (
+                    <text
+                        key={`val-${i}`}
+                        x={p.x}
+                        y={-12}
+                        textAnchor="middle"
+                        fill="currentColor"
+                        className={cn(
+                            "text-[10px] tabular-nums font-medium pointer-events-none select-none transition-colors duration-150",
+                            draggingPointIndex === i ? "text-fg" : "text-fg-muted"
+                        )}
+                    >
+                        {p.band.gain > 0 ? '+' : ''}{p.band.gain}
+                    </text>
+                ))}
+
+                {/* Точки-хэндлы */}
                 {points.map((p, i) => (
                     <circle
-                        key={i}
+                        key={`handle-${i}`}
                         cx={p.x}
                         cy={p.y}
                         r={6}

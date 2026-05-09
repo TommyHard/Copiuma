@@ -186,7 +186,15 @@ export function SearchPage() {
                     {trackQ.data && trackQ.data.length > 0 && (
                         <ResultSection title="Треки" icon={<MusicIcon />}>
                             <ul className="rounded-xl border border-border bg-bg-elevated overflow-hidden shadow-sm">
-                                {trackQ.data.map((t) => <TrackRow key={t.id} track={t} />)}
+                                {trackQ.data.map((t, i) => (
+                                    <TrackRow
+                                        key={t.id}
+                                        track={t}
+                                        playList={trackQ.data!}
+                                        playListIndex={i}
+                                        playListContext={{ type: 'search' }}
+                                    />
+                                ))}
                             </ul>
                         </ResultSection>
                     )}
@@ -240,13 +248,20 @@ export function SearchPage() {
                     <div className="rounded-xl border border-border bg-bg-elevated overflow-hidden shadow-sm">
                         {catalogQ.data?.pages.map((page, i) => (
                             <ul key={i} className="divide-y divide-border/50">
-                                {page.map((t, idx) => (
-                                    <TrackRow
-                                        key={t.id}
-                                        track={t}
-                                        number={i * PAGE_SIZE + idx + 1}
-                                    />
-                                ))}
+                                {page.map((t, idx) => {
+                                    const allTracks = (catalogQ.data?.pages ?? []).flat();
+                                    const globalIdx = i * PAGE_SIZE + idx;
+                                    return (
+                                        <TrackRow
+                                            key={t.id}
+                                            track={t}
+                                            number={globalIdx + 1}
+                                            playList={allTracks}
+                                            playListIndex={globalIdx}
+                                            playListContext={{ type: 'popular' }}
+                                        />
+                                    );
+                                })}
                             </ul>
                         ))}
                     </div>

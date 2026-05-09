@@ -12,6 +12,22 @@ import {
     uploadArtistBanner,
 } from '@/shared/api/artists';
 import { ImageUploader } from '@/features/cover/ImageUploader';
+import { cn } from '@/shared/lib/cn';
+import { MusicIcon } from '@/shared/ui/icons';
+
+function SectionLayout({ title, description, children, className }: { title: string; description?: React.ReactNode; children: React.ReactNode; className?: string }) {
+    return (
+        <section className={cn("grid grid-cols-1 md:grid-cols-[240px_1fr] gap-x-12 gap-y-4 py-8 border-b border-border last:border-0", className)}>
+            <div>
+                <h2 className="text-base font-semibold text-fg">{title}</h2>
+                {description && <div className="mt-1 text-sm text-fg-muted leading-relaxed">{description}</div>}
+            </div>
+            <div className="min-w-0">
+                {children}
+            </div>
+        </section>
+    );
+}
 
 export function ArtistSettingsPage() {
     const qc = useQueryClient();
@@ -28,6 +44,7 @@ export function ArtistSettingsPage() {
     const [initialized, setInitialized] = useState(false);
 
     const [needsRelogin, setNeedsRelogin] = useState(false);
+    const [createError, setCreateError] = useState<string | null>(null);
 
     const a = artist.data;
 
@@ -38,8 +55,6 @@ export function ArtistSettingsPage() {
             setInitialized(true);
         }
     }, [a, initialized]);
-
-    const [createError, setCreateError] = useState<string | null>(null);
 
     const save = useMutation({
         mutationFn: () => updateArtist(a!.id, { name: name.trim(), bio: bio.trim() }),
@@ -53,13 +68,8 @@ export function ArtistSettingsPage() {
     const create = useMutation({
         mutationFn: async (data: { name: string; bio?: string }) => {
             setCreateError(null);
-
-            // 1. СНАЧАЛА создаем профиль артиста (проверка уникальности имени в Music API)
             const newArtist = await createArtist(data);
-
-            // 2. ЗАТЕМ меняем роль в Identity, если шаг 1 прошел успешно
             await becomeArtist(data.name);
-
             return newArtist;
         },
         onSuccess: () => {
@@ -68,7 +78,6 @@ export function ArtistSettingsPage() {
             setNeedsRelogin(true);
         },
         onError: (err: any) => {
-            // Обрабатываем 409 ошибку от сервера
             if (err?.response?.status === 409) {
                 setCreateError("Это имя уже занято другим артистом. Пожалуйста, выберите другое.");
             } else {
@@ -77,148 +86,213 @@ export function ArtistSettingsPage() {
         }
     });
 
-    if (artist.isLoading) return <p className="text-fg-muted">Загрузка...</p>;
+    if (artist.isLoading) {
+        return (
+            <div className="mx-auto max-w-4xl p-6 lg:p-10 flex justify-center items-center h-64 text-fg-muted font-medium animate-pulse">
+                Загрузка данных артиста...
+            </div>
+        );
+    }
 
     if (needsRelogin) {
         return (
-            <article className="mx-auto max-w-md space-y-6 text-center mt-10">
-                <div className="rounded-md border border-success/40 bg-success/10 p-6">
-                    <h1 className="text-2xl font-bold text-success mb-2">Профиль успешно создан!</h1>
-                    <p className="text-sm text-fg-muted mb-6">
-                        Чтобы получить полный доступ к функциям артиста,
-                        необходимо обновить сессию.
+            <div className="mx-auto max-w-xl p-6 lg:p-10 flex flex-col items-center justify-center min-h-[60vh]">
+                <div className="w-full rounded-2xl border border-success/40 bg-success/5 p-8 text-center shadow-lg backdrop-blur-sm">
+                    <div className="mx-auto size-16 rounded-full bg-success/20 text-success flex items-center justify-center mb-6">
+                        <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                    </div>
+                    <h1 className="text-3xl font-bold text-success mb-3 tracking-tight">Профиль успешно создан!</h1>
+                    <p className="text-base text-fg-muted mb-8 max-w-sm mx-auto leading-relaxed">
+                        Чтобы получить полный доступ к функциям артиста (загрузке треков, статистике и альбомам),
+                        необходимо обновить вашу сессию.
                     </p>
                     <button
                         onClick={() => logout()}
-                        className="rounded-md bg-accent px-5 py-2 text-sm font-medium text-accent-fg hover:opacity-90"
+                        className="rounded-lg bg-accent px-8 py-3 text-sm font-bold text-accent-fg hover:brightness-110 transition-all active:scale-95 shadow-sm"
                     >
                         Выйти и войти заново
                     </button>
                 </div>
-            </article>
+            </div>
         );
     }
 
     if (!a) {
         return (
-            <article className="mx-auto max-w-md space-y-6">
-                <h1 className="text-2xl font-bold">Профиль артиста</h1>
-                <p className="text-sm text-fg-muted">У вас еще нет профиля артиста. Заполните данные, чтобы создать его.</p>
-                <label className="block">
-                    <span className="mb-1 block text-sm text-fg-muted">Имя / Псевдоним</span>
-                    <input
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        maxLength={200}
-                        placeholder="Название..."
-                        className="w-full rounded-md border border-border bg-bg-elevated px-3 py-2 text-sm outline-none focus:border-accent"
-                    />
-                </label>
-                <label className="block">
-                    <span className="mb-1 block text-sm text-fg-muted">Биография (необязательно)</span>
-                    <textarea
-                        value={bio}
-                        onChange={(e) => setBio(e.target.value)}
-                        maxLength={4000}
-                        rows={4}
-                        placeholder="Напишите пару слов о себе..."
-                        className="w-full rounded-md border border-border bg-bg-elevated px-3 py-2 text-sm outline-none focus:border-accent"
-                    />
-                </label>
+            <div className="mx-auto max-w-3xl p-6 lg:p-10 mt-4 md:mt-10">
+                <div className="text-center space-y-4 mb-10">
+                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-accent/10 text-accent mb-2 shadow-sm border border-accent/20">
+                        <MusicIcon className="w-10 h-10" />
+                    </div>
+                    <h1 className="text-4xl font-black tracking-tight">Создать профиль артиста</h1>
+                    <p className="text-fg-muted max-w-md mx-auto text-base">
+                        Делитесь своим творчеством со всем миром. Заполните начальные данные, чтобы получить доступ к загрузке треков.
+                    </p>
+                </div>
 
-                {createError && <p className="text-xs text-danger">{createError}</p>}
+                <div className="bg-bg-elevated/40 border border-border rounded-2xl p-6 md:p-10 shadow-sm">
+                    <div className="space-y-6">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-fg-muted uppercase ml-1">Имя или Псевдоним</label>
+                            <input
+                                value={name}
+                                onChange={(e) => setName(e.target.value)}
+                                maxLength={200}
+                                placeholder="Ваше сценическое имя"
+                                className="w-full rounded border border-border bg-bg px-4 py-3 outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all text-base"
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-fg-muted uppercase ml-1">Биография (необязательно)</label>
+                            <textarea
+                                value={bio}
+                                onChange={(e) => setBio(e.target.value)}
+                                maxLength={4000}
+                                rows={4}
+                                placeholder="Напишите пару слов о себе..."
+                                className="w-full rounded border border-border bg-bg px-4 py-3 outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all text-base resize-none"
+                            />
+                        </div>
 
-                <button
-                    onClick={() => create.mutate({ name: name.trim(), bio: bio.trim() || undefined })}
-                    disabled={!name.trim() || create.isPending}
-                    className="rounded-md bg-accent px-5 py-2 text-sm font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
-                >
-                    {create.isPending ? 'Создание...' : 'Создать профиль'}
-                </button>
-            </article>
+                        {createError && (
+                            <div className="p-3 rounded-lg bg-danger/10 border border-danger/20 text-danger text-sm font-medium">
+                                {createError}
+                            </div>
+                        )}
+
+                        <div className="pt-2">
+                            <button
+                                onClick={() => create.mutate({ name: name.trim(), bio: bio.trim() || undefined })}
+                                disabled={!name.trim() || create.isPending}
+                                className="w-full rounded-lg bg-accent px-6 py-3.5 text-base font-bold text-accent-fg hover:brightness-110 transition-all active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 shadow-md"
+                            >
+                                {create.isPending ? 'Создание профиля...' : 'Создать профиль'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         );
     }
 
     return (
-        <article className="mx-auto max-w-2xl space-y-8">
-            <h1 className="text-2xl font-bold">Настройки артиста</h1>
+        <div className="mx-auto max-w-4xl p-6 lg:p-10">
+            <header className="mb-10">
+                <h1 className="text-3xl font-bold tracking-tight">Настройки артиста</h1>
+                <p className="text-fg-muted mt-2 text-base">Управление вашим публичным профилем исполнителя.</p>
+            </header>
 
-            <section className="space-y-2">
-                <h2 className="text-lg font-semibold">Баннер</h2>
-                <p className="text-xs text-fg-muted">Рекомендуемый размер: 1500x500, не более 15 МБ</p>
-                <ImageUploader
-                    currentUrl={a.bannerUrl}
-                    shape="banner"
-                    label="Баннер"
-                    onUpload={async (f) => {
-                        await uploadArtistBanner(a.id, f);
-                        qc.invalidateQueries({ queryKey: ['my-artist'] });
-                        qc.invalidateQueries({ queryKey: ['artist', a.id] });
-                    }}
-                    onDelete={async () => {
-                        await deleteArtistBanner(a.id);
-                        qc.invalidateQueries({ queryKey: ['my-artist'] });
-                        qc.invalidateQueries({ queryKey: ['artist', a.id] });
-                    }}
-                />
-            </section>
-
-            <section className="space-y-2">
-                <h2 className="text-lg font-semibold">Аватар</h2>
-                <p className="text-xs text-fg-muted">Не более 10 МБ</p>
-                <ImageUploader
-                    currentUrl={a.avatarUrl}
-                    shape="circle"
-                    label="Аватар"
-                    onUpload={async (f) => {
-                        await uploadArtistAvatar(a.id, f);
-                        qc.invalidateQueries({ queryKey: ['my-artist'] });
-                        qc.invalidateQueries({ queryKey: ['artist', a.id] });
-                    }}
-                    onDelete={async () => {
-                        await deleteArtistAvatar(a.id);
-                        qc.invalidateQueries({ queryKey: ['my-artist'] });
-                        qc.invalidateQueries({ queryKey: ['artist', a.id] });
-                    }}
-                />
-            </section>
-
-            <section className="space-y-2">
-                <h2 className="text-lg font-semibold">Имя артиста</h2>
-                <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => { setName(e.target.value); setDirty(true); }}
-                    maxLength={200}
-                    className="w-full max-w-md rounded-md border border-border bg-bg-elevated px-3 py-2 text-sm outline-none focus:border-accent"
-                    placeholder="Название..."
-                />
-            </section>
-
-            <section className="space-y-2">
-                <h2 className="text-lg font-semibold">Биография</h2>
-                <textarea
-                    value={bio}
-                    onChange={(e) => { setBio(e.target.value); setDirty(true); }}
-                    maxLength={4000}
-                    rows={6}
-                    className="w-full rounded-md border border-border bg-bg-elevated px-3 py-2 text-sm outline-none focus:border-accent"
-                    placeholder="Расскажите о себе..."
-                />
-                <p className="text-xs text-fg-muted">{bio.length}/4000</p>
-            </section>
-
-            <div className="flex gap-3">
-                <button
-                    onClick={() => save.mutate()}
-                    disabled={!dirty || save.isPending}
-                    className="rounded-md bg-accent px-5 py-2 text-sm font-medium text-accent-fg hover:opacity-90 disabled:opacity-50"
+            <div className="space-y-2">
+                <SectionLayout
+                    title="Визуальное оформление"
+                    description="Аватар и баннер формируют уникальный стиль вашей страницы."
                 >
-                    {save.isPending ? 'Сохранение...' : 'Сохранить изменения'}
-                </button>
-                {save.isSuccess && <span className="self-center text-xs text-fg-muted">Сохранено</span>}
-                {save.isError && <span className="self-center text-xs text-danger">Ошибка сохранения</span>}
+                    <div className="space-y-8 bg-bg-elevated/40 p-6 rounded-xl border border-border">
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-fg-muted uppercase">Баннер</span>
+                                <span className="text-[10px] text-fg-muted">Рекомендуется: 1500x500 (до 15 МБ)</span>
+                            </div>
+                            <ImageUploader
+                                currentUrl={a.bannerUrl}
+                                shape="banner"
+                                label="Баннер"
+                                onUpload={async (f) => {
+                                    await uploadArtistBanner(a.id, f);
+                                    qc.invalidateQueries({ queryKey: ['my-artist'] });
+                                    qc.invalidateQueries({ queryKey: ['artist', a.id] });
+                                }}
+                                onDelete={async () => {
+                                    await deleteArtistBanner(a.id);
+                                    qc.invalidateQueries({ queryKey: ['my-artist'] });
+                                    qc.invalidateQueries({ queryKey: ['artist', a.id] });
+                                }}
+                            />
+                        </div>
+
+                        <div className="h-px bg-border/50 w-full" />
+
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-fg-muted uppercase">Аватар</span>
+                                <span className="text-[10px] text-fg-muted">До 10 МБ</span>
+                            </div>
+                            <ImageUploader
+                                currentUrl={a.avatarUrl}
+                                shape="circle"
+                                label="Аватар"
+                                onUpload={async (f) => {
+                                    await uploadArtistAvatar(a.id, f);
+                                    qc.invalidateQueries({ queryKey: ['my-artist'] });
+                                    qc.invalidateQueries({ queryKey: ['artist', a.id] });
+                                }}
+                                onDelete={async () => {
+                                    await deleteArtistAvatar(a.id);
+                                    qc.invalidateQueries({ queryKey: ['my-artist'] });
+                                    qc.invalidateQueries({ queryKey: ['artist', a.id] });
+                                }}
+                            />
+                        </div>
+                    </div>
+                </SectionLayout>
+
+                <SectionLayout
+                    title="Основная информация"
+                    description="Эти данные будут видны всем слушателям на вашей странице артиста."
+                >
+                    <div className="space-y-6">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-fg-muted uppercase ml-1">Имя артиста</label>
+                            <input
+                                type="text"
+                                value={name}
+                                onChange={(e) => { setName(e.target.value); setDirty(true); }}
+                                maxLength={200}
+                                className="w-full rounded border border-border bg-bg-elevated px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all"
+                                placeholder="Ваше сценическое имя"
+                            />
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <div className="flex justify-between items-center ml-1">
+                                <label className="text-xs font-bold text-fg-muted uppercase">Биография</label>
+                                <span className="text-[10px] text-fg-muted">{bio.length}/4000</span>
+                            </div>
+                            <textarea
+                                value={bio}
+                                onChange={(e) => { setBio(e.target.value); setDirty(true); }}
+                                maxLength={4000}
+                                rows={6}
+                                className="w-full rounded border border-border bg-bg-elevated px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all resize-none"
+                                placeholder="Расскажите о себе, своей музыке и планах..."
+                            />
+                        </div>
+
+                        <div className="flex items-center gap-4 pt-2">
+                            <button
+                                onClick={() => save.mutate()}
+                                disabled={!dirty || save.isPending}
+                                className="rounded bg-accent px-6 py-2.5 text-sm font-bold text-accent-fg hover:brightness-110 active:scale-95 disabled:opacity-50 transition-all shadow-sm"
+                            >
+                                {save.isPending ? 'Сохранение...' : 'Сохранить изменения'}
+                            </button>
+
+                            {save.isSuccess && (
+                                <span className="text-xs text-success font-bold animate-in fade-in slide-in-from-left-2">
+                                    Успешно сохранено
+                                </span>
+                            )}
+                            {save.isError && (
+                                <span className="text-xs text-danger font-bold animate-in fade-in slide-in-from-left-2">
+                                    Ошибка при сохранении
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                </SectionLayout>
             </div>
-        </article>
+        </div>
     );
 }

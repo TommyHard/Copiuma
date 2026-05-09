@@ -5,6 +5,7 @@ import {
     unfollowArtist,
 } from '@/shared/api/follows';
 import { cn } from '@/shared/lib/cn';
+import { CheckIcon, PlusIcon } from '@/shared/ui/icons';
 
 interface FollowArtistButtonProps {
     artistId: string;
@@ -35,8 +36,8 @@ export function FollowArtistButton({ artistId, className, disabled }: FollowArti
     const busy = follow.isPending || unfollow.isPending || followed.isLoading;
 
     const baseClasses = isFollowing
-        ? 'h-10 px-6 rounded bg-bg-elevated text-fg font-bold shadow-sm hover:bg-danger hover:text-white transition-colors flex items-center justify-center disabled:opacity-50'
-        : 'h-10 px-6 rounded bg-accent text-white font-bold shadow-sm hover:bg-accent/90 transition-colors flex items-center justify-center disabled:opacity-50';
+        ? 'h-14 px-4 rounded font-black uppercase tracking-widest bg-bg-elevated text-fg border border-border shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50'
+        : 'h-14 px-4 rounded font-black uppercase tracking-widest bg-accent text-accent-fg shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-3 disabled:opacity-50';
 
     return (
         <button
@@ -44,7 +45,15 @@ export function FollowArtistButton({ artistId, className, disabled }: FollowArti
             disabled={busy || disabled}
             className={cn(baseClasses, className)}
         >
-            {isFollowing ? 'Отписаться' : 'Подписаться'}
+            {isFollowing ? (
+                <>
+                    <CheckIcon className="size-6" /> Подписаны
+                </>
+            ) : (
+                <>
+                    <PlusIcon className="size-6" /> Подписаться
+                </>
+            )}
         </button>
     );
 }

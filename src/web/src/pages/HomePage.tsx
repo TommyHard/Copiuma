@@ -115,7 +115,12 @@ export function HomePage() {
                 </Section>
             )}
 
-            <Section title={popularEmpty ? 'Каталог' : 'Популярное'} actionTo="/catalog" actionLabel="Смотреть все">
+            <Section
+                title={popularEmpty ? 'Каталог' : 'Популярное'}
+                actionTo="/search"
+                actionState={{ scrollToCatalog: true }}
+                actionLabel="Смотреть все"
+            >
                 <div className={scrollableListClasses}>
                     {popular.data && popular.data.length > 0 && (
                         <ul>
@@ -137,12 +142,12 @@ export function HomePage() {
     );
 }
 
-function Section({ title, actionTo, actionLabel, children }: { title: string; actionTo?: string; actionLabel?: string; children: React.ReactNode }) {
+function Section({ title, actionTo, actionState, actionLabel, children }: { title: string; actionTo?: string; actionState?: any; actionLabel?: string; children: React.ReactNode }) {
     return (
         <div className="space-y-3">
             <header className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold">{title}</h2>
-                {actionTo && <Link to={actionTo} className="text-xs font-medium text-accent hover:underline">{actionLabel}</Link>}
+                {actionTo && <Link to={actionTo} state={actionState} className="text-xs font-medium text-accent hover:underline">{actionLabel}</Link>}
             </header>
             {children}
         </div>

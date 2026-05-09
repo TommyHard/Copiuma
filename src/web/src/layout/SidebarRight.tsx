@@ -72,13 +72,27 @@ export function SidebarRight() {
 function QueueView() {
     const queue = usePlayer(s => s.queue);
     const index = usePlayer(s => s.index);
+    const isShuffle = usePlayer(s => s.isShuffle);
+    const shuffleOrder = usePlayer(s => s.shuffleOrder);
+    const context = usePlayer(s => s.context);
     const removeFromQueue = usePlayer(s => s.removeFromQueue);
     const playQueueStore = usePlayer(s => s.playQueue);
 
     if (queue.length === 0) return <div className="text-center tracking-tight mt-10"><MusicIcon className="mx-auto mb-2" /> Очередь пуста</div>;
 
     const currentTrack = queue[index];
-    const upcoming = queue.map((t, i) => ({ track: t, originalIndex: i })).slice(index + 1);
+
+    // При shuffle-режиме показываем очередь по порядку shuffleOrder, иначе — по фактическому порядку очереди
+    let upcoming: { track: typeof queue[number]; originalIndex: number }[];
+    if (isShuffle && shuffleOrder.length === queue.length) {
+        const cur = shuffleOrder.indexOf(index);
+        const startFrom = cur >= 0 ? cur + 1 : 0;
+        upcoming = shuffleOrder
+            .slice(startFrom)
+            .map((origIdx) => ({ track: queue[origIdx], originalIndex: origIdx }));
+    } else {
+        upcoming = queue.map((t, i) => ({ track: t, originalIndex: i })).slice(index + 1);
+    }
 
     return (
         <div className="space-y-6">
@@ -101,10 +115,18 @@ function QueueView() {
             )}
             {upcoming.length > 0 && (
                 <div className="space-y-3">
-                    <h3 className="text-sm font-semibold text-fg">Далее</h3>
+                    <h3 className="text-sm font-semibold text-fg flex items-center gap-2">
+                        Далее
+                        {isShuffle && <span className="text-[10px] uppercase tracking-widest text-accent">shuffle</span>}
+                    </h3>
                     <ul className="rounded-md border border-border overflow-hidden">
                         {upcoming.map(({ track, originalIndex }) => (
-                            <TrackRow key={`q-${track.id}-${originalIndex}`} track={track as any} onPlay={() => playQueueStore(queue, originalIndex)} onRemoveFromQueue={() => removeFromQueue(originalIndex)} />
+                            <TrackRow
+                                key={`q-${track.id}-${originalIndex}`}
+                                track={track as any}
+                                onPlay={() => playQueueStore(queue, originalIndex, context ?? { type: 'queue' })}
+                                onRemoveFromQueue={() => removeFromQueue(originalIndex)}
+                            />
                         ))}
                     </ul>
                 </div>
