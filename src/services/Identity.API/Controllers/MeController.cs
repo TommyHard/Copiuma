@@ -1,10 +1,10 @@
 ﻿using Identity.API.Data;
 using Identity.API.Dtos;
 using Identity.API.Models;
+using Identity.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Net;
 using System.Security.Claims;
 
 namespace Identity.API.Controllers;
@@ -15,8 +15,13 @@ namespace Identity.API.Controllers;
 public class MeController : ControllerBase
 {
     private readonly AppDbContext _db;
+    private readonly AvatarUrlBuilder _avatarUrls;
 
-    public MeController(AppDbContext db) => _db = db;
+    public MeController(AppDbContext db, AvatarUrlBuilder avatarUrls)
+    {
+        _db = db;
+        _avatarUrls = avatarUrls;
+    }
 
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -26,14 +31,14 @@ public class MeController : ControllerBase
         var u = await _db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == UserId, ct);
         if (u is null) return NotFound();
 
-        string? avatarUrl = u.AvatarKey != null ? $"/images/{u.AvatarKey}" : null;
+        string? avatarUrl = _avatarUrls.BuildOrNull(u.AvatarKey);
 
         return Ok(new MeResponse(
-            u.Id, 
-            u.Email, 
-            u.DisplayName, 
-            u.Role, 
-            u.EmailVerifiedAt is not null, 
+            u.Id,
+            u.Email,
+            u.DisplayName,
+            u.Role,
+            u.EmailVerifiedAt is not null,
             u.CreatedAt,
             avatarUrl
             ));

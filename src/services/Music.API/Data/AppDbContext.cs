@@ -48,9 +48,17 @@ public class AppDbContext : DbContext
     public DbSet<Report> Reports { get; set; }
     public DbSet<UserFlag> UserFlags { get; set; }
 
+    public DbSet<UserState> UserStates { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<UserState>(b =>
+        {
+            b.HasKey(x => x.UserId);
+            b.Property(x => x.StateJson).HasColumnType("jsonb");
+        });
 
         modelBuilder.Entity<PlaylistTrack>()
             .HasKey(pt => new { pt.PlaylistId, pt.TrackId });

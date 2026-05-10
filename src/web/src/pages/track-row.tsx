@@ -9,7 +9,7 @@ import { dislikeTrack, undoDislikeTrack } from '@/shared/api/dislikes';
 import { addTrack, listPlaylists, getPlaylistsContainingTrack } from '@/shared/api/playlists';
 import { Tooltip } from '@/shared/ui/Tooltip';
 import { useContextMenu, ContextMenuPortal, ContextMenuItem, ContextMenuSub, ContextMenuSeparator } from '@/shared/ui/ContextMenu';
-import { PlayIcon, HeartIcon, PlusIcon, DislikeIcon, SearchIcon, TrashIcon, CheckIcon, MusicIcon } from '@/shared/ui/icons';
+import { PlayIcon, HeartIcon, PlusIcon, DislikeIcon, SearchIcon, TrashIcon, CheckIcon, MusicIcon, QueueIcon } from '@/shared/ui/icons';
 import { cn } from '@/shared/lib/cn';
 
 export function TrackRow({
@@ -33,7 +33,25 @@ export function TrackRow({
     const qc = useQueryClient();
     const like = useToggleTrackLike();
     const updatePlayerTrack = usePlayer(s => s.updateTrackState);
+    const addToQueue = usePlayer(s => s.addToQueue);
+    const playNext = usePlayer(s => s.playNext);
     const liked = !!track.isLikedByMe;
+
+    const trackForPlayer = {
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        artistId: track.artistId ?? null,
+        duration: track.duration,
+        uploadedAt: track.uploadedAt,
+        albumId: track.albumId ?? null,
+        trackNumber: track.trackNumber ?? null,
+        isExplicit: track.isExplicit,
+        coverUrl: track.coverUrl,
+        isLikedByMe: track.isLikedByMe,
+        featuredArtists: track.featuredArtists,
+        hlsReady: true,
+    };
 
     const [isDisliked, setIsDisliked] = useState(track.isDislikedByMe ?? false);
     const contextMenu = useContextMenu();
@@ -225,6 +243,30 @@ export function TrackRow({
                         })}
                     </div>
                 </ContextMenuSub>
+
+                {!onRemoveFromQueue && (
+                    <>
+                        <ContextMenuItem
+                            icon={<QueueIcon />}
+                            onClick={() => {
+                                playNext(trackForPlayer as any);
+                                contextMenu.close();
+                            }}
+                        >
+                            Играть следующим
+                        </ContextMenuItem>
+                        <ContextMenuItem
+                            icon={<PlusIcon />}
+                            onClick={() => {
+                                addToQueue(trackForPlayer as any);
+                                contextMenu.close();
+                            }}
+                        >
+                            Добавить в очередь
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                    </>
+                )}
 
                 {onRemoveFromQueue && (
                     <>

@@ -103,7 +103,7 @@ function QueueView() {
                     <div className="rounded-md border border-border bg-bg-elevated p-3 flex items-center gap-3">
                         <div
                             className="w-12 h-12 rounded bg-bg-elevated flex items-center justify-center tracking-tight shadow-sm bg-cover bg-center overflow-hidden"
-                            style={{ backgroundImage: currentTrack.coverUrl ? `url(${currentTrack.coverUrl})` : undefined }}
+                            style={{ backgroundImage: currentTrack.coverUrl ? `url("${currentTrack.coverUrl.replace(/"/g, '\\"')}")` : undefined }}
                         >
                             {!currentTrack.coverUrl && <MusicIcon className="w-6 h-6 opacity-40" />}
                         </div>
@@ -162,7 +162,7 @@ function NowPlayingView({ onOpenQueue }: { onOpenQueue: () => void }) {
         <div className="space-y-6">
             <div
                 className="w-full aspect-square rounded-xl bg-bg-elevated flex items-center justify-center tracking-tight shadow-md bg-cover bg-center overflow-hidden"
-                style={{ backgroundImage: currentTrack.coverUrl ? `url(${currentTrack.coverUrl})` : undefined }}
+                style={{ backgroundImage: currentTrack.coverUrl ? `url("${currentTrack.coverUrl.replace(/"/g, '\\"')}")` : undefined }}
             >
                 {!currentTrack.coverUrl && <MusicIcon className="w-32 h-32 opacity-50" />}
             </div>

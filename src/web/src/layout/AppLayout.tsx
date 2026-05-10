@@ -3,6 +3,7 @@ import { Header } from './Header';
 import { Player } from '@/features/player/Player';
 import { ToastContainer } from '@/features/notifications/ToastContainer';
 import { useNotificationHub } from '@/features/notifications/useNotificationHub';
+import { useUserStateSync } from '@/features/sync/useUserStateSync';
 import { OfflineBanner } from '@/features/offline/OfflineBanner';
 import { SidebarLeft } from './SidebarLeft';
 import { SidebarRight } from './SidebarRight';
@@ -14,6 +15,7 @@ import { LyricsView } from '@/features/lyrics/LyricsView';
 
 export function AppLayout() {
     useNotificationHub();
+    useUserStateSync();
 
     const {
         isLeftOpen, setLeftOpen, leftWidth, setLeftWidth,

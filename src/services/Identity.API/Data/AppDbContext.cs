@@ -47,7 +47,7 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<RefreshToken>(b =>
         {
-            b.HasIndex(t => t.Token).IsUnique();
+            b.HasIndex(t => t.TokenHash).IsUnique();
             b.HasIndex(t => new { t.UserId, t.IsRevoked });
             b.Property(t => t.IpAddress).HasMaxLength(64);
             b.Property(t => t.UserAgent).HasMaxLength(512);

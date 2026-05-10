@@ -14,6 +14,7 @@ import { SleepTimerButton } from './SleepTimerButton';
 import { EqualizerButton } from './EqualizerButton';
 import { LyricsButton } from './LyricsButton';
 import { ensureEqualizerGraph, applyEqualizer } from './equalizerAudio';
+import { isTrackCachedOffline } from '@/features/offline/offlineCache';
 
 interface PlaySession {
     trackId: string;
@@ -59,7 +60,6 @@ const ShuffleIcon = ({ active }: { active: boolean }) => (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
             <path d="M 3 18 h 4 c 3 0, 4 -12, 7 -12 h 7" />
             <path d="M 17 2 l 4 4 l -4 4" />
-
             <path d="M 3 6 h 4 c 1.5 0, 2 1.5, 3 4" />
             <path d="M 11 14 c 1 2.5, 1.5 4, 3 4 h 7" />
             <path d="M 17 14 l 4 4 l -4 4" />
@@ -375,16 +375,13 @@ export function Player() {
                 hlsRef.current?.detach();
                 return;
             }
-            try {
-                const st = await getTrackStatus(track.id);
-                if (cancelled) return;
 
-                if (st.status !== 'Ready') {
-                    console.warn("Трек не готов, пропускаем...");
-                    next();
-                    return;
-                }
+            // Если трек уже скачан в офлайн — Service Worker отдаст master.m3u8
+            // и сегменты из Cache Storage
+            const cachedOffline = await isTrackCachedOffline(track.id).catch(() => false);
+            if (cancelled) return;
 
+            const startPlayback = () => {
                 hlsRef.current?.load(hlsMasterUrl(track.id), () => {
                     if (cancelled) return;
                     sourceReadyRef.current = true;
@@ -395,6 +392,24 @@ export function Player() {
                         });
                     }
                 });
+            };
+
+            if (cachedOffline) {
+                startPlayback();
+                return;
+            }
+
+            try {
+                const st = await getTrackStatus(track.id);
+                if (cancelled) return;
+
+                if (st.status !== 'Ready') {
+                    console.warn("Трек не готов, пропускаем...");
+                    next();
+                    return;
+                }
+
+                startPlayback();
             } catch (e) {
                 if (cancelled) return;
                 console.error("Ошибка загрузки трека (404), пропускаем...", e);
@@ -613,7 +628,7 @@ export function Player() {
                 <Link to={`/tracks/${track.id}`} className="shrink-0 flex">
                     <div
                         className="w-16 h-16 bg-bg-elevated rounded-md flex items-center justify-center text-fg-muted shadow-sm bg-cover bg-center overflow-hidden"
-                        style={{ backgroundImage: track.coverUrl ? `url(${track.coverUrl})` : undefined }}
+                        style={{ backgroundImage: track.coverUrl ? `url("${track.coverUrl.replace(/"/g, '\\"')}")` : undefined }}
                     >
                         {!track.coverUrl && <MusicIcon className="w-6 h-6 opacity-50" />}
                     </div>

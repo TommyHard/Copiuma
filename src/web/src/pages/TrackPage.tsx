@@ -10,6 +10,7 @@ import { dislikeTrack } from '@/shared/api/dislikes';
 import { similarTracks } from '@/shared/api/recommendations';
 import { listGenres } from '@/shared/api/genres';
 import { usePlayTrack } from '@/features/player/usePlayTrack';
+import { usePlayer } from '@/features/player/store';
 import { Waveform } from '@/features/track/Waveform';
 import { TrackRow } from './track-row';
 import { useAuth } from '@/features/auth/useAuth';
@@ -169,8 +170,19 @@ export function TrackPage() {
                 onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (file) {
-                        await uploadTrackCover(t.id, file);
+                        const { coverUrl } = await uploadTrackCover(t.id, file);
+                        qc.setQueryData<any>(['track', id], (prev: any) => prev ? {
+                            ...prev,
+                            coverUrl,
+                            ownCoverUrl: coverUrl,
+                            hasOwnCover: true,
+                        } : prev);
+                        usePlayer.getState().updateTrackState(t.id, { coverUrl });
                         qc.invalidateQueries({ queryKey: ['track', id] });
+                        qc.invalidateQueries({ queryKey: ['catalog'] });
+                        qc.invalidateQueries({ queryKey: ['playlist'] });
+                        qc.invalidateQueries({ queryKey: ['album-tracks'] });
+                        e.target.value = '';
                     }
                 }}
             />
@@ -217,12 +229,15 @@ export function TrackPage() {
             {/* BANNER */}
             <div className="relative h-[450px] w-full shrink-0 overflow-hidden bg-bg border-b border-black">
                 <div
-                    className="absolute inset-0 origin-center blur-md"
+                    className="absolute inset-0 origin-center blur-md transform-gpu"
                     style={{
                         transform: `scale(${bannerScale})`,
-                        backgroundImage: activeCoverUrl ? `url(${activeCoverUrl})` : 'none',
+                        backgroundImage: activeCoverUrl
+                            ? `url("${activeCoverUrl.replace(/"/g, '\\"')}")`
+                            : 'none',
                         backgroundSize: 'cover',
                         backgroundPosition: 'center',
+                        willChange: 'transform, filter',
                     }}
                 />
                 <div

@@ -1,4 +1,5 @@
 ﻿using Identity.API.Data;
+using Identity.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -16,14 +17,16 @@ public class UsersController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly ILogger<UsersController> _log;
+    private readonly AvatarUrlBuilder _avatarUrls;
 
     private const int MinQueryLength = 2;
     private const int MaxResults = 10;
 
-    public UsersController(AppDbContext context, ILogger<UsersController> log)
+    public UsersController(AppDbContext context, ILogger<UsersController> log, AvatarUrlBuilder avatarUrls)
     {
         _context = context;
         _log = log;
+        _avatarUrls = avatarUrls;
     }
 
     private Guid CallerId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -60,7 +63,7 @@ public class UsersController : ControllerBase
         var results = rows.Select(u => (object)new UserSearchResult(
             u.Id,
             u.Name,
-            u.AvatarKey != null ? $"/images/{u.AvatarKey}" : null
+            _avatarUrls.BuildOrNull(u.AvatarKey)
         )).ToList();
 
         return Ok(results);
@@ -167,7 +170,7 @@ public class UsersController : ControllerBase
         var results = rows.Select(r => new UserSearchResult(
             r.Id,
             r.DisplayName,
-            r.AvatarKey != null ? $"/images/{r.AvatarKey}" : null
+            _avatarUrls.BuildOrNull(r.AvatarKey)
         )).ToList();
         return Ok(results);
     }

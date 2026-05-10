@@ -36,6 +36,8 @@ import {
     UsersIcon, SettingsIcon
 } from '@/shared/ui/icons';
 import { UserAvatar } from '@/shared/ui/UserAvatar';
+import { saveItem, unsaveItem } from '@/features/library/savedItems';
+import { useIsSaved } from '@/features/library/useSavedItems';
 
 const ROLE_TRANSLATIONS: Record<string, string> = {
     Owner: 'Владелец',
@@ -564,6 +566,15 @@ export function PlaylistPage() {
                     </div>
                 )}
 
+                {!isOwner && (
+                    <SavePlaylistButton
+                        playlistId={p.id}
+                        title={p.title}
+                        subtitle={p.ownerName ?? null}
+                        coverUrl={p.coverUrl ?? null}
+                    />
+                )}
+
                 {!isOwner && myMember && (
                     <button
                         onClick={() => leave.mutate()}
@@ -946,6 +957,32 @@ export function PlaylistPage() {
                 )}
             </ContextMenuPortal>
         </article>
+    );
+}
+
+function SavePlaylistButton({
+    playlistId, title, subtitle, coverUrl,
+}: { playlistId: string; title: string; subtitle: string | null; coverUrl: string | null }) {
+    const saved = useIsSaved('playlist', playlistId);
+    return (
+        <Tooltip content={saved ? 'В медиатеке — нажмите чтобы убрать' : 'Сохранить в медиатеку'} position="top">
+            <button
+                onClick={() => {
+                    if (saved) unsaveItem('playlist', playlistId);
+                    else saveItem({ kind: 'playlist', id: playlistId, title, subtitle, coverUrl });
+                }}
+                className={cn(
+                    'h-12 px-4 rounded flex items-center gap-2 border transition-colors',
+                    saved
+                        ? 'border-accent text-accent bg-accent/10 hover:bg-accent/15'
+                        : 'border-border text-fg-muted hover:text-fg hover:border-fg-muted'
+                )}
+                aria-pressed={saved}
+            >
+                <HeartIcon filled={saved} />
+                <span className="text-sm font-bold">{saved ? 'В медиатеке' : 'Сохранить'}</span>
+            </button>
+        </Tooltip>
     );
 }
 

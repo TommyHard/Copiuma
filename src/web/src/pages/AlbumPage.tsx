@@ -25,6 +25,9 @@ import {
     SettingsIcon, DownloadIcon
 } from '@/shared/ui/icons';
 import { UserAvatar } from '@/shared/ui/UserAvatar';
+import { saveItem, unsaveItem } from '@/features/library/savedItems';
+import { useIsSaved } from '@/features/library/useSavedItems';
+import { HeartIcon } from '@/shared/ui/icons';
 
 export function AlbumPage() {
     const { id } = useParams();
@@ -191,6 +194,8 @@ export function AlbumPage() {
                         <PlayIcon className="size-6" /> Играть
                     </button>
                 )}
+
+                <SaveAlbumButton albumId={a.id} title={a.title} subtitle={a.artistName ?? null} coverUrl={a.coverUrl ?? null} />
 
                 <div className="flex-1" />
 
@@ -404,5 +409,31 @@ function AlbumEditDialog({ album, onClose, onSaved }: { album: AlbumSummary; onC
                 </div>
             </form>
         </div>
+    );
+}
+
+function SaveAlbumButton({
+    albumId, title, subtitle, coverUrl,
+}: { albumId: string; title: string; subtitle: string | null; coverUrl: string | null }) {
+    const saved = useIsSaved('album', albumId);
+    return (
+        <Tooltip content={saved ? 'В медиатеке — нажмите чтобы убрать' : 'Сохранить в медиатеку'} position="top">
+            <button
+                onClick={() => {
+                    if (saved) unsaveItem('album', albumId);
+                    else saveItem({ kind: 'album', id: albumId, title, subtitle, coverUrl });
+                }}
+                className={cn(
+                    'h-14 px-4 rounded flex items-center gap-2 border transition-colors',
+                    saved
+                        ? 'border-accent text-accent bg-accent/10 hover:bg-accent/15'
+                        : 'border-border text-fg-muted hover:text-fg hover:border-fg-muted'
+                )}
+                aria-pressed={saved}
+            >
+                <HeartIcon filled={saved} />
+                <span className="text-sm font-bold">{saved ? 'В медиатеке' : 'Сохранить'}</span>
+            </button>
+        </Tooltip>
     );
 }

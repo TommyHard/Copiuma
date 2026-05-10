@@ -19,11 +19,17 @@ import {
     InfoIcon
 } from '@/shared/ui/icons';
 import { Tooltip } from '@/shared/ui/Tooltip';
-import { acceptInvitation, declineInvitation } from '@/shared/api/invitations';
+import { acceptInvitation, declineInvitation, listIncomingInvitations } from '@/shared/api/invitations';
+import { Link } from 'react-router-dom';
 
 export function NotificationsPage() {
     const qc = useQueryClient();
     const q = useQuery({ queryKey: ['notifications'], queryFn: () => listNotifications(1, 50) });
+
+    const invitationsQ = useQuery({
+        queryKey: ['invitations'],
+        queryFn: listIncomingInvitations,
+    });
 
     const acceptInv = useMutation({
         mutationFn: (id: string) => acceptInvitation(id),
@@ -43,6 +49,8 @@ export function NotificationsPage() {
             qc.invalidateQueries({ queryKey: ['invitations'] });
         },
     });
+
+    const pendingInvitations = (invitationsQ.data ?? []).filter(i => i.status === 'Pending');
 
     const invalidate = () => {
         qc.invalidateQueries({ queryKey: ['notifications'] });
@@ -120,6 +128,48 @@ export function NotificationsPage() {
                     </button>
                 </div>
             </header>
+
+            {pendingInvitations.length > 0 && (
+                <section className="space-y-3">
+                    <h2 className="text-lg font-bold tracking-tight flex items-center gap-2">
+                        <MailIcon className="size-5 text-accent" />
+                        Приглашения в плейлисты
+                        <span className="text-xs font-medium text-fg-muted">({pendingInvitations.length})</span>
+                    </h2>
+                    <ul className="space-y-3">
+                        {pendingInvitations.map((inv) => (
+                            <li key={inv.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-accent/20 bg-accent/5 p-4">
+                                <div className="min-w-0">
+                                    <p className="text-sm font-semibold text-fg">
+                                        <Link to={`/playlists/${inv.playlistId}`} className="hover:underline text-accent">
+                                            "{inv.playlistTitle}"
+                                        </Link>
+                                    </p>
+                                    <p className="mt-1 text-xs text-fg-muted">
+                                        От {inv.inviterName ?? 'Пользователя'} • Роль: {inv.proposedRole}
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <button
+                                        disabled={acceptInv.isPending || declineInv.isPending}
+                                        onClick={() => acceptInv.mutate(inv.id)}
+                                        className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                                    >
+                                        Принять
+                                    </button>
+                                    <button
+                                        disabled={acceptInv.isPending || declineInv.isPending}
+                                        onClick={() => declineInv.mutate(inv.id)}
+                                        className="rounded-md border border-border bg-transparent px-3 py-1.5 text-xs font-medium transition-colors hover:bg-bg disabled:opacity-50"
+                                    >
+                                        Отклонить
+                                    </button>
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                </section>
+            )}
 
             {q.isLoading && (
                 <div className="space-y-4">

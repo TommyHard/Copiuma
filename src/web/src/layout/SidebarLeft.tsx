@@ -11,7 +11,11 @@ import { useContextMenu, ContextMenuPortal, ContextMenuItem } from '@/shared/ui/
 import { PlaylistCover } from '@/features/playlists/PlaylistCover';
 import { CreatePlaylistDialog } from '@/features/playlists/CreatePlaylistDialog';
 import { NowPlayingFromBadge } from '@/features/player/NowPlayingBadge';
-import { HeartIcon, TrashIcon, SidebarLeftIcon, PlusIcon, SearchIcon, MusicIcon, DjRoomsIcon, OfflineIcon, HistoryIcon } from '@/shared/ui/icons';
+import { HeartIcon, TrashIcon, SidebarLeftIcon, PlusIcon, SearchIcon, MusicIcon, DjRoomsIcon, OfflineIcon, HistoryIcon, InfoIcon } from '@/shared/ui/icons';
+import { useSavedItems } from '@/features/library/useSavedItems';
+import { unsaveItem, markUnavailable, type SavedItem } from '@/features/library/savedItems';
+import { getAlbum } from '@/shared/api/albums';
+import { getPlaylist } from '@/shared/api/playlists';
 import { Tooltip } from '@/shared/ui/Tooltip';
 import { cn } from '@/shared/lib/cn';
 import type { FollowedUser, FollowedArtist, PlaylistSummary } from '@/shared/types';
@@ -173,11 +177,106 @@ export function SidebarLeft() {
                     {playlistsQ.data?.map(p => (
                         <PlaylistSidebarItem key={p.id} playlist={p} compact={!isLeftOpen} />
                     ))}
+
+                    <SavedItemsSection compact={!isLeftOpen} />
                 </div>
             </div>
 
             <CreatePlaylistDialog open={createOpen} onClose={() => setCreateOpen(false)} />
         </section>
+    );
+}
+
+function SavedItemsSection({ compact }: { compact: boolean }) {
+    const items = useSavedItems();
+    if (items.length === 0) return null;
+    return (
+        <>
+            {!compact && (
+                <div className="mt-4 mb-2 text-[11px] uppercase tracking-widest font-bold text-fg-muted/70">
+                    Сохранённое
+                </div>
+            )}
+            {items.map((it) => (
+                <SavedItemRow key={`${it.kind}:${it.id}`} item={it} compact={compact} />
+            ))}
+        </>
+    );
+}
+
+function SavedItemRow({ item, compact }: { item: SavedItem; compact: boolean }) {
+    const contextMenu = useContextMenu();
+    const path = item.kind === 'album' ? `/albums/${item.id}` : `/playlists/${item.id}`;
+
+    // Тихо проверяем доступность; если 404 — помечаем элемент как unavailable
+    useQuery({
+        queryKey: ['saved-availability', item.kind, item.id],
+        queryFn: async () => {
+            try {
+                if (item.kind === 'album') await getAlbum(item.id);
+                else await getPlaylist(item.id);
+                if (item.unavailable) markUnavailable(item.kind, item.id, false);
+                return true;
+            } catch {
+                if (!item.unavailable) markUnavailable(item.kind, item.id, true);
+                return false;
+            }
+        },
+        staleTime: 60_000,
+    });
+
+    return (
+        <>
+            <Link
+                to={item.unavailable ? '#' : path}
+                onClick={(e) => { if (item.unavailable) e.preventDefault(); }}
+                onContextMenu={contextMenu.onContextMenu}
+                className={cn(
+                    "flex items-center gap-3 mb-1 p-2 -mx-2 rounded-lg transition-colors group",
+                    item.unavailable ? "opacity-60 cursor-not-allowed" : "hover:bg-accent/10"
+                )}
+            >
+                <div className="w-10 h-10 shrink-0 rounded-md overflow-hidden bg-bg-elevated flex items-center justify-center shadow-md">
+                    {item.coverUrl ? (
+                        <img src={item.coverUrl} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                        <MusicIcon className="w-6 h-6 opacity-40" />
+                    )}
+                </div>
+                {!compact && (
+                    <div className="flex flex-col min-w-0 flex-1">
+                        <span className="text-[15px] font-semibold text-fg tracking-tight truncate group-hover:text-accent transition-colors">
+                            {item.title}
+                        </span>
+                        <span className="text-[12px] text-fg-muted truncate flex items-center gap-1">
+                            {item.kind === 'album' ? 'Альбом' : 'Плейлист'}
+                            {item.subtitle && <> • {item.subtitle}</>}
+                            {item.unavailable && (
+                                <span className="ml-1 text-danger inline-flex items-center gap-0.5">
+                                    <InfoIcon className="size-3" />
+                                    недоступен
+                                </span>
+                            )}
+                        </span>
+                    </div>
+                )}
+                {!compact && !item.unavailable && (
+                    <NowPlayingFromBadge
+                        target={item.kind === 'album' ? { type: 'album', id: item.id } : { type: 'playlist', id: item.id }}
+                        className="shrink-0"
+                    />
+                )}
+            </Link>
+            <ContextMenuPortal isOpen={contextMenu.isOpen} position={contextMenu.position}>
+                <ContextMenuItem
+                    danger
+                    icon={<TrashIcon className="w-4 h-4" />}
+                    onClick={() => { unsaveItem(item.kind, item.id); contextMenu.close(); }}
+                >
+                    Убрать из медиатеки
+                </ContextMenuItem>
+            </ContextMenuPortal>
+        </>
     );
 }
 

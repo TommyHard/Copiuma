@@ -1,6 +1,7 @@
 ﻿using System.Security.Claims;
 using Identity.API.Data;
 using Identity.API.Dtos;
+using Identity.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -28,6 +29,9 @@ public class SessionsController : ControllerBase
     public async Task<IActionResult> List(CancellationToken ct)
     {
         var currentRefresh = Request.Headers["X-Refresh-Token"].FirstOrDefault();
+        var currentHash = string.IsNullOrEmpty(currentRefresh)
+            ? null
+            : TokenService.HashRefreshToken(currentRefresh);
 
         var sessions = await _db.RefreshTokens
             .Where(t => t.UserId == UserId && !t.IsRevoked && t.ExpiryDate > DateTime.UtcNow)
@@ -40,7 +44,7 @@ public class SessionsController : ControllerBase
                 t.CreatedAt,
                 t.LastUsedAt,
                 t.ExpiryDate,
-                currentRefresh != null && t.Token == currentRefresh))
+                currentHash != null && t.TokenHash == currentHash))
             .ToListAsync(ct);
 
         return Ok(sessions);
@@ -67,12 +71,15 @@ public class SessionsController : ControllerBase
     public async Task<IActionResult> RevokeAllExceptCurrent(CancellationToken ct)
     {
         var currentRefresh = Request.Headers["X-Refresh-Token"].FirstOrDefault();
+        var currentHash = string.IsNullOrEmpty(currentRefresh)
+            ? null
+            : TokenService.HashRefreshToken(currentRefresh);
 
         var query = _db.RefreshTokens
             .Where(t => t.UserId == UserId && !t.IsRevoked);
 
-        if (!string.IsNullOrEmpty(currentRefresh))
-            query = query.Where(t => t.Token != currentRefresh);
+        if (!string.IsNullOrEmpty(currentHash))
+            query = query.Where(t => t.TokenHash != currentHash);
 
         var tokensToRevoke = await query.ToListAsync(ct);
         var redisDb = _redis.GetDatabase();
@@ -80,6 +87,8 @@ public class SessionsController : ControllerBase
         foreach (var t in tokensToRevoke)
         {
             t.IsRevoked = true;
+            t.RevokedAt = DateTime.UtcNow;
+            t.RevokedReason = "logout-other-sessions";
             await redisDb.KeyDeleteAsync($"active_session:{t.Id}");
         }
 

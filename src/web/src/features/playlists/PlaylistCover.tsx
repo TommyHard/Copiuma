@@ -26,7 +26,7 @@ export function PlaylistCover({
         return (
             <div
                 className={cn('bg-bg-elevated bg-cover bg-center', radius, className)}
-                style={{ backgroundImage: `url(${coverUrl})` }}
+                style={{ backgroundImage: `url("${coverUrl.replace(/"/g, '\\"')}")` }}
                 aria-hidden
             />
         );
@@ -47,7 +47,7 @@ export function PlaylistCover({
         return (
             <div
                 className={cn('bg-bg-elevated bg-cover bg-center', radius, className)}
-                style={{ backgroundImage: `url(${tiles[0]})` }}
+                style={{ backgroundImage: `url("${tiles[0].replace(/"/g, '\\"')}")` }}
                 aria-hidden
             />
         );
@@ -63,7 +63,7 @@ export function PlaylistCover({
                     <div
                         key={i}
                         className="h-full w-full bg-cover bg-center"
-                        style={{ backgroundImage: `url(${url})` }}
+                        style={{ backgroundImage: `url("${url.replace(/"/g, '\\"')}")` }}
                     />
                 ))}
             </div>
@@ -78,15 +78,15 @@ export function PlaylistCover({
             >
                 <div
                     className="row-span-2 bg-cover bg-center"
-                    style={{ backgroundImage: `url(${tiles[0]})` }}
+                    style={{ backgroundImage: `url("${tiles[0].replace(/"/g, '\\"')}")` }}
                 />
                 <div
                     className="bg-cover bg-center"
-                    style={{ backgroundImage: `url(${tiles[1]})` }}
+                    style={{ backgroundImage: `url("${tiles[1].replace(/"/g, '\\"')}")` }}
                 />
                 <div
                     className="bg-cover bg-center"
-                    style={{ backgroundImage: `url(${tiles[2]})` }}
+                    style={{ backgroundImage: `url("${tiles[2].replace(/"/g, '\\"')}")` }}
                 />
             </div>
         );
@@ -101,7 +101,7 @@ export function PlaylistCover({
                 <div
                     key={i}
                     className="bg-cover bg-center"
-                    style={{ backgroundImage: `url(${url})` }}
+                    style={{ backgroundImage: `url("${url.replace(/"/g, '\\"')}")` }}
                 />
             ))}
         </div>

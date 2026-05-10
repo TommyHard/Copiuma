@@ -6,7 +6,6 @@ using Identity.API.Services;
 using Identity.API.Services.Email;
 using Identity.API.Services.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using StackExchange.Redis;
@@ -38,9 +37,9 @@ public class Program
         builder.Services.AddSwaggerGen();
 
         builder.Services.AddScoped<TokenService>();
+        builder.Services.AddSingleton<AvatarUrlBuilder>();
         builder.Services.AddDatabase(builder.Configuration);
 
-        // √нида живи
         var redisConn = builder.Configuration["Redis:Configuration"] ?? "localhost:6379";
 
         if (!redisConn.Contains("abortConnect", StringComparison.OrdinalIgnoreCase))
@@ -85,7 +84,6 @@ public class Program
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-            // policy "auth": 10 запросов в минуту с одного IP
             options.AddPolicy("auth", ctx =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: ctx.Connection.RemoteIpAddress?.ToString() ?? "anon",

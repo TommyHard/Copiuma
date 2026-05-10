@@ -124,6 +124,10 @@ export interface PlayerState {
 
     playTrack(track: PlayerTrack, context?: PlaybackContext): void;
     playQueue(tracks: PlayerTrack[], startIndex?: number, context?: PlaybackContext): void;
+    /** Добавить трек в конец очереди */
+    addToQueue(track: PlayerTrack): void;
+    /** Поставить трек следующим после текущего */
+    playNext(track: PlayerTrack): void;
     removeFromQueue(index: number): void;
     updateTrackState(trackId: string, partial: Partial<PlayerTrack>): void;
     togglePlay(): void;
@@ -286,6 +290,46 @@ export const usePlayer = create<PlayerState>()(
                 } else {
                     set({ seekRequest: { value: 0, nonce: Date.now() } });
                 }
+            },
+
+            addToQueue(track) {
+                set((s) => {
+                    if (s.queue.some((t) => t.id === track.id)) return {};
+                    const newQueue = [...s.queue, track];
+                    let nextShuffle = s.shuffleOrder;
+                    if (s.isShuffle && s.shuffleOrder.length > 0) {
+                        nextShuffle = [...s.shuffleOrder, newQueue.length - 1];
+                    }
+                    // Если очередь была пустой — делаем добавленный трек активным
+                    const wasEmpty = s.queue.length === 0 || s.index < 0;
+                    return {
+                        queue: newQueue,
+                        shuffleOrder: nextShuffle,
+                        index: wasEmpty ? newQueue.length - 1 : s.index,
+                        playNonce: wasEmpty ? s.playNonce + 1 : s.playNonce,
+                    };
+                });
+            },
+
+            playNext(track) {
+                set((s) => {
+                    const dupIdx = s.queue.findIndex((t) => t.id === track.id);
+                    let baseQueue = s.queue;
+                    let curIndex = s.index;
+                    if (dupIdx !== -1) {
+                        baseQueue = [...s.queue];
+                        baseQueue.splice(dupIdx, 1);
+                        if (dupIdx < curIndex) curIndex--;
+                    }
+                    const insertAt = curIndex < 0 ? 0 : curIndex + 1;
+                    const newQueue = [...baseQueue.slice(0, insertAt), track, ...baseQueue.slice(insertAt)];
+                    return {
+                        queue: newQueue,
+                        index: curIndex < 0 ? insertAt : curIndex,
+                        // shuffle reset
+                        shuffleOrder: s.isShuffle ? [] : s.shuffleOrder,
+                    };
+                });
             },
 
             removeFromQueue(idx) {

@@ -250,9 +250,19 @@ export function ArtistPage() {
                     <section className="space-y-6">
                         <h2 className="text-2xl font-bold tracking-tight">Популярные треки</h2>
                         <div className="rounded-lg border border-border bg-bg-elevated/40 backdrop-blur-sm overflow-hidden">
-                            {tracksQ.data?.slice(0, 5).map((track: TrackListItem, i: number) => (
-                                <TrackRow key={track.id} track={track} number={i + 1} />
-                            ))}
+                            {(() => {
+                                const popularList = tracksQ.data?.slice(0, 5) ?? [];
+                                return popularList.map((track: TrackListItem, i: number) => (
+                                    <TrackRow
+                                        key={track.id}
+                                        track={track}
+                                        number={i + 1}
+                                        playList={popularList}
+                                        playListIndex={i}
+                                        playListContext={artist?.id ? { type: 'artist', id: artist.id } : undefined}
+                                    />
+                                ));
+                            })()}
                         </div>
                     </section>
 

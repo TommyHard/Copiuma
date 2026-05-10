@@ -15,6 +15,10 @@ import {
     getCacheStats,
     isTrackCachedOffline,
     purgeTrackFromCache,
+    listOfflineTrackMeta,
+    rememberOfflineTrackMeta,
+    forgetOfflineTrackMeta,
+    listLocallyCachedTrackIds,
     type DownloadProgress,
 } from '@/features/offline/offlineCache';
 import { purgeAllOffline } from '@/shared/lib/serviceWorker';
@@ -46,6 +50,45 @@ export function OfflinePage() {
         retry: false,
         staleTime: isOffline ? Infinity : 30_000,
     });
+
+    // Кешируем список локально
+    useEffect(() => {
+        if (!tracksQ.data) return;
+        for (const t of tracksQ.data) {
+            rememberOfflineTrackMeta(t.trackId, {
+                title: t.title,
+                artist: t.artist,
+                artistId: t.artistId,
+                duration: t.duration,
+                coverUrl: t.coverUrl ?? null,
+                addedAt: t.addedAt,
+            });
+        }
+    }, [tracksQ.data]);
+
+    // Если сервер недоступен — собираем список из localStorage метаданных,
+    // ограничивая локально закешированными треками
+    const fallbackTracks: OfflineTrackItem[] = (() => {
+        if (tracksQ.data || tracksQ.isLoading) return [];
+        const cachedIds = new Set(listLocallyCachedTrackIds());
+        const meta = listOfflineTrackMeta().filter(({ trackId }) => cachedIds.has(trackId));
+        return meta.map(({ trackId, meta: m }) => ({
+            trackId,
+            source: 'single',
+            addedAt: m.addedAt,
+            lastDownloadedAt: null,
+            title: m.title,
+            artist: m.artist,
+            duration: m.duration,
+            artistId: m.artistId,
+            albumId: null,
+            fileKey: null,
+            coverUrl: m.coverUrl ?? null,
+        }));
+    })();
+
+    const displayedTracks = tracksQ.data ?? fallbackTracks;
+    const usingFallback = !tracksQ.data && fallbackTracks.length > 0;
 
     const cacheQ = useQuery({
         queryKey: ['offline-cache-stats'],
@@ -92,7 +135,14 @@ export function OfflinePage() {
             <Section title="Ваша библиотека">
                 {tracksQ.isLoading && <p className="tracking-tight animate-pulse">Загрузка списка...</p>}
 
-                {tracksQ.data && tracksQ.data.length === 0 ? (
+                {usingFallback && (
+                    <div className="rounded-md border border-warning/30 bg-warning/5 p-3 text-xs text-warning flex items-center gap-2">
+                        <InfoIcon className="size-4 shrink-0" />
+                        Нет связи с сервером — показаны треки из локального кэша.
+                    </div>
+                )}
+
+                {displayedTracks.length === 0 && !tracksQ.isLoading ? (
                     <div className="rounded-md border border-dashed border-border p-12 text-center">
                         <MusicIcon className="mx-auto size-12 opacity-40 mb-4" />
                         <p className="tracking-tight">Пока ничего не скачано.</p>
@@ -100,8 +150,8 @@ export function OfflinePage() {
                 ) : (
                     <div className={scrollableListClasses}>
                         <ul className="divide-y divide-border/50">
-                            {tracksQ.data?.map((t) => (
-                                <OfflineRow key={t.trackId} item={t} />
+                            {displayedTracks.map((t) => (
+                                <OfflineRow key={t.trackId} item={t} offlineMode={usingFallback} />
                             ))}
                         </ul>
                     </div>
@@ -146,7 +196,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     );
 }
 
-function OfflineRow({ item }: { item: OfflineTrackItem }) {
+function OfflineRow({ item, offlineMode }: { item: OfflineTrackItem; offlineMode?: boolean }) {
     const qc = useQueryClient();
     const play = usePlayTrack();
     const [cached, setCached] = useState<boolean | null>(null);
@@ -157,6 +207,7 @@ function OfflineRow({ item }: { item: OfflineTrackItem }) {
         queryKey: ['track', item.trackId],
         queryFn: () => getTrack(item.trackId),
         staleTime: 5 * 60 * 1000,
+        enabled: !offlineMode,
     });
 
     useEffect(() => {
@@ -168,9 +219,12 @@ function OfflineRow({ item }: { item: OfflineTrackItem }) {
     }, [item.trackId]);
 
     const remove = useMutation({
-        mutationFn: () => removeOfflineTrack(item.trackId),
+        mutationFn: async () => {
+            try { await removeOfflineTrack(item.trackId); } catch { /* ignore */ }
+        },
         onSuccess: async () => {
             await purgeTrackFromCache(item.trackId);
+            forgetOfflineTrackMeta(item.trackId);
             qc.invalidateQueries({ queryKey: ['offline-tracks'] });
             qc.invalidateQueries({ queryKey: ['offline-cache-stats'] });
         },

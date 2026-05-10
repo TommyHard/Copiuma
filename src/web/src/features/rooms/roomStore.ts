@@ -20,6 +20,8 @@ interface RoomState {
     participants: RoomParticipant[];
     current: CurrentTrackInRoom | null;
     rejected: string | null;
+    /** Слушатель локально поставил паузу — heartbeat DJ его не разбудит */
+    localPaused: boolean;
 
     set(partial: Partial<RoomState>): void;
     reset(): void;
@@ -34,6 +36,7 @@ export const useRoomStore = create<RoomState>((set) => ({
     participants: [],
     current: null,
     rejected: null,
+    localPaused: false,
 
     set(partial) {
         set(partial);
@@ -46,6 +49,7 @@ export const useRoomStore = create<RoomState>((set) => ({
             participants: [],
             current: null,
             rejected: null,
+            localPaused: false,
         });
     },
     upsertParticipant(p) {

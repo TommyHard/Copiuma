@@ -8,13 +8,16 @@ using System.Text.Json;
 namespace Music.API.Services;
 
 /// <summary>
-/// SQL рекомендации. Три поведения:
+/// SQL рекомендации. Поведения:
 ///
-/// 1 Popular - COUNT PlayEvent за последние 7 дней. Кеш 15 мин
-/// 2 Similar — ко-встречаемость: "юзеры, слушавшие X, также слушали Y"
-///   Кеш 30 мин на track
-/// 3 For-you - треки любимых артистов пользователя, которых он ещё не слушал
-///   Fallback на Popular, если истории нет. Кеш 10 мин на юзера
+/// 1. Popular   — COUNT PlayEvent с тайм-decay (3 окна: 24ч×4, 3д×2, 7д×1). Кеш 15 мин.
+/// 2. Similar   — ко-встречаемость, нормализованная по глобальной популярности
+///                (трек-кандидат, который слушают «все», не выигрывает у нишевого
+///                но релевантного). Кеш 30 мин на track.
+/// 3. For-you   — треки любимых артистов + жанровое расширение, мягкий штраф за
+///                уже знакомые треки (не исключаем полностью), штрафуем skip'ы.
+///                Кеш 10 мин на юзера.
+/// 4. Trending artists — count артистов с тайм-decay, кеш 15 мин.
 /// </summary>
 public class RecommendationsService
 {
@@ -22,6 +25,14 @@ public class RecommendationsService
     private const int PopularLookbackDays = 7;
     private const int SimilarLookbackDays = 30;
     private const int ForYouLookbackDays = 30;
+    /// <summary> 
+    /// Минимум юзеров на ко-встречу, чтобы трек считался похожим
+    /// </summary>
+    private const int SimilarMinCoUsers = 2;
+    /// <summary> 
+    /// Сколько кандидатов по жанрам подмешивать к "for-you"
+    /// </summary>
+    private const int ForYouGenreExpansion = 50;
 
     private readonly AppDbContext _db;
     private readonly IDistributedCache _cache;
@@ -51,13 +62,24 @@ public class RecommendationsService
         if (await ReadCacheAsync<List<TrackRecommendationItem>>(key, ct) is { } cached)
             return cached;
 
-        var since = DateTime.UtcNow.AddDays(-PopularLookbackDays);
+        var now = DateTime.UtcNow;
+        var d1 = now.AddDays(-1);
+        var d3 = now.AddDays(-3);
+        var d7 = now.AddDays(-PopularLookbackDays);
 
+        // Time-decay: окна (<=24ч)x4 + (>24ч,<=3д)x2 + (>3д,<=7д)x1
         var rows = await _db.PlayEvents
-            .Where(e => e.StartedAt >= since)
+            .Where(e => e.StartedAt >= d7)
             .GroupBy(e => e.TrackId)
-            .Select(g => new { TrackId = g.Key, Plays = g.Count() })
-            .OrderByDescending(x => x.Plays)
+            .Select(g => new
+            {
+                TrackId = g.Key,
+                Score = g.Count(e => e.StartedAt >= d1) * 4
+                      + g.Count(e => e.StartedAt < d1 && e.StartedAt >= d3) * 2
+                      + g.Count(e => e.StartedAt < d3)
+            })
+            .Where(x => x.Score > 0)
+            .OrderByDescending(x => x.Score)
             .Take(take)
             .Join(_db.Tracks,
                 p => p.TrackId, t => t.Id,
@@ -67,7 +89,7 @@ public class RecommendationsService
                     t.Artist,
                     t.ArtistId,
                     t.AlbumId,
-                    p.Plays,
+                    p.Score,
                     t.Duration,
                     t.IsExplicit,
                     false,
@@ -103,15 +125,26 @@ public class RecommendationsService
             .Select(e => e.UserId)
             .Distinct();
 
-        // Что ещё они слушали (исключая искомый трек) — считаем ко-встречаемость
-        // как число уникальных пользователей на трек
-        var rows = await _db.PlayEvents
+        // Ко-встречаемость + глобальная популярность кандидата
+        var coStats = await _db.PlayEvents
             .Where(e => userIds.Contains(e.UserId)
                         && e.TrackId != trackId
                         && e.StartedAt >= since)
             .GroupBy(e => e.TrackId)
-            .Select(g => new { TrackId = g.Key, CoUsers = g.Select(x => x.UserId).Distinct().Count() })
-            .OrderByDescending(x => x.CoUsers)
+            .Select(g => new
+            {
+                TrackId = g.Key,
+                CoUsers = g.Select(x => x.UserId).Distinct().Count(),
+                GlobalPlays = _db.PlayEvents
+                    .Where(p => p.TrackId == g.Key && p.StartedAt >= since)
+                    .Select(p => p.UserId)
+                    .Distinct()
+                    .Count()
+            })
+            .Where(x => x.CoUsers >= SimilarMinCoUsers)
+            // Нормализуем: "много слушающих этот, и есть пересечение" лучше,
+            // чем "слушают все подряд"
+            .OrderByDescending(x => (double)(x.CoUsers * x.CoUsers) / (double)(x.CoUsers + x.GlobalPlays * 0.05 + 1))
             .Take(take)
             .Join(_db.Tracks,
                 p => p.TrackId, t => t.Id,
@@ -128,8 +161,8 @@ public class RecommendationsService
                     null))
             .ToListAsync(ct);
 
-        await WriteCacheAsync(key, rows, TimeSpan.FromMinutes(30), ct);
-        return rows;
+        await WriteCacheAsync(key, coStats, TimeSpan.FromMinutes(30), ct);
+        return coStats;
     }
 
     private record Excluded(HashSet<Guid> TrackIds, HashSet<Guid> ArtistIds);
@@ -174,13 +207,21 @@ public class RecommendationsService
 
         var ex = await GetDislikesAsync(userId.Value, ct);
 
-        IReadOnlyList<TrackRecommendationItem> filtered = (ex.TrackIds.Count == 0 && ex.ArtistIds.Count == 0)
-            ? rows.Take(take).ToList()
-            : rows
+        IReadOnlyList<TrackRecommendationItem> filtered;
+        if (ex.TrackIds.Count == 0 && ex.ArtistIds.Count == 0)
+        {
+            filtered = rows.Take(take).ToList();
+        }
+        else
+        {
+            // Применяем фильтр и берём ровно take. Если raw был с запасом
+            // (take * 3) — потерь после фильтра почти нет
+            filtered = rows
                 .Where(r => !ex.TrackIds.Contains(r.TrackId))
                 .Where(r => !r.ArtistId.HasValue || !ex.ArtistIds.Contains(r.ArtistId.Value))
                 .Take(take)
                 .ToList();
+        }
 
         return await EnrichLikedAsync(filtered, userId.Value, ct);
     }
@@ -223,17 +264,23 @@ public class RecommendationsService
 
         var since = DateTime.UtcNow.AddDays(-ForYouLookbackDays);
 
-        // Любимые артисты юзера: из прослушиваний + лайков
-        // Score = count прослушиваний + 5 за каждый лайк
+        // Score per artist:
+        //   completed -> +2
+        //   незавершённый, но playedMs >= 30 сек -> +1 (поверх "ушёл, но что-то слушал")
+        //   ранний скип (<5 сек) -> -1
+        //   лайк -> +5
         var playsByArtist = _db.PlayEvents
                 .Where(e => e.UserId == userId && e.StartedAt >= since)
                 .Join(_db.Tracks, e => e.TrackId, t => t.Id, (e, t) => new { t.ArtistId, e.PlayedMs, e.Completed })
                 .Where(x => x.ArtistId.HasValue)
                 .GroupBy(x => x.ArtistId!.Value)
-                .Select(g => new {
+                .Select(g => new
+                {
                     ArtistId = g.Key,
-                    // Штраф -2 очка за скип на первых 2х секундах, иначе +1
-                    Score = g.Sum(x => x.PlayedMs < 2000 && !x.Completed ? -2 : 1)
+                    Score = g.Sum(x =>
+                        x.Completed ? 2 :
+                        x.PlayedMs >= 30000 ? 1 :
+                        x.PlayedMs < 5000 ? -1 : 0)
                 });
 
         var likesByArtist = _db.LikedTracks
@@ -245,68 +292,107 @@ public class RecommendationsService
 
         var dislikes = await GetDislikesAsync(userId, ct);
 
-        var topArtists = await playsByArtist
+        // Топ-20 положительных (Score > 0), исключаем дизлайкнутых артистов
+        var topArtistsRanked = await playsByArtist
             .Concat(likesByArtist)
             .GroupBy(x => x.ArtistId)
             .Select(g => new { ArtistId = g.Key, Score = g.Sum(x => x.Score) })
+            .Where(x => x.Score > 0)
             .OrderByDescending(x => x.Score)
             .Take(20)
-            .Select(x => x.ArtistId)
             .ToListAsync(ct);
 
-        // Убираем дизлайкнутых артистов из пула "любимых"
-        topArtists = topArtists.Where(a => !dislikes.ArtistIds.Contains(a)).Take(10).ToList();
+        var topArtists = topArtistsRanked
+            .Where(a => !dislikes.ArtistIds.Contains(a.ArtistId))
+            .Take(10)
+            .Select(a => a.ArtistId)
+            .ToList();
 
-        if (topArtists.Count == 0)
+        // Жанровое расширение: жанры лайкнутых/прослушанных треков
+        var topGenreIds = await _db.PlayEvents
+            .Where(e => e.UserId == userId && e.StartedAt >= since)
+            .Join(_db.TrackGenres, e => e.TrackId, tg => tg.TrackId, (e, tg) => tg.GenreId)
+            .GroupBy(gid => gid)
+            .OrderByDescending(g => g.Count())
+            .Take(5)
+            .Select(g => g.Key)
+            .ToListAsync(ct);
+
+        if (topArtists.Count == 0 && topGenreIds.Count == 0)
         {
+            // Никакой истории — fallback на популярное
             return await GetPopularAsync(take, userId, ct);
         }
 
+        // Знакомые треки: прослушанные + лайкнутые. Не исключаем, а штрафуем.
         var knownTrackIds = await _db.PlayEvents
             .Where(e => e.UserId == userId)
             .Select(e => e.TrackId)
             .Union(_db.LikedTracks.Where(l => l.UserId == userId).Select(l => l.TrackId))
             .ToListAsync(ct);
-
         var knownSet = new HashSet<Guid>(knownTrackIds);
-
-        foreach (var t in dislikes.TrackIds) knownSet.Add(t);
 
         var popularityTable = _db.PlayEvents
             .Where(e => e.StartedAt >= since)
             .GroupBy(e => e.TrackId)
             .Select(g => new { TrackId = g.Key, Plays = g.Count() });
 
-        var candidates = await _db.Tracks
-            .Where(t => t.ArtistId.HasValue && topArtists.Contains(t.ArtistId.Value))
+        // Базовый пул: треки топ-артистов
+        var byArtist = _db.Tracks
+            .Where(t => t.ArtistId.HasValue && topArtists.Contains(t.ArtistId.Value));
+
+        // Жанровое расширение: треки в топ-жанрах юзера, чьих артистов он
+        // ещё не слушал плотно. Берём только если жанры есть
+        var byGenre = _db.TrackGenres
+            .Where(tg => topGenreIds.Contains(tg.GenreId))
+            .Select(tg => tg.Track!)
+            .Where(t => t.ArtistId.HasValue);
+
+        // Кандидаты = объединение, дедуп по Id
+        var candidatesRaw = await byArtist
+            .Concat(byGenre)
+            .Distinct()
             .GroupJoin(
                 popularityTable,
                 t => t.Id, p => p.TrackId,
-                (t, ps) => new { t, Plays = ps.Sum(x => (int?)x.Plays) ?? 0 })
+                (t, ps) => new
+                {
+                    t.Id,
+                    t.Title,
+                    t.Artist,
+                    t.ArtistId,
+                    t.AlbumId,
+                    t.Duration,
+                    t.IsExplicit,
+                    Plays = ps.Sum(x => (int?)x.Plays) ?? 0
+                })
             .OrderByDescending(x => x.Plays)
-            .Take(take * 3)
-            .Select(x => new TrackRecommendationItem(
-                x.t.Id,
-                x.t.Title,
-                x.t.Artist,
-                x.t.ArtistId,
-                x.t.AlbumId,
-                x.Plays,
-                x.t.Duration,
-                x.t.IsExplicit,
-                false,
-                null))
+            .Take(take * 3 + ForYouGenreExpansion)
             .ToListAsync(ct);
 
-        var filtered = candidates.Where(c => !knownSet.Contains(c.TrackId)).Take(take).ToList();
+        // Финальная сортировка in-memory: знакомые -> x0.3, дизлайки -> 0
+        var scored = candidatesRaw
+            .Where(c => !dislikes.TrackIds.Contains(c.Id))
+            .Where(c => !c.ArtistId.HasValue || !dislikes.ArtistIds.Contains(c.ArtistId.Value))
+            .Select(c => new
+            {
+                Item = new TrackRecommendationItem(
+                    c.Id, c.Title, c.Artist, c.ArtistId, c.AlbumId,
+                    c.Plays, c.Duration, c.IsExplicit, false, null),
+                Score = (double)c.Plays * (knownSet.Contains(c.Id) ? 0.3 : 1.0)
+            })
+            .OrderByDescending(x => x.Score)
+            .Take(take)
+            .Select(x => x.Item)
+            .ToList();
 
-        if (filtered.Count == 0)
+        if (scored.Count == 0)
         {
             return await GetPopularAsync(take, userId, ct);
         }
 
-        await WriteCacheAsync(key, filtered, TimeSpan.FromMinutes(10), ct);
-        return await EnrichLikedAsync(filtered, userId, ct);
+        await WriteCacheAsync(key, scored, TimeSpan.FromMinutes(10), ct);
+        return await EnrichLikedAsync(scored, userId, ct);
     }
 
     // Trending artists
@@ -334,19 +420,30 @@ public class RecommendationsService
         if (await ReadCacheAsync<List<ArtistRecommendationItem>>(key, ct) is { } cached)
             return cached;
 
-        var since = DateTime.UtcNow.AddDays(-PopularLookbackDays);
+        var now = DateTime.UtcNow;
+        var d1 = now.AddDays(-1);
+        var d3 = now.AddDays(-3);
+        var d7 = now.AddDays(-PopularLookbackDays);
 
+        // То же time-decay, что и в Popular: 24чx4, 3дx2, 7дx1
         var rows = await _db.PlayEvents
-            .Where(e => e.StartedAt >= since)
-            .Join(_db.Tracks, e => e.TrackId, t => t.Id, (e, t) => t.ArtistId)
-            .Where(a => a.HasValue)
-            .GroupBy(a => a!.Value)
-            .Select(g => new { ArtistId = g.Key, Plays = g.Count() })
-            .OrderByDescending(x => x.Plays)
+            .Where(e => e.StartedAt >= d7)
+            .Join(_db.Tracks, e => e.TrackId, t => t.Id, (e, t) => new { t.ArtistId, e.StartedAt })
+            .Where(x => x.ArtistId.HasValue)
+            .GroupBy(x => x.ArtistId!.Value)
+            .Select(g => new
+            {
+                ArtistId = g.Key,
+                Score = g.Count(x => x.StartedAt >= d1) * 4
+                      + g.Count(x => x.StartedAt < d1 && x.StartedAt >= d3) * 2
+                      + g.Count(x => x.StartedAt < d3)
+            })
+            .Where(x => x.Score > 0)
+            .OrderByDescending(x => x.Score)
             .Take(take)
             .Join(_db.Artists,
                 p => p.ArtistId, a => a.Id,
-                (p, a) => new { a.Id, a.Name, p.Plays, a.AvatarKey })
+                (p, a) => new { a.Id, a.Name, Plays = p.Score, a.AvatarKey })
             .ToListAsync(ct);
 
         var items = new List<ArtistRecommendationItem>(rows.Count);

@@ -3,10 +3,27 @@
 public class RefreshToken
 {
     public Guid Id { get; set; }
-    public required string Token { get; set; }
+    /// <summary>
+    /// SHA-256 хэш refresh-токена. Сам токен НЕ храним — только хэш,
+    /// чтобы дамп БД не выдал валидные refresh-токены
+    /// </summary>
+    public required string TokenHash { get; set; }
     public DateTime ExpiryDate { get; set; }
     public bool IsRevoked { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Когда был отзыв
+    /// </summary>
+    public DateTime? RevokedAt { get; set; }
+    /// <summary>
+    /// Причина отзыва: 'rotated' / 'logout' / 'reuse-detected' / 'password-reset'
+    /// </summary>
+    public string? RevokedReason { get; set; }
+    /// <summary>
+    /// При rotate сохраняем id новой сессии
+    /// </summary>
+    public Guid? ReplacedBySessionId { get; set; }
 
     /// <summary>
     /// IP в момент выдачи (login) или последнего rotate

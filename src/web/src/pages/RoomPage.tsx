@@ -8,6 +8,8 @@ import { useAuth } from '@/features/auth/useAuth';
 import { getTrack } from '@/shared/api/catalog';
 import { cn } from '@/shared/lib/cn';
 import { InfoIcon, MusicIcon } from '@/shared/ui/icons';
+import { UserAvatar } from '@/shared/ui/UserAvatar';
+import { batchUsers } from '@/shared/api/users';
 
 export function RoomPage() {
     const { id } = useParams();
@@ -60,6 +62,15 @@ function RoomPageInner({
     const participants = useRoomStore((s) => s.participants);
     const current = useRoomStore((s) => s.current);
     const rejected = useRoomStore((s) => s.rejected);
+
+    const participantIds = participants.map(p => p.userId).sort();
+    const avatarsQ = useQuery({
+        queryKey: ['user-names', ...participantIds],
+        queryFn: () => batchUsers(participantIds),
+        enabled: participantIds.length > 0,
+        staleTime: 5 * 60 * 1000,
+    });
+    const avatarMap = new Map((avatarsQ.data ?? []).map(u => [u.id, u.avatarUrl]));
 
     const [copied, setCopied] = useState(false);
     useEffect(() => {
@@ -149,7 +160,7 @@ function RoomPageInner({
 
                     {!isDj && (
                         <p className="text-[11px] text-fg-muted uppercase tracking-wider mt-4 text-center lg:text-left">
-                            В режиме слушателя ваши изменения позиции/паузы локально применяются, но через секунду перезаписываются сигналом DJ
+                            В режиме слушателя вы можете ставить паузу локально. Чтобы снова синхронизироваться с DJ — нажмите Play.
                         </p>
                     )}
                 </section>
@@ -173,9 +184,11 @@ function RoomPageInner({
                                     to={`/users/${p.userId}`}
                                     className="shrink-0 transition-transform group-hover:scale-105"
                                 >
-                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-accent/20 to-bg flex items-center justify-center text-lg font-bold text-accent border border-accent/10">
-                                        {p.userName.charAt(0).toUpperCase()}
-                                    </div>
+                                    <UserAvatar
+                                        avatarUrl={avatarMap.get(p.userId) ?? null}
+                                        displayName={p.userName}
+                                        size={40}
+                                    />
                                 </Link>
 
                                 <div className="flex-1 min-w-0 flex items-center justify-between">
@@ -232,7 +245,7 @@ function NowPlayingCard({
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 rounded border border-border bg-bg-elevated p-6 shadow-sm">
             <div
                 className="w-40 h-40 shrink-0 rounded border border-border bg-bg flex items-center justify-center shadow-md bg-cover bg-center"
-                style={{ backgroundImage: coverUrl ? `url(${coverUrl})` : undefined }}
+                style={{ backgroundImage: coverUrl ? `url("${coverUrl.replace(/"/g, '\\"')}")` : undefined }}
                 aria-hidden
             >
                 {!coverUrl && <MusicIcon className="w-12 h-12 text-fg-muted opacity-30" />}

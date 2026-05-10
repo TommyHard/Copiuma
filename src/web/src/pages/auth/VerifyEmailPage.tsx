@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { verifyEmail } from '@/shared/api/auth';
 import { extractError } from './LoginPage';
@@ -8,6 +8,7 @@ export function VerifyEmailPage() {
     const token = params.get('token');
     const [status, setStatus] = useState<'pending' | 'success' | 'error'>('pending');
     const [message, setMessage] = useState<string | null>(null);
+    const requestedRef = useRef<string | null>(null);
 
     useEffect(() => {
         if (!token) {
@@ -15,6 +16,9 @@ export function VerifyEmailPage() {
             setMessage('Ссылка некорректна — отсутствует token.');
             return;
         }
+        if (requestedRef.current === token) return;
+        requestedRef.current = token;
+
         verifyEmail(token)
             .then((r) => {
                 setStatus('success');

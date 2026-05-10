@@ -262,3 +262,58 @@ function setStatusEntry(trackId: string, entry: OfflineStatusEntry | null): void
     }
     writeStatus(map);
 }
+
+/** Список trackId, которые реально лежат в локальном кэше */
+export function listLocallyCachedTrackIds(): string[] {
+    const map = readStatus();
+    return Object.entries(map)
+        .filter(([, v]) => v.complete)
+        .map(([k]) => k);
+}
+
+/** local метаданные трека для офлайна */
+export interface OfflineTrackMeta {
+    title: string;
+    artist: string | null;
+    artistId: string | null;
+    duration: string | null;
+    coverUrl: string | null;
+    addedAt: string;
+}
+const META_KEY = 'cw:offline-meta';
+
+function readMetaMap(): Record<string, OfflineTrackMeta> {
+    try {
+        const raw = localStorage.getItem(META_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return typeof parsed === 'object' && parsed !== null ? parsed : {};
+    } catch {
+        return {};
+    }
+}
+
+export function rememberOfflineTrackMeta(trackId: string, meta: OfflineTrackMeta): void {
+    try {
+        const map = readMetaMap();
+        map[trackId] = meta;
+        localStorage.setItem(META_KEY, JSON.stringify(map));
+    } catch { /* ignore */ }
+}
+
+export function forgetOfflineTrackMeta(trackId: string): void {
+    try {
+        const map = readMetaMap();
+        delete map[trackId];
+        localStorage.setItem(META_KEY, JSON.stringify(map));
+    } catch { /* ignore */ }
+}
+
+export function getOfflineTrackMeta(trackId: string): OfflineTrackMeta | null {
+    return readMetaMap()[trackId] ?? null;
+}
+
+export function listOfflineTrackMeta(): Array<{ trackId: string; meta: OfflineTrackMeta }> {
+    const map = readMetaMap();
+    return Object.entries(map).map(([trackId, meta]) => ({ trackId, meta }));
+}

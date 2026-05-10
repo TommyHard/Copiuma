@@ -87,7 +87,7 @@ export function useRoom(roomId: string, requestDj: boolean) {
             },
         );
 
-        // Полный список участников комнаты, который шлёт сервер при JoinRoom
+        // Полный список участников
         c.on('ParticipantList', (raw: any) => {
             const arr = Array.isArray(raw) ? raw : [];
             const list = arr.map((p: any) => ({
@@ -121,6 +121,8 @@ export function useRoom(roomId: string, requestDj: boolean) {
         c.on('ReceivePause', (position: number) => {
             const cur = useRoomStore.getState().current;
             setRoomState({ current: cur ? { ...cur, position, isPlaying: false } : null });
+            // Не перетираем личную паузу слушателя
+            if (!useRoomStore.getState().isDj && useRoomStore.getState().localPaused) return;
             usePlayer.setState({ isPlaying: false });
             usePlayer.getState().seek(position);
         });
@@ -128,17 +130,35 @@ export function useRoom(roomId: string, requestDj: boolean) {
         c.on('ReceiveSeek', (position: number) => {
             const cur = useRoomStore.getState().current;
             setRoomState({ current: cur ? { ...cur, position } : null });
+            if (!useRoomStore.getState().isDj && useRoomStore.getState().localPaused) return;
             usePlayer.getState().seek(position);
         });
 
         c.on('ReceiveHeartbeat', (position: number, isPlaying: boolean) => {
             const cur = useRoomStore.getState().current;
             setRoomState({ current: cur ? { ...cur, position, isPlaying } : null });
+            // Слушатель в режиме локальной паузы — не возобновляем
+            if (!useRoomStore.getState().isDj && useRoomStore.getState().localPaused) return;
 
             if (Math.abs(usePlayer.getState().position - position) > 0.5) {
                 usePlayer.getState().seek(position);
             }
             usePlayer.setState({ isPlaying });
+        });
+
+        // Слушатель: если пользователь сам нажал Pause / Play — переходим в режим
+        // "локальная пауза" и больше не подчиняемся heartbeat DJ, пока трек тот же
+        const unsubLocalPause = usePlayer.subscribe((s, prev) => {
+            if (useRoomStore.getState().isDj) return;
+            if (s.isPlaying === prev.isPlaying) return;
+
+            if (!s.isPlaying) {
+                // user сам поставил паузу
+                useRoomStore.getState().set({ localPaused: true });
+            } else {
+                // user сам нажал play — синхронизируемся с DJ
+                useRoomStore.getState().set({ localPaused: false });
+            }
         });
 
         // SignalR connection lifecycle с защитой от cancel во время negotiation
@@ -249,6 +269,7 @@ export function useRoom(roomId: string, requestDj: boolean) {
                 unsubPlayer();
                 unsubPlayer = null;
             }
+            unsubLocalPause();
             // Дожидаемся завершения negotiation, иначе SignalR падает
             // с "The connection was stopped during negotiation"
             startPromise.finally(() => {

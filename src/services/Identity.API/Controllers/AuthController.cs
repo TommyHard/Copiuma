@@ -112,6 +112,24 @@ public class AuthController : ControllerBase
 
         await _lockout.ClearAsync(email);
 
+        var userAgent = Truncate(HttpContext.Request.Headers.UserAgent.ToString(), 512);
+        var device = Truncate(deviceLabel, 128);
+
+        // Если у пользователя уже есть активная сессия для этого устройства
+        // (тот же deviceLabel + userAgent), отзываем её
+        var stale = await _db.RefreshTokens
+            .Where(r => r.UserId == user.Id
+                     && !r.IsRevoked
+                     && r.DeviceLabel == device
+                     && r.UserAgent == userAgent)
+            .ToListAsync();
+        foreach (var s in stale)
+        {
+            s.IsRevoked = true;
+            s.LastUsedAt = DateTime.UtcNow;
+            await _redis.GetDatabase().KeyDeleteAsync($"active_session:{s.Id}");
+        }
+
         // Создаем ID сессии до токенов
         var sessionId = Guid.NewGuid();
         var jwt = _tokenService.CreateToken(user, sessionId);
@@ -121,11 +139,11 @@ public class AuthController : ControllerBase
         {
             Id = sessionId,
             UserId = user.Id,
-            Token = refresh,
+            TokenHash = TokenService.HashRefreshToken(refresh),
             ExpiryDate = DateTime.UtcNow.AddDays(RefreshTokenDays),
             IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
-            UserAgent = Truncate(HttpContext.Request.Headers.UserAgent.ToString(), 512),
-            DeviceLabel = Truncate(deviceLabel, 128)
+            UserAgent = userAgent,
+            DeviceLabel = device
         });
 
         await _db.SaveChangesAsync();
@@ -140,42 +158,62 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("refresh-token")]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
     {
+        if (string.IsNullOrEmpty(request.RefreshToken))
+            return Unauthorized("Отсутствует refresh-token.");
+
+        var hash = TokenService.HashRefreshToken(request.RefreshToken);
+
         using var tx = await _db.Database.BeginTransactionAsync();
         var stored = await _db.RefreshTokens
             .Include(r => r.User)
-            .FirstOrDefaultAsync(r => r.Token == request.RefreshToken);
+            .FirstOrDefaultAsync(r => r.TokenHash == hash);
 
         if (stored is null) return Unauthorized("Сессия не найдена.");
 
         if (stored.IsRevoked)
         {
-            // Сносить все сессии - т.е. 1 подключение за раз
-            //await RevokeAllForUserAsync(stored.UserId);
-            //await _db.SaveChangesAsync();
-            //await tx.CommitAsync();
+            // Повторное использование revoked refresh-токена —
+            // сигнал corrupt. Сносим ВСЕ активные сессии пользователя
+            await RevokeAllForUserAsync(stored.UserId, "reuse-detected");
+            await _db.SaveChangesAsync();
+            await tx.CommitAsync();
+            _log.LogWarning(
+                "Refresh token reuse detected for user {UserId}, all sessions revoked.",
+                stored.UserId);
             return Unauthorized("Сессия была отозвана.");
         }
 
         if (stored.ExpiryDate <= DateTime.UtcNow)
             return Unauthorized("Срок действия сессии истек.");
 
+        if (stored.User is null)
+            return Unauthorized("Пользователь не найден.");
+
+        // ROTATE: помечаем старый токен revoked + создаём новый
+        var newSessionId = Guid.NewGuid();
         stored.IsRevoked = true;
+        stored.RevokedAt = DateTime.UtcNow;
+        stored.RevokedReason = "rotated";
+        stored.ReplacedBySessionId = newSessionId;
         stored.LastUsedAt = DateTime.UtcNow;
 
-        var newSessionId = Guid.NewGuid();
-        var newJwt = _tokenService.CreateToken(stored.User!, newSessionId);
+        var newJwt = _tokenService.CreateToken(stored.User, newSessionId);
         var newRefresh = _tokenService.GenerateRefreshToken();
+
+        var newUserAgent = Truncate(HttpContext.Request.Headers.UserAgent.ToString(), 512);
+        if (string.IsNullOrEmpty(newUserAgent)) newUserAgent = stored.UserAgent;
 
         _db.RefreshTokens.Add(new RefreshToken
         {
             Id = newSessionId,
             UserId = stored.UserId,
-            Token = newRefresh,
+            TokenHash = TokenService.HashRefreshToken(newRefresh),
             ExpiryDate = DateTime.UtcNow.AddDays(RefreshTokenDays),
             IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? stored.IpAddress,
-            UserAgent = Truncate(HttpContext.Request.Headers.UserAgent.ToString(), 512) ?? stored.UserAgent,
+            UserAgent = newUserAgent,
             DeviceLabel = stored.DeviceLabel
         });
 
@@ -193,10 +231,14 @@ public class AuthController : ControllerBase
     [HttpPost("logout")]
     public async Task<IActionResult> Logout([FromBody] RefreshTokenRequest request)
     {
-        var token = await _db.RefreshTokens.FirstOrDefaultAsync(t => t.Token == request.RefreshToken);
+        if (string.IsNullOrEmpty(request.RefreshToken)) return NoContent();
+        var hash = TokenService.HashRefreshToken(request.RefreshToken);
+        var token = await _db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash);
         if (token is null) return NoContent();
 
         token.IsRevoked = true;
+        token.RevokedAt = DateTime.UtcNow;
+        token.RevokedReason = "logout";
         await _db.SaveChangesAsync();
 
         // Kill сессию в Redis
@@ -208,10 +250,12 @@ public class AuthController : ControllerBase
     [HttpPost("logout-all")]
     public async Task<IActionResult> LogoutAll([FromBody] RefreshTokenRequest request)
     {
-        var token = await _db.RefreshTokens.FirstOrDefaultAsync(t => t.Token == request.RefreshToken);
+        if (string.IsNullOrEmpty(request.RefreshToken)) return Unauthorized();
+        var hash = TokenService.HashRefreshToken(request.RefreshToken);
+        var token = await _db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash);
         if (token is null) return Unauthorized();
 
-        await RevokeAllForUserAsync(token.UserId);
+        await RevokeAllForUserAsync(token.UserId, "logout-all");
         await _db.SaveChangesAsync();
         return NoContent();
     }
@@ -227,13 +271,20 @@ public class AuthController : ControllerBase
             .Include(t => t.User)
             .FirstOrDefaultAsync(t => t.TokenHash == hash);
 
-        if (record is null
-            || record.ConsumedAt is not null
-            || record.ExpiresAt <= DateTime.UtcNow
-            || record.User is null)
-        {
+        if (record is null || record.User is null)
             return BadRequest("Недействительный или устаревший токен.");
+
+        // Идемпотентность: если токен уже был использован и email действительно
+        // подтверждён — обход 400
+        if (record.ConsumedAt is not null)
+        {
+            if (record.User.EmailVerifiedAt is not null)
+                return Ok(new { Message = "Email уже подтверждён." });
+            return BadRequest("Токен уже использован.");
         }
+
+        if (record.ExpiresAt <= DateTime.UtcNow)
+            return BadRequest("Срок действия токена истёк.");
 
         record.ConsumedAt = DateTime.UtcNow;
         record.User.EmailVerifiedAt = DateTime.UtcNow;
@@ -322,23 +373,26 @@ public class AuthController : ControllerBase
         record.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(req.NewPassword);
         record.User.PasswordChangedAt = DateTime.UtcNow;
 
-        await RevokeAllForUserAsync(record.User.Id);
+        await RevokeAllForUserAsync(record.User.Id, "password-reset");
         await _lockout.ClearAsync(record.User.Email);
         await _db.SaveChangesAsync();
 
         return Ok(new { Message = "Пароль успешно изменен." });
     }
 
-    private async Task RevokeAllForUserAsync(Guid userId)
+    private async Task RevokeAllForUserAsync(Guid userId, string reason = "manual")
     {
         var tokens = await _db.RefreshTokens
             .Where(t => t.UserId == userId && !t.IsRevoked)
             .ToListAsync();
 
         var db = _redis.GetDatabase();
+        var now = DateTime.UtcNow;
         foreach (var t in tokens)
         {
             t.IsRevoked = true;
+            t.RevokedAt = now;
+            t.RevokedReason = reason;
             await db.KeyDeleteAsync($"active_session:{t.Id}");
         }
     }

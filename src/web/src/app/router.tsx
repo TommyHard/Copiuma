@@ -27,6 +27,7 @@ import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage';
 import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage';
 import { DeviceGrantPage } from '@/pages/auth/DeviceGrantPage';
 import { UserProfilePage } from '@/pages/UserProfilePage';
+import { GenrePage } from '@/pages/GenrePage';
 import { ArtistSettingsPage } from '@/pages/ArtistSettingsPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
@@ -64,6 +65,7 @@ export const router = createBrowserRouter([
                     { path: 'artists/:id', element: <ArtistPage /> },
                     { path: 'albums/:id', element: <AlbumPage /> },
                     { path: 'search', element: <SearchPage /> },
+                    { path: 'genres/:slug', element: <GenrePage /> },
                     { path: 'favorites', element: <FavoritesPage /> },
                     { path: 'offline', element: <OfflinePage /> },
                     { path: 'history', element: <HistoryPage /> },
