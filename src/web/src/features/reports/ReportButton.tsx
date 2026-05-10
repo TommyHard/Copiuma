@@ -96,7 +96,7 @@ export const ReportButton = forwardRef<
                             </div>
                             <button
                                 onClick={handleClose}
-                                className="rounded-full p-2 text-fg-muted hover:bg-bg hover:text-fg transition-colors"
+                                className="rounded p-2 text-fg-muted hover:bg-bg hover:text-fg transition-colors"
                             >
                                 <svg className="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

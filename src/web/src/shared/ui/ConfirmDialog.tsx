@@ -1,4 +1,5 @@
 import { cn } from '@/shared/lib/cn';
+import { createPortal } from 'react-dom';
 
 interface ConfirmDialogProps {
     isOpen: boolean;
@@ -14,7 +15,7 @@ interface ConfirmDialogProps {
 export function ConfirmDialog({ isOpen, title, message, onConfirm, onCancel, confirmText = 'ОК', cancelText = 'Отмена', danger }: ConfirmDialogProps) {
     if (!isOpen) return null;
 
-    return (
+    const dialogContent = (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
             <div
                 className="w-full max-w-sm rounded-xl border border-border bg-bg-elevated p-6 shadow-xl animate-in zoom-in-95 duration-200"
@@ -28,14 +29,14 @@ export function ConfirmDialog({ isOpen, title, message, onConfirm, onCancel, con
                 <div className="flex justify-end gap-3">
                     <button
                         onClick={onCancel}
-                        className="rounded-lg px-4 py-2 text-sm font-medium hover:bg-fg/10 transition-colors"
+                        className="rounded px-4 py-2 text-sm font-medium hover:bg-fg/10 transition-colors"
                     >
                         {cancelText}
                     </button>
                     <button
                         onClick={onConfirm}
                         className={cn(
-                            "rounded-lg px-5 py-2.5 text-sm font-medium transition-opacity shadow-sm",
+                            "rounded px-5 py-2.5 text-sm font-medium transition-opacity shadow-sm",
                             danger ? "bg-danger text-white hover:opacity-90" : "bg-accent text-accent-fg hover:opacity-90"
                         )}
                     >
@@ -45,4 +46,6 @@ export function ConfirmDialog({ isOpen, title, message, onConfirm, onCancel, con
             </div>
         </div>
     );
+
+    return createPortal(dialogContent, document.body);
 }

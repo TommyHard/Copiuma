@@ -27,6 +27,7 @@ import {
     LyricsIcon,
     PencilIcon
 } from '@/shared/ui/icons';
+import { NowPlayingBadge } from '@/features/player/NowPlayingBadge';
 import { cn } from '@/shared/lib/cn';
 
 export function TrackPage() {
@@ -143,6 +144,7 @@ export function TrackPage() {
     if (trackQ.isError || !trackQ.data) return <div className="p-8 text-danger">Трек не найден.</div>;
 
     const t = trackQ.data;
+    const activeCoverUrl = t.ownCoverUrl || t.coverUrl;
     const ready = statusQ.data?.status === 'Ready';
     const isOwner = !!user && !!t.uploadedByUserId && user.id === t.uploadedByUserId;
     const gradientBaseColor = coverColor || 'var(--accent-color, rgba(0, 0, 0, 0.5))';
@@ -154,6 +156,7 @@ export function TrackPage() {
     const bannerScale = Math.max(1, 1.1 - (scrollY / BANNER_HEIGHT) * 0.7);
     const colorOverlayOpacity = Math.min(1, (scrollY / BANNER_HEIGHT) * 3);
     const isStickyVisible = scrollY > BANNER_HEIGHT;
+
 
     return (
         <div ref={pageRef} className="relative flex flex-col min-h-full pb-32">
@@ -217,7 +220,7 @@ export function TrackPage() {
                     className="absolute inset-0 origin-center blur-md"
                     style={{
                         transform: `scale(${bannerScale})`,
-                        backgroundImage: t.coverUrl ? `url(${t.coverUrl})` : 'none',
+                        backgroundImage: activeCoverUrl ? `url(${activeCoverUrl})` : 'none',
                         backgroundSize: 'cover',
                         backgroundPosition: 'center',
                     }}
@@ -239,8 +242,8 @@ export function TrackPage() {
                 <div className="absolute bottom-20 left-6 md:left-12 right-6 flex flex-col md:flex-row items-end gap-8 z-10">
                     <div className="shrink-0 shadow-2xl rounded-lg overflow-hidden bg-bg-elevated">
                         <div className="size-48 md:size-64 relative group">
-                            {t.coverUrl ? (
-                                <img src={t.coverUrl} alt={t.title} className="h-full w-full object-cover" />
+                            {activeCoverUrl ? (
+                                <img src={activeCoverUrl} alt={t.title} className="h-full w-full object-cover" />
                             ) : (
                                 <div className="flex h-full w-full items-center justify-center bg-accent/10 text-accent/40">
                                     <MusicIcon className="size-20" />
@@ -267,8 +270,9 @@ export function TrackPage() {
                                     </>
                                 )}
                             </div>
-                            <h1 className="text-5xl md:text-7xl font-black tracking-tight leading-none">
-                                {t.title}
+                            <h1 className="text-5xl md:text-7xl font-black tracking-tight leading-none flex items-center gap-3 flex-wrap">
+                                <span>{t.title}</span>
+                                <NowPlayingBadge trackId={t.id} className="scale-150 origin-left" />
                             </h1>
                         </div>
 
@@ -461,7 +465,7 @@ export function TrackPage() {
                                                 onClick={() => { lyricsInputRef.current?.click(); setMenuOpen(false); }}
                                                 className="w-full text-left px-3 py-2 text-sm hover:bg-fg/10 rounded flex items-center gap-2 text-fg"
                                             >
-                                                <LyricsIcon className="size-4"/> {hasLyrics ? 'Заменить .lrc-файл' : 'Загрузить .lrc-файл'}
+                                                <LyricsIcon className="size-4" /> {hasLyrics ? 'Заменить .lrc-файл' : 'Загрузить .lrc-файл'}
                                             </button>
                                             {hasLyrics && (
                                                 <button
@@ -481,7 +485,7 @@ export function TrackPage() {
                                                 onClick={() => { setEditOpen(true); setMenuOpen(false); }}
                                                 className="w-full text-left px-3 py-2 text-sm hover:bg-fg/10 rounded flex items-center gap-2 text-fg"
                                             >
-                                                <PencilIcon/> Редактировать
+                                                <PencilIcon /> Редактировать
                                             </button>
                                             <button
                                                 onClick={() => { setDeleteOpen(true); setMenuOpen(false); }}

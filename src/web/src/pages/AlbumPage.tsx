@@ -129,7 +129,7 @@ export function AlbumPage() {
                     className="size-48 md:size-56 shrink-0 shadow-2xl rounded ring-1 ring-border relative z-10 bg-cover bg-center bg-no-repeat"
                     style={{ backgroundImage: a.coverUrl ? `url(${a.coverUrl})` : undefined }}
                 >
-                    {!a.coverUrl && <div className="size-full flex items-center justify-center bg-bg-elevated"><MusicIcon className="size-12 text-fg-muted/20" /></div>}
+                    {!a.coverUrl && <div className="size-full flex items-center justify-center bg-bg-elevated"><MusicIcon className="w-6 h-6 text-fg-muted/20" /></div>}
                 </div>
 
                 <div className="relative z-10 flex flex-col gap-3 min-w-0 flex-1">
@@ -182,7 +182,7 @@ export function AlbumPage() {
             </div>
 
             {/* TOOLBAR */}
-            <div className="flex items-center gap-4 px-6 md:px-10 py-6 relative z-20 w-full">
+            <div className="flex items-center gap-4 px-6 md:px-10 py-6 relative z-[35] w-full">
                 {tracks.length > 0 && (
                     <button
                         onClick={handlePlayAll}
@@ -286,6 +286,9 @@ export function AlbumPage() {
                                     key={t.id}
                                     track={t}
                                     number={t.trackNumber ?? index + 1}
+                                    playList={tracks}
+                                    playListIndex={index}
+                                    playListContext={id ? { type: 'album', id } : undefined}
                                 />
                             ))
                         )}

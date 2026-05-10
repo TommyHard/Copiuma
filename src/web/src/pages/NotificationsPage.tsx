@@ -288,13 +288,13 @@ function NotificationIcon({ type, isRead }: { type: NotificationType; isRead: bo
     const getIcon = () => {
         switch (type) {
             case 'TrackProcessed':
-                return <MusicIcon className="size-5" />;
+                return <MusicIcon className="w-5 h-5" />;
             case 'NewFollower':
-                return <UsersIcon className="size-5" />;
+                return <UsersIcon className="w-5 h-5" />;
             case 'PlaylistInvitation':
-                return <MailIcon className="size-5" />;
+                return <MailIcon className="w-5 h-5" />;
             default:
-                return <InfoIcon className="size-5" />;
+                return <InfoIcon className="w-5 h-5" />;
         }
     };
 

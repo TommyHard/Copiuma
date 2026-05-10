@@ -154,26 +154,47 @@ public class PlaylistsController : ControllerBase
         if (await _context.PlaylistMembers.AnyAsync(m => m.PlaylistId == playlistId && m.UserId == request.InviteeId))
             return Conflict("Пользователь уже участник плейлиста.");
 
-        if (await _context.PlaylistInvitations.AnyAsync(i =>
+        // Если уже есть pending-приглашение — переиспользуем (обновим роль),
+        // чтобы повторный invite не возвращал 409 пользователю
+        var existingPending = await _context.PlaylistInvitations.FirstOrDefaultAsync(i =>
             i.PlaylistId == playlistId &&
             i.InviteeId == request.InviteeId &&
-            i.Status == InvitationStatus.Pending))
+            i.Status == InvitationStatus.Pending);
+
+        // Старые завершённые/отменённые/отклонённые приглашения подчищаем,
+        // чтобы они не блокировали повторный invite
+        var oldCompleted = await _context.PlaylistInvitations
+            .Where(i => i.PlaylistId == playlistId
+                     && i.InviteeId == request.InviteeId
+                     && i.Status != InvitationStatus.Pending)
+            .ToListAsync();
+        if (oldCompleted.Count > 0)
         {
-            return Conflict("Приглашение уже отправлено и ожидает ответа.");
+            _context.PlaylistInvitations.RemoveRange(oldCompleted);
         }
 
-        var invitation = new PlaylistInvitation
+        PlaylistInvitation invitation;
+        if (existingPending is not null)
         {
-            Id = Guid.NewGuid(),
-            PlaylistId = playlistId,
-            InviterId = UserId,
-            InviteeId = request.InviteeId,
-            ProposedRole = role,
-            Status = InvitationStatus.Pending,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        _context.PlaylistInvitations.Add(invitation);
+            existingPending.ProposedRole = role;
+            existingPending.InviterId = UserId;
+            existingPending.CreatedAt = DateTime.UtcNow;
+            invitation = existingPending;
+        }
+        else
+        {
+            invitation = new PlaylistInvitation
+            {
+                Id = Guid.NewGuid(),
+                PlaylistId = playlistId,
+                InviterId = UserId,
+                InviteeId = request.InviteeId,
+                ProposedRole = role,
+                Status = InvitationStatus.Pending,
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.PlaylistInvitations.Add(invitation);
+        }
         await _context.SaveChangesAsync();
 
         await _notify.CreateAsync(request.InviteeId, NotificationTypes.PlaylistInvitation, new

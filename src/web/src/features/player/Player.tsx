@@ -541,7 +541,7 @@ export function Player() {
             <div className="bg-transparent px-6 py-2 flex items-center justify-between gap-6 opacity-30 pointer-events-none select-none">
                 <div className="flex items-center gap-4 w-1/3 min-w-[180px] -translate-y-[5px]">
                     <div className="w-16 h-16 bg-bg-elevated rounded-md shrink-0 flex items-center justify-center">
-                        <MusicIcon className="opacity-50" />
+                        <MusicIcon className="w-6 h-6 opacity-50" />
                     </div>
                     <div className="flex flex-col min-w-0">
                         <span className="text-sm font-semibold truncate text-fg">Нет трека</span>
@@ -615,7 +615,7 @@ export function Player() {
                         className="w-16 h-16 bg-bg-elevated rounded-md flex items-center justify-center text-fg-muted shadow-sm bg-cover bg-center overflow-hidden"
                         style={{ backgroundImage: track.coverUrl ? `url(${track.coverUrl})` : undefined }}
                     >
-                        {!track.coverUrl && <MusicIcon className="opacity-50" />}
+                        {!track.coverUrl && <MusicIcon className="w-6 h-6 opacity-50" />}
                     </div>
                 </Link>
 

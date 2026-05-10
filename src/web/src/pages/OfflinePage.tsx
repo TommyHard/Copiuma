@@ -94,7 +94,7 @@ export function OfflinePage() {
 
                 {tracksQ.data && tracksQ.data.length === 0 ? (
                     <div className="rounded-md border border-dashed border-border p-12 text-center">
-                        <MusicIcon className="mx-auto size-8 tracking-tight/30 mb-4" />
+                        <MusicIcon className="mx-auto size-12 opacity-40 mb-4" />
                         <p className="tracking-tight">Пока ничего не скачано.</p>
                     </div>
                 ) : (

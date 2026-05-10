@@ -191,7 +191,7 @@ function PlaylistSidebarItem({ playlist, compact }: { playlist: PlaylistSummary,
                 {hasCover ? (
                     <PlaylistCover coverUrl={playlist.coverUrl} previewCovers={playlist.previewCovers} className="w-full h-full" rounded="md" />
                 ) : (
-                    <MusicIcon className="opacity-40" />
+                    <MusicIcon className="w-6 h-6 opacity-40" />
                 )}
             </div>
             {!compact && (

@@ -71,8 +71,8 @@ export const UsersIcon = ({ className }: { className?: string }) => (
 );
 
 export const MusicIcon = ({ className }: { className?: string }) => (
-    <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={cn("w-4 h-4", className)}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 19.5V5.625c0-.621.504-1.125 1.125-1.125h9.75c.621 0 1.125.504 1.125 1.125v11.25m-12 3c0 1.242-1.008 2.25-2.25 2.25S5.25 20.742 5.25 19.5s1.008-2.25 2.25-2.25 2.25 1.008 2.25 2.25zm12 0c0 1.242-1.008 2.25-2.25 2.25s-2.25-1.008-2.25-2.25 1.008-2.25 2.25-2.25 2.25 1.008 2.25 2.25z" />
+    <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={cn(className)}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M 16.5 19.5 c 0 -1.242 -1.008 -2.25 -2.25 -2.25 s -2.25 1.008 -2.25 2.25 s 1.008 2.25 2.25 2.25 S 16.5 20.742 16.5 19.5 Z M 7.5 19.5 c 0 -1.242 -1.008 -2.25 -2.25 -2.25 s -2.25 1.008 -2.25 2.25 s 1.008 2.25 2.25 2.25 S 7.5 20.742 7.5 19.5 Z M 16.5 19.5 V 5 H 7.5 V 19.5" />
     </svg>
 );
 

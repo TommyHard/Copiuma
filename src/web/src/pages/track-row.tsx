@@ -124,7 +124,7 @@ export function TrackRow({
                     {track.coverUrl ? (
                         <img src={track.coverUrl} alt="" className="w-full h-full object-cover" />
                     ) : (
-                        <MusicIcon className="w-4 h-4 text-fg-muted" />
+                        <MusicIcon className="w-6 h-6 text-fg-muted" />
                     )}
                 </div>
 

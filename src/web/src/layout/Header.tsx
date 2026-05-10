@@ -141,7 +141,9 @@ export function Header() {
 
             {/* THEMES, BELL, FRIEND'S ACTIVITY, PROFILE */}
             <div className="flex-1 flex items-center justify-end gap-2 text-sm">
+
                 <ThemeToggle />
+
                 {user && <NotificationsBell />}
 
                 {user && (

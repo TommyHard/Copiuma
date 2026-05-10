@@ -232,7 +232,7 @@ export function ArtistPage() {
                                     <img src={artist.avatarUrl} alt={artist.name} className={cn("h-full w-full object-cover", isBlocked && "grayscale")} />
                                 ) : (
                                     <div className="flex h-full w-full items-center justify-center text-accent/50 bg-bg-elevated">
-                                        <MusicIcon className="size-8" />
+                                        <MusicIcon className="w-8 h-8" />
                                     </div>
                                 )}
                             </div>
@@ -256,34 +256,37 @@ export function ArtistPage() {
                         </div>
                     </section>
 
-                    <section className="space-y-4">
-                        <h2 className="text-2xl font-bold tracking-tight">Дискография</h2>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                            {albumsQ.data?.map((album: AlbumSummary) => (
-                                <Link
-                                    key={album.id}
-                                    to={`/albums/${album.id}`}
-                                    className="group p-2 rounded-lg transition-all duration-300 border border-transparent hover:border-border/40 hover:bg-accent/40 shadow-none hover:shadow-xl"
-                                >
-                                    <div className="aspect-square rounded-lg overflow-hidden bg-bg shadow-2xl mb-5 relative">
-                                        {album.coverUrl ? (
-                                            <img src={album.coverUrl} alt={album.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                                        ) : (
-                                            <div className="flex h-full w-full items-center justify-center bg-accent/5">
-                                                <MusicIcon className="size-32 text-accent/10" />
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div>
-                                        <h3 className="truncate font-black text-lg text-fg group-hover:text-white transition-colors">{album.title}</h3>
-                                        <p className="text-sm text-fg-muted font-medium group-hover:text-white/80 transition-colors">
-                                            {album.releasedAt ? new Date(album.releasedAt).getFullYear() + ' • ' : ''} Альбом
-                                        </p>
-                                    </div>
-                                </Link>
-                            ))}
-                        </div>
-                    </section>
+                    {!!albumsQ.data?.length && (
+
+                        <section className="space-y-4">
+                            <h2 className="text-2xl font-bold tracking-tight">Дискография</h2>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                {albumsQ.data?.map((album: AlbumSummary) => (
+                                    <Link
+                                        key={album.id}
+                                        to={`/albums/${album.id}`}
+                                        className="group p-2 rounded-lg transition-all duration-300 border border-transparent hover:border-border/40 hover:bg-accent/40 shadow-none hover:shadow-xl"
+                                    >
+                                        <div className="aspect-square rounded-lg overflow-hidden bg-bg shadow-2xl mb-5 relative">
+                                            {album.coverUrl ? (
+                                                <img src={album.coverUrl} alt={album.title} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                                            ) : (
+                                                <div className="flex h-full w-full items-center justify-center bg-accent/5">
+                                                    <MusicIcon className="w-8 h-8 text-accent/10" />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <h3 className="truncate font-black text-lg text-fg group-hover:text-white transition-colors">{album.title}</h3>
+                                            <p className="text-sm text-fg-muted font-medium group-hover:text-white/80 transition-colors">
+                                                {album.releasedAt ? new Date(album.releasedAt).getFullYear() + ' • ' : ''} Альбом
+                                            </p>
+                                        </div>
+                                    </Link>
+                                ))}
+                            </div>
+                        </section>
+                    )}
 
                     <section className="space-y-6">
                         <h2 className="text-2xl font-bold tracking-tight">Об артисте</h2>

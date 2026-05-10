@@ -13,6 +13,7 @@ import { LikeButton } from '@/features/player/Player';
 import { useToggleTrackLike } from '@/features/track/useToggleTrackLike';
 import { cn } from '@/shared/lib/cn';
 import type { FriendFeedItem } from '@/shared/types';
+import { FollowArtistButton } from '@/features/follows/FollowArtistButton';
 
 const scrollbarClasses = "[&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-thumb]:rounded-full";
 
@@ -78,7 +79,7 @@ function QueueView() {
     const removeFromQueue = usePlayer(s => s.removeFromQueue);
     const playQueueStore = usePlayer(s => s.playQueue);
 
-    if (queue.length === 0) return <div className="text-center tracking-tight mt-10"><MusicIcon className="mx-auto mb-2" /> Очередь пуста</div>;
+    if (queue.length === 0) return <div className="text-center tracking-tight mt-10"><MusicIcon className="w-6 h-6 mx-auto mb-2" /> Очередь пуста</div>;
 
     const currentTrack = queue[index];
 
@@ -104,7 +105,7 @@ function QueueView() {
                             className="w-12 h-12 rounded bg-bg-elevated flex items-center justify-center tracking-tight shadow-sm bg-cover bg-center overflow-hidden"
                             style={{ backgroundImage: currentTrack.coverUrl ? `url(${currentTrack.coverUrl})` : undefined }}
                         >
-                            {!currentTrack.coverUrl && <MusicIcon className="w-5 h-5 opacity-40" />}
+                            {!currentTrack.coverUrl && <MusicIcon className="w-6 h-6 opacity-40" />}
                         </div>
                         <div className="min-w-0 flex-1">
                             <div className="text-sm font-medium truncate">{currentTrack.title}</div>
@@ -163,7 +164,7 @@ function NowPlayingView({ onOpenQueue }: { onOpenQueue: () => void }) {
                 className="w-full aspect-square rounded-xl bg-bg-elevated flex items-center justify-center tracking-tight shadow-md bg-cover bg-center overflow-hidden"
                 style={{ backgroundImage: currentTrack.coverUrl ? `url(${currentTrack.coverUrl})` : undefined }}
             >
-                {!currentTrack.coverUrl && <MusicIcon className="opacity-50" />}
+                {!currentTrack.coverUrl && <MusicIcon className="w-32 h-32 opacity-50" />}
             </div>
 
             <div className="flex items-center justify-between gap-3 min-w-0">
@@ -208,11 +209,12 @@ function NowPlayingView({ onOpenQueue }: { onOpenQueue: () => void }) {
                         <Link to={`/artists/${a.id}`} className="text-lg font-bold hover:underline block truncate">{a.name}</Link>
                         <div className="flex justify-between items-center gap-2">
                             <span className="text-xs tracking-tight font-medium truncate">{a.monthlyListeners?.toLocaleString()} слушателей</span>
-                            {/* Скрыть кнопку, если пользователь владелец */}
+                            {/* Скрыть, если user==artist */}
                             {!isOwner && (
-                                <button onClick={() => isFollowed ? unfollowArtist(a.id) : followArtist(a.id)} className={cn("px-5 py-1.5 shrink-0 rounded-full text-xs font-bold transition-all", isFollowed ? "border border-border text-fg hover:bg-bg" : "bg-fg text-bg hover:opacity-80")}>
-                                    {isFollowed ? 'Отписаться' : 'Подписаться'}
-                                </button>
+                                <FollowArtistButton
+                                    artistId={a.id}
+                                    className={cn("w-34 h-8 text-[9px] rounded-full font-bold transition-all", isFollowed ? "border border-border text-fg hover:bg-bg" : "bg-fg text-bg hover:opacity-80")}
+                                />
                             )}
                         </div>
                         {a.bio && <p className="text-xs tracking-tight line-clamp-3 leading-relaxed whitespace-pre-wrap">{a.bio}</p>}

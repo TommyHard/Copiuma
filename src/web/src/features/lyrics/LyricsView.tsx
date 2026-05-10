@@ -77,14 +77,14 @@ export function LyricsView() {
     }, []);
 
     return (
-        <div className="absolute inset-0 z-30 flex flex-col bg-bg-elevated">
+        <div className="absolute inset-0 z-[40] flex flex-col bg-bg-elevated">
             {/* Header */}
             <div className="shrink-0 flex items-center justify-between gap-4 px-6 py-4 border-b border-border">
                 <div className="flex items-center gap-4 min-w-0">
                     <div className="size-12 rounded-md bg-bg overflow-hidden shrink-0">
                         {track?.coverUrl
                             ? <img src={track.coverUrl} alt="" className="size-full object-cover" />
-                            : <div className="size-full flex items-center justify-center"><MusicIcon className="opacity-40" /></div>}
+                            : <div className="size-full flex items-center justify-center"><MusicIcon className="w-6 h-6 opacity-40" /></div>}
                     </div>
                     <div className="min-w-0">
                         {track ? (
@@ -92,7 +92,7 @@ export function LyricsView() {
                                 {track.title}
                             </Link>
                         ) : <div className="text-lg font-bold text-fg-muted">Ничего не играет</div>}
-                        <div  className="text-xs text-fg-muted truncate">
+                        <div className="text-xs text-fg-muted truncate">
                             {track && (track.artistId ? (
                                 <Link to={`/artists/${track.artistId}`} className="hover:text-fg hover:underline">
                                     {track.artist ?? 'Неизвестный исполнитель'}
@@ -121,7 +121,7 @@ export function LyricsView() {
                     aria-label="Закрыть"
                     className="size-9 rounded hover:bg-fg/10 flex items-center justify-center text-fg-muted hover:text-fg transition-colors"
                 >
-                    <PlusIcon className="w-5 h-5 rotate-45"/>
+                    <PlusIcon className="w-5 h-5 rotate-45" />
                 </button>
             </div>
 

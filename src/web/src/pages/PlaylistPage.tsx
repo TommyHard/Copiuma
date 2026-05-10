@@ -21,6 +21,7 @@ import { usePlayer } from '@/features/player/store';
 import { InvitePeopleDialog } from '@/features/playlists/InvitePeopleDialog';
 import { PlaylistAuditLog } from '@/features/playlists/PlaylistAuditLog';
 import { PlaylistCover } from '@/features/playlists/PlaylistCover';
+import { NowPlayingFromBadge } from '@/features/player/NowPlayingBadge';
 import type { PlaylistTrack, PlaylistVisibility, UserSearchResult } from '@/shared/types';
 import { useToggleTrackLike } from '@/features/track/useToggleTrackLike';
 import { usePlayTrack } from '@/features/player/usePlayTrack';
@@ -367,7 +368,7 @@ export function PlaylistPage() {
     }
 
     function playAll() {
-        if (tracks.length === 0) return;
+        if (tracks.length === 0 || !id) return;
         playQueue(
             tracks.map((t) => ({
                 id: t.trackId,
@@ -379,9 +380,12 @@ export function PlaylistPage() {
                 albumId: t.albumId || null,
                 trackNumber: null,
                 isExplicit: t.isExplicit,
-                coverUrl: t.coverUrl
+                coverUrl: t.coverUrl,
+                isLikedByMe: t.isLikedByMe,
+                featuredArtists: (t as any).featuredArtists,
             })),
             0,
+            { type: 'playlist', id },
         );
     }
 
@@ -428,8 +432,9 @@ export function PlaylistPage() {
                             </button>
                         </div>
                     ) : (
-                        <div className="group flex items-center gap-3">
+                        <div className="group flex items-center gap-3 flex-wrap">
                             <h1 className="text-4xl md:text-6xl font-black text-fg tracking-tight truncate">{p.title}</h1>
+                            {id && <NowPlayingFromBadge target={{ type: 'playlist', id }} label />}
                             {isOwner && (
                                 <Tooltip content="Переименовать">
                                     <button onClick={() => startRename(p.title)} className="opacity-0 group-hover:opacity-100 text-fg-muted hover:text-fg transition-opacity p-2">
@@ -465,7 +470,7 @@ export function PlaylistPage() {
             </div>
 
             {/* TOOLBAR */}
-            <div className="flex items-center gap-4 px-6 md:px-10 py-6 relative z-20 w-full flex-wrap">
+            <div className="flex items-center gap-4 px-6 md:px-10 py-6 relative z-[35] w-full flex-wrap">
                 {tracks.length > 0 && (
                     <Tooltip content="Играть всё">
                         <button
@@ -632,7 +637,9 @@ export function PlaylistPage() {
                                 albumId: albumId || null,
                                 trackNumber: null,
                                 isExplicit: t.isExplicit,
-                                coverUrl: trackCover
+                                coverUrl: trackCover,
+                                isLikedByMe: t.isLikedByMe,
+                                featuredArtists: trackAny.featuredArtists,
                             };
 
                             return (
@@ -690,7 +697,7 @@ export function PlaylistPage() {
                                                 <img src={trackCover} className="size-full object-cover" alt="" />
                                             ) : (
                                                 <div className="size-full flex items-center justify-center bg-accent/5">
-                                                    <MusicIcon className="size-5 text-fg-muted/40" />
+                                                    <MusicIcon className="w-5 h-5 text-fg-muted/40" />
                                                 </div>
                                             )}
                                         </div>

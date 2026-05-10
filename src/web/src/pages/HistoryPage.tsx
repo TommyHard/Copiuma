@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from '@tansta
 import { clearHistory, recentArtists, recentTracks, rawHistory } from '@/shared/api/history';
 import type { RawPlayEvent } from '@/shared/types';
 import { TrackRow } from './track-row';
-import { ChevronDownIcon, TrashIcon } from '@/shared/ui/icons';
+import { ArrowRightIcon, ChevronDownIcon, TrashIcon } from '@/shared/ui/icons';
 import { ArtistSlider } from '@/shared/ui/ArtistSlider';
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 
@@ -66,7 +66,7 @@ export function HistoryPage() {
             {/* АРТИСТЫ */}
             {artists.data && artists.data.length > 0 && (
                 <section className="space-y-4">
-                    <h2 className="text-2xl font-bold tracking-tight text-fg">Недавно артисты</h2>
+                    <h2 className="text-2xl font-bold tracking-tight text-fg">Недавние артисты</h2>
                     <ArtistSlider artists={artists.data as any} />
                 </section>
             )}
@@ -114,7 +114,7 @@ export function HistoryPage() {
                 <div className="flex items-center justify-between">
                     <h2 className="text-2xl font-bold tracking-tight text-fg">События (Raw)</h2>
                     <button onClick={exportJsonData} className="text-sm font-medium text-accent hover:underline transition-all">
-                        ↓ Экспорт JSON
+                        Экспорт JSON
                     </button>
                 </div>
 

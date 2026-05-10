@@ -490,7 +490,7 @@ export function FavoritesPage() {
                                     </div>
                                     <div className="flex items-center gap-3 overflow-hidden">
                                         <div className="size-11 bg-bg-elevated rounded overflow-hidden shrink-0">
-                                            {f.coverUrl ? <img src={f.coverUrl} className="size-full object-cover" alt="" /> : <div className="size-full flex items-center justify-center bg-accent/5"><MusicIcon className="size-5 text-fg-muted/40" /></div>}
+                                            {f.coverUrl ? <img src={f.coverUrl} className="size-full object-cover" alt="" /> : <div className="size-full flex items-center justify-center bg-accent/5"><MusicIcon className="w-6 h-6 text-fg-muted/40" /></div>}
                                         </div>
                                         <div className="flex flex-col min-w-0">
                                             <Tooltip content={f.title}>
