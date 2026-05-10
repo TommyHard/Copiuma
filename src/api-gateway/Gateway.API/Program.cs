@@ -46,7 +46,7 @@ public class Program
                 Scheme = "Bearer",
                 BearerFormat = "JWT",
                 In = ParameterLocation.Header,
-                Description = "������� ����� � �������: Bearer {�����}"
+                Description = "Введите токен в формате: Bearer {токен}"
             });
             options.AddSecurityRequirement(new OpenApiSecurityRequirement
             {
@@ -60,10 +60,10 @@ public class Program
             });
         });
 
-        // con. Redis � �����
+        // con. Redis к шлюзу
         var redisConn = builder.Configuration["Redis:Configuration"] ?? "localhost:6379";
 
-        // ����� ����
+        // Гнида живи
         if (!redisConn.Contains("abortConnect", StringComparison.OrdinalIgnoreCase))
         {
             redisConn = $"{redisConn},abortConnect=false";
@@ -194,6 +194,13 @@ public class Program
         });
 
         app.UseAuthorization();
+
+        // health-эндпоинт без auth, чтобы балансировщик и docker
+        // healthcheck могли проверять gateway
+        var healthHandler = (Func<IResult>)(() => Results.Ok(new { status = "ok", time = DateTime.UtcNow }));
+        app.MapGet("/health", healthHandler).AllowAnonymous();
+        app.MapGet("/api/health", healthHandler).AllowAnonymous();
+
         app.MapReverseProxy();
         app.Run();
     }

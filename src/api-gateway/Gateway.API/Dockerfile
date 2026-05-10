@@ -18,4 +18,8 @@ RUN dotnet publish "Gateway.API.csproj" -c Release -o /app/publish /p:UseAppHost
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD wget --quiet --spider http://localhost:8080/health || exit 1
+
 ENTRYPOINT ["dotnet", "Gateway.API.dll"]

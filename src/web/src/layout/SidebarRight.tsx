@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getFriendsFeed, followArtist, unfollowArtist, listFollowedArtists } from '@/shared/api/follows';
+import { getFriendsFeed, listFollowedArtists } from '@/shared/api/follows';
 import { batchUsers } from '@/shared/api/users';
 import { getArtist } from '@/shared/api/artists';
 import { TrackRow } from '@/pages/track-row';

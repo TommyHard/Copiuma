@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient, useInfiniteQuery } from '@tansta
 import { clearHistory, recentArtists, recentTracks, rawHistory } from '@/shared/api/history';
 import type { RawPlayEvent } from '@/shared/types';
 import { TrackRow } from './track-row';
-import { ArrowRightIcon, ChevronDownIcon, TrashIcon } from '@/shared/ui/icons';
+import { ChevronDownIcon, TrashIcon } from '@/shared/ui/icons';
 import { ArtistSlider } from '@/shared/ui/ArtistSlider';
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 

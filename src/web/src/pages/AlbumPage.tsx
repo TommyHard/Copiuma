@@ -130,9 +130,10 @@ export function AlbumPage() {
 
                 <div
                     className="size-48 md:size-56 shrink-0 shadow-2xl rounded ring-1 ring-border relative z-10 bg-cover bg-center bg-no-repeat"
-                    style={{ backgroundImage: a.coverUrl ? `url(${a.coverUrl})` : undefined }}
+                    style={{ backgroundImage: a.coverUrl ? `url("${a.coverUrl.replace(/"/g, '\\"')}")` : undefined }}
                 >
                     {!a.coverUrl && <div className="size-full flex items-center justify-center bg-bg-elevated"><MusicIcon className="w-6 h-6 text-fg-muted/20" /></div>}
+
                 </div>
 
                 <div className="relative z-10 flex flex-col gap-3 min-w-0 flex-1">

@@ -343,6 +343,13 @@ public class AuthController : ControllerBase
         await _db.SaveChangesAsync();
 
         var url = BuildPasswordResetUrl(plaintext);
+
+        if (user.Email.EndsWith("_dev", StringComparison.OrdinalIgnoreCase))
+        {
+            _log.LogInformation("\n=== [DEV BYPASS] ===\nАккаунт: {Email}\nСсылка для сброса пароля:\n{Url}\n====================\n", user.Email, url);
+            return AcceptedWithMaskedResponse();
+        }
+
         await _email.SendAsync(EmailTemplates.BuildPasswordReset(user.Email, url));
 
         return AcceptedWithMaskedResponse();
@@ -400,6 +407,13 @@ public class AuthController : ControllerBase
     private async Task SendVerificationAsync(string email, string plaintext)
     {
         var url = BuildVerificationUrl(plaintext);
+
+        if (email.EndsWith("_dev", StringComparison.OrdinalIgnoreCase))
+        {
+            _log.LogInformation("\n=== [DEV BYPASS] ===\nАккаунт: {Email}\nСсылка для подтверждения:\n{Url}\n====================\n", email, url);
+            return;
+        }
+
         try
         {
             await _email.SendAsync(EmailTemplates.BuildVerification(email, url));

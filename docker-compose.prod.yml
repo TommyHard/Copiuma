@@ -1,0 +1,160 @@
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+
+services:
+  redis:
+    image: redis:alpine
+    container_name: copiuma_cache
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    ports: []
+
+  postgres:
+    image: postgres:16
+    container_name: copiuma_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports: []
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio
+    container_name: copiuma_storage
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    ports: []
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: copiuma_rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbit_data:/var/lib/rabbitmq
+    ports: []
+
+  identity-api:
+    container_name: identity_api
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=copiuma_identity;Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      - JwtSettings__Key=${JWT_KEY}
+      - JwtSettings__Issuer=${JWT_ISSUER:-Copiuma.Identity}
+      - JwtSettings__Audience=${JWT_AUDIENCE:-Copiuma.Clients}
+      - Redis__Configuration=redis:6379,abortConnect=false
+      - Smtp__Host=${SMTP_HOST}
+      - Smtp__Port=${SMTP_PORT}
+      - Smtp__User=${SMTP_USER}
+      - Smtp__Password=${SMTP_PASSWORD}
+      - Smtp__From=${SMTP_FROM}
+    ports: []
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  music-api:
+    container_name: music_api
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=copiuma_music;Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      - Minio__Endpoint=minio:9000
+      - Minio__PublicEndpoint=${PUBLIC_HOST}
+      - Minio__AccessKey=${MINIO_ROOT_USER}
+      - Minio__SecretKey=${MINIO_ROOT_PASSWORD}
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__UserName=${RABBITMQ_USER}
+      - RabbitMQ__Password=${RABBITMQ_PASSWORD}
+      - Redis__Configuration=redis:6379,abortConnect=false
+    ports: []
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      redis:
+        condition: service_started
+
+  gateway-api:
+    container_name: gateway_api
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - JwtSettings__Key=${JWT_KEY}
+      - JwtSettings__Issuer=${JWT_ISSUER:-Copiuma.Identity}
+      - JwtSettings__Audience=${JWT_AUDIENCE:-Copiuma.Clients}
+      - Cors__AllowedOrigins__0=${PUBLIC_ORIGIN}
+      - ReverseProxy__Clusters__identity-cluster__Destinations__destination1__Address=http://identity-api:8080
+      - ReverseProxy__Clusters__music-cluster__Destinations__destination1__Address=http://music-api:8080
+      - ReverseProxy__Clusters__storage-cluster__Destinations__destination1__Address=http://minio:9000
+      - Redis__Configuration=redis:6379,abortConnect=false
+    ports: []
+    depends_on:
+      - identity-api
+      - music-api
+
+  audio-processing-worker:
+    container_name: audio_processing_worker
+    restart: unless-stopped
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=copiuma_music;Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
+      - Minio__Endpoint=minio:9000
+      - Minio__AccessKey=${MINIO_ROOT_USER}
+      - Minio__SecretKey=${MINIO_ROOT_PASSWORD}
+      - RabbitMQ__HostName=rabbitmq
+      - RabbitMQ__UserName=${RABBITMQ_USER}
+      - RabbitMQ__Password=${RABBITMQ_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+
+  web:
+    build:
+      context: ./src/web
+      dockerfile: Dockerfile
+      args:
+        VITE_GATEWAY_URL: /api
+        VITE_IDENTITY_URL: /identity
+    container_name: copiuma_web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - gateway-api
+
+volumes:
+  redis_data:
+  postgres_data:
+  minio_data:
+  rabbit_data:

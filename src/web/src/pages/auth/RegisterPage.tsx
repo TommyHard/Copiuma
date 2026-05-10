@@ -61,7 +61,7 @@ export function RegisterPage() {
             <div className="space-y-4 text-center mt-14">
                 <h1 className="text-2xl font-semibold">Проверьте почту</h1>
                 <p className="text-fg-muted">
-                    Мы отправили ссылку на <span className="text-white font-medium">{email}</span>. Перейдите по ней, чтобы подтвердить email.
+                    Мы отправили ссылку на <span className="text-accent font-medium">{email}</span>. Перейдите по ней, чтобы подтвердить email.
                 </p>
                 <div className="pt-6">
                     <Link to="/auth/login" className="text-accent hover:underline font-medium">

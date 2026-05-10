@@ -5,3 +5,21 @@
 *.suo
 .idea/
 .vscode/
+
+# Frontend
+node_modules/
+src/web/dist/
+src/web/.vite/
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
